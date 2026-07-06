@@ -15,6 +15,7 @@ public sealed class BlockCraneController : MonoBehaviour
     
     [Space]
     [SerializeField] private int _activeJointCount = 4;
+    [SerializeField] private int _maxJointCount = 7;
     [SerializeField] private float _segmentLength = 1.15f;
     [SerializeField] private GameObject _jointPrefab;
     [SerializeField] private List<Transform> _joints = new List<Transform>(8);
@@ -40,7 +41,9 @@ public sealed class BlockCraneController : MonoBehaviour
             _joystick.gameObject.SetActive(true);
         }
 
-        _activeJointCount = Mathf.Clamp(_activeJointCount, 1, _joints.Count);
+        int existingJointCount = GetExistingJointCount();
+        _maxJointCount = Mathf.Max(_maxJointCount, existingJointCount);
+        _activeJointCount = existingJointCount > 0 ? Mathf.Clamp(_activeJointCount, 1, existingJointCount) : 0;
         AllocateSolverBuffers();
         CacheFixedRoot();
         CacheModelPoseOffsets();
@@ -62,14 +65,16 @@ public sealed class BlockCraneController : MonoBehaviour
 
     public void AddJoint()
     {
-        if (_activeJointCount >= _joints.Count)
+        if (_activeJointCount >= _maxJointCount)
             return;
 
-        int newJointIndex = _activeJointCount;
-        if (!EnsureJointExists(newJointIndex))
+        int insertIndex = _activeJointCount - 1;
+        int storageIndex = _activeJointCount;
+        Transform insertedJoint = GetOrCreateJoint(storageIndex);
+        if (insertedJoint == null)
             return;
 
-        PositionNewJoint(newJointIndex);
+        InsertJointBeforeLast(insertIndex, storageIndex, insertedJoint);
         _activeJointCount++;
         ApplyActiveJointCount();
         RefreshActiveSegmentData();
@@ -171,9 +176,9 @@ public sealed class BlockCraneController : MonoBehaviour
 
     private void AllocateSolverBuffers()
     {
-        _solvePositions = new Vector3[_joints.Count + 1];
-        _segmentLengths = new float[_joints.Count];
-        _jointRotationOffsets = new Quaternion[_joints.Count];
+        _solvePositions = new Vector3[_maxJointCount + 1];
+        _segmentLengths = new float[_maxJointCount];
+        _jointRotationOffsets = new Quaternion[_maxJointCount];
     }
 
     private void CacheModelPoseOffsets()
@@ -229,19 +234,26 @@ public sealed class BlockCraneController : MonoBehaviour
         return _joints[jointIndex].position + _joints[jointIndex].right * _segmentLength;
     }
 
-    private bool EnsureJointExists(int jointIndex)
+    private Transform GetOrCreateJoint(int jointIndex)
     {
+        EnsureJointSlot(jointIndex);
+
         if (_joints[jointIndex] != null)
-            return true;
+            return _joints[jointIndex];
 
         Transform joint = CreateJointFromPrefab(jointIndex);
         if (joint == null)
-            return false;
+            return null;
 
         joint.name = "Joint_" + jointIndex;
         RenameGeneratedJointChildren(joint, jointIndex);
-        _joints[jointIndex] = joint;
-        return true;
+        return joint;
+    }
+
+    private void EnsureJointSlot(int jointIndex)
+    {
+        while (_joints.Count <= jointIndex)
+            _joints.Add(null);
     }
 
     private Transform CreateJointFromPrefab(int jointIndex)
@@ -253,29 +265,34 @@ public sealed class BlockCraneController : MonoBehaviour
         return source != null ? Instantiate(source, transform) : null;
     }
 
-    private void PositionNewJoint(int jointIndex)
+    private void InsertJointBeforeLast(int insertIndex, int storageIndex, Transform insertedJoint)
     {
-        Transform previousJoint = _joints[jointIndex - 1];
-        Transform joint = _joints[jointIndex];
-        if (previousJoint == null || joint == null || _saw == null)
+        Transform pushedJoint = _joints[insertIndex];
+        if (pushedJoint == null || insertedJoint == null || _saw == null)
             return;
 
-        Vector3 previousPosition = previousJoint.position;
+        Vector3 pushedPosition = pushedJoint.position;
         Vector3 sawPosition = _saw.position;
-        Vector3 direction = sawPosition - previousPosition;
+        Vector3 direction = sawPosition - pushedPosition;
         float appendLength = direction.magnitude;
         if (appendLength <= 0.0001f)
-            appendLength = _segmentLengths[jointIndex - 1] > 0.0001f ? _segmentLengths[jointIndex - 1] : _segmentLength;
+            appendLength = _segmentLengths[insertIndex] > 0.0001f ? _segmentLengths[insertIndex] : _segmentLength;
 
-        Vector3 appendDirection = direction.sqrMagnitude > 0.0001f ? direction.normalized : previousJoint.right;
+        Vector3 appendDirection = direction.sqrMagnitude > 0.0001f ? direction.normalized : pushedJoint.right;
         Vector3 extendedSawPosition = sawPosition + appendDirection * appendLength;
 
-        joint.gameObject.SetActive(true);
-        joint.position = sawPosition;
+        insertedJoint.gameObject.SetActive(true);
+        insertedJoint.position = pushedPosition;
+        insertedJoint.rotation = pushedJoint.rotation;
+
+        pushedJoint.position = sawPosition;
+        pushedJoint.rotation = GetSegmentRotation(appendDirection) * _jointRotationOffsets[insertIndex];
+
         _saw.position = extendedSawPosition;
         _sawTarget = extendedSawPosition;
 
-        joint.rotation = GetSegmentRotation(appendDirection) * _jointRotationOffsets[jointIndex - 1];
+        _joints[storageIndex] = pushedJoint;
+        _joints[insertIndex] = insertedJoint;
     }
 
     private static void RenameGeneratedJointChildren(Transform joint, int jointIndex)
@@ -336,6 +353,20 @@ public sealed class BlockCraneController : MonoBehaviour
             reach += _segmentLengths[i];
 
         return reach;
+    }
+
+    private int GetExistingJointCount()
+    {
+        int count = 0;
+        for (int i = 0; i < _joints.Count; i++)
+        {
+            if (_joints[i] == null)
+                break;
+
+            count++;
+        }
+
+        return count;
     }
 
     private static Quaternion GetSegmentRotation(Vector3 direction)
