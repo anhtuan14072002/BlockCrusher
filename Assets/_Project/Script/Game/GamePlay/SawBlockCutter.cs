@@ -2,11 +2,16 @@ using UnityEngine;
 
 public sealed class SawBlockCutter : MonoBehaviour
 {
-    [SerializeField] private float _releasedBlockForce = 14f;
-    [SerializeField] private float _maxSawVelocity = 12f;
+    [SerializeField] private float _compressionForce = 9f;
+    [SerializeField] private float _maxSawVelocity = 8f;
+    [SerializeField] private float _minPushSpeed = 0.15f;
+    [SerializeField, Range(0f, 1f)] private float _sideDampingOnContact = 0.35f;
+    [SerializeField] private float _maxBlockVelocity = 4f;
 
     private Vector3 _previousPosition;
     private Vector3 _sawVelocity;
+    private Vector3 _pressDirection;
+    private float _pressSpeed;
 
     private void Awake()
     {
@@ -21,6 +26,10 @@ public sealed class SawBlockCutter : MonoBehaviour
 
         if (_sawVelocity.sqrMagnitude > _maxSawVelocity * _maxSawVelocity)
             _sawVelocity = _sawVelocity.normalized * _maxSawVelocity;
+
+        Vector3 planarVelocity = new Vector3(_sawVelocity.x, _sawVelocity.y, 0f);
+        _pressSpeed = planarVelocity.magnitude;
+        _pressDirection = _pressSpeed > 0.0001f ? planarVelocity / _pressSpeed : Vector3.zero;
 
         _previousPosition = currentPosition;
     }
@@ -58,6 +67,10 @@ public sealed class SawBlockCutter : MonoBehaviour
             return;
 
         block.Release();
-        block.ApplySawMotion(_sawVelocity, contactPoint, _releasedBlockForce);
+
+        if (_pressSpeed < _minPushSpeed)
+            return;
+
+        block.ApplySawCompression(_pressDirection, _pressSpeed, contactPoint, _compressionForce, _sideDampingOnContact, _maxBlockVelocity);
     }
 }

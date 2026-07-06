@@ -628,9 +628,9 @@ Transform:
   m_GameObject: {fileID: 925441447}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 2.81, y: 0.93, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
+  m_LocalPosition: {x: 2.81, y: 0.16, z: 0}
+  m_LocalScale: {x: 0.7, y: 0.7, z: 0.7}
+  m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 1680214657}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -650,7 +650,7 @@ MonoBehaviour:
   _blockPrefab: {fileID: 612727279210085569, guid: 3f4ebe89b85f2a147bdba89bc394f76d, type: 3}
   _container: {fileID: 925441448}
   _pixelSize: 0.12
-  _sampleStep: 1
+  _sampleStep: 2
   _alphaThreshold: 0.1
   _centerTexture: 1
   _applyPixelColor: 1
@@ -1435,7 +1435,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1875790452085665969, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 0
+      value: -0.29
       objectReference: {fileID: 0}
     - target: {fileID: 1875790452085665969, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: m_LocalRotation.w

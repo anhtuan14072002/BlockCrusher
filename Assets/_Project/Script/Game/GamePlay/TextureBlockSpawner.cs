@@ -41,6 +41,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         int width = _texture.width;
         int height = _texture.height;
         float alphaLimit = _alphaThreshold * 255f;
+        float voxelSize = _pixelSize * _sampleStep;
         Vector3 offset = _centerTexture ? new Vector3((width - _sampleStep) * _pixelSize * -0.5f, (height - _sampleStep) * _pixelSize * -0.5f, 0f) : Vector3.zero;
 
         for (int y = 0; y < height; y += _sampleStep)
@@ -56,7 +57,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
                 block.name = "PixelBlock_" + x + "_" + y;
                 block.transform.localPosition = localPosition;
                 block.transform.localRotation = Quaternion.identity;
-                block.transform.localScale = Vector3.one * _pixelSize;
+                block.transform.localScale = Vector3.one * voxelSize;
 
                 PixelBlock pixelBlock = block.GetComponent<PixelBlock>();
                 if (pixelBlock == null)
