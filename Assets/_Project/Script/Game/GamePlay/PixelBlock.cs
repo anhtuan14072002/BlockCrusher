@@ -45,6 +45,15 @@ public sealed class PixelBlock : MonoBehaviour
         _rigidbody.WakeUp();
     }
 
+    public void ApplySawMotion(Vector3 velocity, Vector3 contactPoint, float force)
+    {
+        if (!_released || force <= 0f)
+            return;
+
+        CacheComponents();
+        _rigidbody.AddForceAtPosition(velocity * force, contactPoint, ForceMode.Acceleration);
+    }
+
     private void Freeze()
     {
         _released = false;
