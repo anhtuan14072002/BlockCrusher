@@ -15,11 +15,22 @@ public sealed class PixelBlock : MonoBehaviour
     private Renderer _renderer;
     private MaterialPropertyBlock _propertyBlock;
     private bool _released;
+    private Vector3 _previousPhysicsPosition;
 
     private void Awake()
     {
         CacheComponents();
         Freeze();
+    }
+
+    private void FixedUpdate()
+    {
+        if (!_released)
+            return;
+
+        CacheComponents();
+        TextureBlockSpawner.ResolveGridCollisionForActiveSpawners(transform, _rigidbody, _previousPhysicsPosition);
+        _previousPhysicsPosition = _rigidbody.position;
     }
 
     public void Initialize(Color32 color, bool applyColor)
@@ -48,21 +59,47 @@ public sealed class PixelBlock : MonoBehaviour
         ConfigureRigidbody();
         _rigidbody.isKinematic = false;
         _rigidbody.useGravity = true;
+        _previousPhysicsPosition = _rigidbody.position;
         _rigidbody.WakeUp();
     }
 
-    public void ApplySawCompression(Vector3 pressDirection, float pressSpeed, Vector3 contactPoint, float force, float sideDamping, float maxVelocity)
+    public void ApplySawCompression(Vector3 sawCenter, Vector3 sawMoveDirection, float pressSpeed, Vector3 contactPoint,
+        float outwardForce, float tangentialForce, float spinDirection, float bladeRadius, float sideDamping,
+        float maxVelocity)
     {
-        if (!_released || force <= 0f || pressSpeed <= 0f)
+        if (!_released)
             return;
 
         CacheComponents();
-        _rigidbody.AddForceAtPosition(pressDirection * (pressSpeed * force), contactPoint, ForceMode.Acceleration);
+
+        Vector3 outward = _rigidbody.worldCenterOfMass - sawCenter;
+        outward.z = 0f;
+        if (outward.sqrMagnitude <= 0.0001f)
+            outward = sawMoveDirection.sqrMagnitude > 0.0001f ? sawMoveDirection : Vector3.up;
+        else
+            outward.Normalize();
+
+        Vector3 tangent = new Vector3(-outward.y, outward.x, 0f) * Mathf.Sign(spinDirection);
+        float speedScale = 1f + Mathf.Min(pressSpeed, 4f) * 0.1f;
+        float distanceFromBladeCenter = Vector3.Distance(new Vector3(_rigidbody.position.x, _rigidbody.position.y, 0f),
+            new Vector3(sawCenter.x, sawCenter.y, 0f));
+        float radiusPush = bladeRadius > 0f ? Mathf.Clamp01((bladeRadius - distanceFromBladeCenter) / bladeRadius) : 0f;
 
         Vector3 velocity = _rigidbody.linearVelocity;
-        Vector3 pressVelocity = pressDirection * Vector3.Dot(velocity, pressDirection);
-        Vector3 sideVelocity = velocity - pressVelocity;
-        _rigidbody.linearVelocity = Vector3.ClampMagnitude(pressVelocity + sideVelocity * sideDamping, maxVelocity);
+        float outwardSpeed = Vector3.Dot(velocity, outward);
+        if (outwardSpeed < 0f)
+            velocity -= outward * outwardSpeed;
+
+        float tangentSpeed = Vector3.Dot(velocity, tangent);
+        velocity -= tangent * tangentSpeed * (radiusPush * (1f - sideDamping));
+
+        float pushScale = 1f + radiusPush * 1.25f;
+        float targetOutwardSpeed = outwardForce * 0.08f * pushScale * speedScale;
+        if (outwardSpeed < targetOutwardSpeed)
+            velocity += outward * (targetOutwardSpeed - Mathf.Max(outwardSpeed, 0f));
+
+        velocity += tangent * (tangentialForce * 0.006f * pushScale);
+        _rigidbody.linearVelocity = Vector3.ClampMagnitude(velocity, maxVelocity);
     }
 
     private void Freeze()
@@ -73,6 +110,7 @@ public sealed class PixelBlock : MonoBehaviour
         _rigidbody.useGravity = false;
         _rigidbody.linearVelocity = Vector3.zero;
         _rigidbody.angularVelocity = Vector3.zero;
+        _previousPhysicsPosition = _rigidbody.position;
     }
 
     private void ConfigureRigidbody()
@@ -82,8 +120,10 @@ public sealed class PixelBlock : MonoBehaviour
         _rigidbody.angularDamping = _angularDamping;
         _rigidbody.sleepThreshold = _sleepThreshold;
         _rigidbody.interpolation = RigidbodyInterpolation.None;
-        _rigidbody.collisionDetectionMode = CollisionDetectionMode.Discrete;
-        _rigidbody.constraints = RigidbodyConstraints.FreezePositionZ | RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationY;
+        _rigidbody.collisionDetectionMode =
+            _released ? CollisionDetectionMode.ContinuousDynamic : CollisionDetectionMode.Discrete;
+        _rigidbody.constraints = RigidbodyConstraints.FreezePositionZ | RigidbodyConstraints.FreezeRotationX |
+                                 RigidbodyConstraints.FreezeRotationY;
         _rigidbody.solverIterations = 3;
         _rigidbody.solverVelocityIterations = 1;
     }

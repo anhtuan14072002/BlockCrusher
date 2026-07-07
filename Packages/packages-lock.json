@@ -49,7 +49,7 @@
       "depth": 0,
       "source": "git",
       "dependencies": {},
-      "hash": "5e26d0aa1528f069751abc21220393048335f004"
+      "hash": "e631de561ad41a8141a278d507e805d67ef3fe21"
     },
     "com.tuna.custom": {
       "version": "https://github.com/anhtuan14072002/Core.git?path=/com.tuna.custom",
