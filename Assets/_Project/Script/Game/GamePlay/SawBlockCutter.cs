@@ -64,7 +64,13 @@ public sealed class SawBlockCutter : MonoBehaviour
     {
         PixelBlock block = other.GetComponentInParent<PixelBlock>();
         if (block == null)
+        {
+            TextureBlockChunk chunk = other.GetComponentInParent<TextureBlockChunk>();
+            if (chunk != null)
+                chunk.ReleaseAtWorld(contactPoint, _pressDirection, _pressSpeed, _compressionForce, _sideDampingOnContact, _maxBlockVelocity);
+
             return;
+        }
 
         block.Release();
 

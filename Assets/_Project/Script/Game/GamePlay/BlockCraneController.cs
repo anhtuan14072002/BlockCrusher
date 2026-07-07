@@ -12,6 +12,8 @@ public sealed class BlockCraneController : MonoBehaviour
     [SerializeField] private Vector2 _targetXBounds = new Vector2(-3.8f, 3.8f);
     [SerializeField] private Vector2 _targetYBounds = new Vector2(-2.6f, 6.2f);
     [SerializeField] private int _ikIterations = 16;
+    [SerializeField] private int _foldRelaxIterations = 12;
+    [SerializeField] private float _foldSagStrength = 0.18f;
     
     [Space]
     [SerializeField] private int _activeJointCount = 4;
@@ -31,6 +33,7 @@ public sealed class BlockCraneController : MonoBehaviour
 
     private void Awake()
     {
+        Application.targetFrameRate = 60;
         if (_joystick == null)
         {
             _joystick = FindFirstObjectByType<Joystick>();
@@ -44,6 +47,7 @@ public sealed class BlockCraneController : MonoBehaviour
         int existingJointCount = GetExistingJointCount();
         _maxJointCount = Mathf.Max(_maxJointCount, existingJointCount);
         _activeJointCount = existingJointCount > 0 ? Mathf.Clamp(_activeJointCount, 1, existingJointCount) : 0;
+
         AllocateSolverBuffers();
         CacheFixedRoot();
         CacheModelPoseOffsets();
@@ -77,7 +81,8 @@ public sealed class BlockCraneController : MonoBehaviour
         InsertJointBeforeLast(insertIndex, storageIndex, insertedJoint);
         _activeJointCount++;
         ApplyActiveJointCount();
-        RefreshActiveSegmentData();
+        RelaxFoldedPoseToSaw();
+        CacheSawRotationOffset();
         SolveJointsToSaw();
     }
 
@@ -274,25 +279,73 @@ public sealed class BlockCraneController : MonoBehaviour
         Vector3 pushedPosition = pushedJoint.position;
         Vector3 sawPosition = _saw.position;
         Vector3 direction = sawPosition - pushedPosition;
-        float appendLength = direction.magnitude;
-        if (appendLength <= 0.0001f)
-            appendLength = _segmentLengths[insertIndex] > 0.0001f ? _segmentLengths[insertIndex] : _segmentLength;
-
-        Vector3 appendDirection = direction.sqrMagnitude > 0.0001f ? direction.normalized : pushedJoint.right;
-        Vector3 extendedSawPosition = sawPosition + appendDirection * appendLength;
+        float segmentLength = direction.magnitude;
+        if (segmentLength <= 0.0001f)
+            segmentLength = _segmentLengths[insertIndex] > 0.0001f ? _segmentLengths[insertIndex] : _segmentLength;
 
         insertedJoint.gameObject.SetActive(true);
         insertedJoint.position = pushedPosition;
         insertedJoint.rotation = pushedJoint.rotation;
 
         pushedJoint.position = sawPosition;
-        pushedJoint.rotation = GetSegmentRotation(appendDirection) * _jointRotationOffsets[insertIndex];
+        pushedJoint.rotation = direction.sqrMagnitude > 0.0001f
+            ? GetSegmentRotation(direction) * _jointRotationOffsets[insertIndex]
+            : pushedJoint.rotation;
 
-        _saw.position = extendedSawPosition;
-        _sawTarget = extendedSawPosition;
+        _segmentLengths[storageIndex] = segmentLength;
+        _jointRotationOffsets[storageIndex] = _jointRotationOffsets[insertIndex];
 
+        _sawTarget = sawPosition;
         _joints[storageIndex] = pushedJoint;
         _joints[insertIndex] = insertedJoint;
+    }
+
+    private void RelaxFoldedPoseToSaw()
+    {
+        if (_saw == null || _activeJointCount <= 1)
+            return;
+
+        Vector3 rootPosition = GetRootPosition();
+        Vector3 sawPosition = _saw.position;
+        float reach = GetActiveReach();
+        float targetDistance = Vector3.Distance(rootPosition, sawPosition);
+        float slack = Mathf.Max(0f, reach - targetDistance);
+        if (slack <= 0.0001f)
+            return;
+
+        int segmentCount = _activeJointCount;
+        _solvePositions[0] = rootPosition;
+        for (int i = 1; i < segmentCount; i++)
+            _solvePositions[i] = _joints[i] != null ? _joints[i].position : Vector3.Lerp(rootPosition, sawPosition, i / (float)segmentCount);
+        _solvePositions[segmentCount] = sawPosition;
+
+        Vector3 sagOffset = Vector3.down * (slack * _foldSagStrength);
+        int relaxIterations = Mathf.Max(1, _foldRelaxIterations);
+        for (int iteration = 0; iteration < relaxIterations; iteration++)
+        {
+            for (int i = 1; i < segmentCount; i++)
+                _solvePositions[i] += sagOffset / relaxIterations;
+
+            _solvePositions[0] = rootPosition;
+            for (int i = 1; i <= segmentCount; i++)
+            {
+                Vector3 direction = _solvePositions[i] - _solvePositions[i - 1];
+                if (direction.sqrMagnitude > 0.0001f)
+                    _solvePositions[i] = _solvePositions[i - 1] + direction.normalized * _segmentLengths[i - 1];
+            }
+
+            _solvePositions[segmentCount] = sawPosition;
+            for (int i = segmentCount - 1; i >= 0; i--)
+            {
+                Vector3 direction = _solvePositions[i] - _solvePositions[i + 1];
+                if (direction.sqrMagnitude > 0.0001f)
+                    _solvePositions[i] = _solvePositions[i + 1] + direction.normalized * _segmentLengths[i];
+            }
+        }
+
+        _solvePositions[0] = rootPosition;
+        _solvePositions[segmentCount] = sawPosition;
+        ApplySolvedJoints();
     }
 
     private static void RenameGeneratedJointChildren(Transform joint, int jointIndex)

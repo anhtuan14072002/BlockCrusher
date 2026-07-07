@@ -12,6 +12,7 @@
     "com.tuna.ui": "https://github.com/anhtuan14072002/Core.git?path=/com.tuna.ui",
     "com.tuna.v": "https://github.com/anhtuan14072002/Core.git?path=/com.tuna.v",
     "com.unity.collab-proxy": "2.12.4",
+    "com.unity.device-simulator.devices": "1.0.1",
     "com.unity.feature.2d": "2.0.1",
     "com.unity.feature.development": "1.0.2",
     "com.unity.inputsystem": "1.19.0",
