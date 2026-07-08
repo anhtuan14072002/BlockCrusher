@@ -13,6 +13,7 @@ public sealed class PixelBlock : MonoBehaviour
 
     private Rigidbody _rigidbody;
     private Renderer _renderer;
+    private Transform _transform;
     private MaterialPropertyBlock _propertyBlock;
     private bool _released;
     private Vector3 _previousPhysicsPosition;
@@ -28,8 +29,7 @@ public sealed class PixelBlock : MonoBehaviour
         if (!_released)
             return;
 
-        CacheComponents();
-        TextureBlockSpawner.ResolveGridCollisionForActiveSpawners(transform, _rigidbody, _previousPhysicsPosition);
+        TextureBlockSpawner.ResolveGridCollisionForActiveSpawners(_transform, _rigidbody, _previousPhysicsPosition);
         _previousPhysicsPosition = _rigidbody.position;
     }
 
@@ -69,8 +69,6 @@ public sealed class PixelBlock : MonoBehaviour
     {
         if (!_released)
             return;
-
-        CacheComponents();
 
         Vector3 outward = _rigidbody.worldCenterOfMass - sawCenter;
         outward.z = 0f;
@@ -120,8 +118,7 @@ public sealed class PixelBlock : MonoBehaviour
         _rigidbody.angularDamping = _angularDamping;
         _rigidbody.sleepThreshold = _sleepThreshold;
         _rigidbody.interpolation = RigidbodyInterpolation.None;
-        _rigidbody.collisionDetectionMode =
-            _released ? CollisionDetectionMode.ContinuousDynamic : CollisionDetectionMode.Discrete;
+        _rigidbody.collisionDetectionMode = CollisionDetectionMode.Discrete;
         _rigidbody.constraints = RigidbodyConstraints.FreezePositionZ | RigidbodyConstraints.FreezeRotationX |
                                  RigidbodyConstraints.FreezeRotationY;
         _rigidbody.solverIterations = 3;
@@ -130,6 +127,9 @@ public sealed class PixelBlock : MonoBehaviour
 
     private void CacheComponents()
     {
+        if (_transform == null)
+            _transform = transform;
+
         if (_rigidbody == null)
             _rigidbody = GetComponent<Rigidbody>();
 

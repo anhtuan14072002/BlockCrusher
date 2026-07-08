@@ -30,6 +30,7 @@ namespace Crusher
         private Transform _rootParent;
         private Vector3 _rootLocalPosition;
         private Vector3 _sawTarget;
+        private float _activeReach;
 
         private void Awake()
         {

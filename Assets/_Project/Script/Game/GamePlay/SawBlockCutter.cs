@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 public sealed class SawBlockCutter : MonoBehaviour
@@ -16,6 +17,8 @@ public sealed class SawBlockCutter : MonoBehaviour
     private Vector3 _pressDirection;
     private float _pressSpeed;
     private float _resistanceUntil;
+    private readonly Dictionary<Collider, PixelBlock> _blockCache = new Dictionary<Collider, PixelBlock>(128);
+    private readonly Dictionary<Collider, TextureBlockChunk> _chunkCache = new Dictionary<Collider, TextureBlockChunk>(16);
 
     public bool IsResisting => Time.time < _resistanceUntil;
 
@@ -64,6 +67,22 @@ public sealed class SawBlockCutter : MonoBehaviour
         ReleaseAndPush(collision.collider, collision.GetContact(0).point);
     }
 
+    private void OnCollisionExit(Collision collision)
+    {
+        ClearCache(collision.collider);
+    }
+
+    private void OnTriggerExit(Collider other)
+    {
+        ClearCache(other);
+    }
+
+    private void OnDisable()
+    {
+        _blockCache.Clear();
+        _chunkCache.Clear();
+    }
+
     private void ReleaseAndPush(Collider other)
     {
         Vector3 contactPoint = other.ClosestPoint(transform.position);
@@ -72,10 +91,10 @@ public sealed class SawBlockCutter : MonoBehaviour
 
     private void ReleaseAndPush(Collider other, Vector3 contactPoint)
     {
-        PixelBlock block = other.GetComponentInParent<PixelBlock>();
+        PixelBlock block = GetBlock(other);
         if (block == null)
         {
-            TextureBlockChunk chunk = other.GetComponentInParent<TextureBlockChunk>();
+            TextureBlockChunk chunk = GetChunk(other);
             if (chunk != null && chunk.ReleaseAtWorld(contactPoint, _pressDirection, _pressSpeed, _compressionForce,
                     _bladeTangentialForce, _bladeSpinDirection, _bladePushRadius, _sideDampingOnContact, _maxBlockVelocity))
                 RegisterResistance();
@@ -93,5 +112,31 @@ public sealed class SawBlockCutter : MonoBehaviour
     private void RegisterResistance()
     {
         _resistanceUntil = Time.time + _resistanceDuration;
+    }
+
+    private void ClearCache(Collider other)
+    {
+        _blockCache.Remove(other);
+        _chunkCache.Remove(other);
+    }
+
+    private PixelBlock GetBlock(Collider other)
+    {
+        if (_blockCache.TryGetValue(other, out PixelBlock block))
+            return block;
+
+        block = other.GetComponentInParent<PixelBlock>();
+        _blockCache.Add(other, block);
+        return block;
+    }
+
+    private TextureBlockChunk GetChunk(Collider other)
+    {
+        if (_chunkCache.TryGetValue(other, out TextureBlockChunk chunk))
+            return chunk;
+
+        chunk = other.GetComponentInParent<TextureBlockChunk>();
+        _chunkCache.Add(other, chunk);
+        return chunk;
     }
 }

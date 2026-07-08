@@ -605,7 +605,7 @@ Transform:
   m_GameObject: {fileID: 925441447}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 2.83, y: 0.88, z: 0}
+  m_LocalPosition: {x: 3.3, y: 1.39, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 1
   m_Children: []
@@ -627,14 +627,15 @@ MonoBehaviour:
   _blockPrefab: {fileID: 612727279210085569, guid: 3f4ebe89b85f2a147bdba89bc394f76d, type: 3}
   _container: {fileID: 925441448}
   _chunkMaterial: {fileID: 2100000, guid: 27e4bb3294908924e9d6a58207d8f342, type: 2}
-  _pixelSize: 0.1
+  _pixelSize: 0.12
   _sampleStep: 1
   _alphaThreshold: 0.1
-  _chunkColliderDepth: 0.1
+  _chunkColliderDepth: 0.12
   _sawReleaseRadius: 0.5
   _renderVoxelDetailFromStart: 1
   _detailVoxelScale: 0.94
   _voxelRandomYRotation: 20
+  _maxPhysicsDebrisPerFrame: 8
   _centerTexture: 1
   _spawnOnAwake: 1
 --- !u!1 &988305463
@@ -1445,10 +1446,22 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 2804058868560588496, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
+      propertyPath: _speed
+      value: 1.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 2804058868560588496, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
+      propertyPath: _acceleration
+      value: 15
+      objectReference: {fileID: 0}
     - target: {fileID: 3874013574092171956, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: m_Material
       value: 
       objectReference: {fileID: 1200620426}
+    - target: {fileID: 3874013574092171956, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
+      propertyPath: m_IsTrigger
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 3968589527393570256, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: m_Name
       value: BlockCrane
@@ -1479,7 +1492,7 @@ PrefabInstance:
       objectReference: {fileID: 3000000105}
     - target: {fileID: 8972793132794875421, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: _sawContactMoveMultiplier
-      value: 0.05
+      value: 0.2
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

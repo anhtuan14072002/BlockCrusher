@@ -12,15 +12,15 @@ namespace Crusher
             int segmentCount = _activeJointCount;
             Vector3 rootPosition = GetRootPosition();
             Vector3 targetPosition = _sawTarget;
-            float targetDistance = Vector3.Distance(rootPosition, targetPosition);
+            Vector3 rootToTarget = targetPosition - rootPosition;
             float maxReach = GetActiveReach();
 
             for (int i = 0; i < _activeJointCount; i++)
                 _solvePositions[i] = _joints[i] != null ? _joints[i].position : rootPosition;
 
-            if (targetDistance >= maxReach)
+            if (rootToTarget.sqrMagnitude >= maxReach * maxReach)
             {
-                Vector3 direction = (targetPosition - rootPosition).normalized;
+                Vector3 direction = rootToTarget.normalized;
                 _solvePositions[0] = rootPosition;
 
                 for (int i = 1; i <= segmentCount; i++)

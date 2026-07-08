@@ -35,11 +35,7 @@ namespace Crusher
 
         private float GetActiveReach()
         {
-            float reach = 0f;
-            for (int i = 0; i < _activeJointCount; i++)
-                reach += _segmentLengths[i];
-
-            return reach;
+            return _activeReach;
         }
 
         private static Quaternion GetSegmentRotation(Vector3 direction)

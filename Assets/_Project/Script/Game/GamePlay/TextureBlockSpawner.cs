@@ -8,6 +8,43 @@ using UnityEngine.Rendering;
 public sealed class TextureBlockSpawner : MonoBehaviour
 {
     private static readonly List<TextureBlockSpawner> ActiveSpawners = new();
+    private static readonly Vector2[] ReleasedBlockUvs =
+    {
+        new Vector2(0f, 0f),
+        new Vector2(0f, 1f),
+        new Vector2(1f, 1f),
+        new Vector2(1f, 0f),
+        new Vector2(0f, 0f),
+        new Vector2(0f, 1f),
+        new Vector2(1f, 1f),
+        new Vector2(1f, 0f),
+        new Vector2(0f, 0f),
+        new Vector2(0f, 1f),
+        new Vector2(1f, 1f),
+        new Vector2(1f, 0f),
+        new Vector2(0f, 0f),
+        new Vector2(0f, 1f),
+        new Vector2(1f, 1f),
+        new Vector2(1f, 0f),
+        new Vector2(0f, 0f),
+        new Vector2(0f, 1f),
+        new Vector2(1f, 1f),
+        new Vector2(1f, 0f),
+        new Vector2(0f, 0f),
+        new Vector2(0f, 1f),
+        new Vector2(1f, 1f),
+        new Vector2(1f, 0f)
+    };
+
+    private static readonly int[] ReleasedBlockIndices =
+    {
+        0, 1, 2, 0, 2, 3,
+        4, 5, 6, 4, 6, 7,
+        8, 9, 10, 8, 10, 11,
+        12, 13, 14, 12, 14, 15,
+        16, 17, 18, 16, 18, 19,
+        20, 21, 22, 20, 22, 23
+    };
 
     [SerializeField] private Texture2D _texture;
     [SerializeField] private GameObject _blockPrefab;
@@ -21,6 +58,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     [SerializeField] private bool _renderVoxelDetailFromStart = true;
     [SerializeField, Range(0.75f, 1f)] private float _detailVoxelScale = 0.94f;
     [SerializeField, Range(0f, 30f)] private float _voxelRandomYRotation = 20f;
+    [SerializeField, Range(0, 32)] private int _maxPhysicsDebrisPerFrame = 8;
     [SerializeField] private bool _centerTexture = true;
     [SerializeField] private bool _spawnOnAwake = true;
 
@@ -33,6 +71,9 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     private int _gridWidth;
     private int _gridHeight;
     private float _cellSize;
+    private int _dirtyChunkIndex = -1;
+    private int _physicsDebrisFrame = -1;
+    private int _physicsDebrisSpawnedThisFrame;
 
     public static bool ReleaseAtWorldForActiveSpawners(Vector3 worldPoint, Vector3 pressDirection, float pressSpeed,
         float outwardForce, float tangentialForce, float spinDirection, float bladeRadius, float sideDamping,
@@ -106,6 +147,16 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     private void OnDestroy()
     {
         DisposeCells();
+    }
+
+    private void LateUpdate()
+    {
+        if (_dirtyChunkIndex < 0)
+            return;
+
+        int chunkIndex = _dirtyChunkIndex;
+        _dirtyChunkIndex = -1;
+        RebuildChunk(chunkIndex);
     }
 
     [ContextMenu("Spawn")]
@@ -212,16 +263,44 @@ public sealed class TextureBlockSpawner : MonoBehaviour
 
                 Color32 color = _cellColors[cellIndex];
                 _cellSolid[cellIndex] = 0;
-                SpawnReleasedBlock(cellLocal, color, worldPoint, pressDirection, pressSpeed, outwardForce,
-                    tangentialForce, spinDirection, bladeRadius, sideDamping, maxVelocity);
+                if (TryConsumePhysicsDebrisBudget())
+                {
+                    SpawnReleasedBlock(cellLocal, color, worldPoint, pressDirection, pressSpeed, outwardForce,
+                        tangentialForce, spinDirection, bladeRadius, sideDamping, maxVelocity);
+                }
+
                 releasedAny = true;
             }
         }
 
         if (releasedAny && _chunks.Count > 0)
-            RebuildChunk(0);
+            MarkChunkDirty(0);
 
         return releasedAny;
+    }
+
+    private void MarkChunkDirty(int chunkIndex)
+    {
+        _dirtyChunkIndex = chunkIndex;
+    }
+
+    private bool TryConsumePhysicsDebrisBudget()
+    {
+        if (_maxPhysicsDebrisPerFrame <= 0)
+            return false;
+
+        int frame = Time.frameCount;
+        if (_physicsDebrisFrame != frame)
+        {
+            _physicsDebrisFrame = frame;
+            _physicsDebrisSpawnedThisFrame = 0;
+        }
+
+        if (_physicsDebrisSpawnedThisFrame >= _maxPhysicsDebrisPerFrame)
+            return false;
+
+        _physicsDebrisSpawnedThisFrame++;
+        return true;
     }
 
     private void CreateChunks()
@@ -258,6 +337,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     private void RebuildChunk(int chunkIndex)
     {
         ChunkRuntime chunk = _chunks[chunkIndex];
+        _dirtyChunkIndex = -1;
         int maxCells = chunk.Width * chunk.Height;
         int vertexCapacity = chunk.IsDetailed ? maxCells * 24 : maxCells * 4;
         int indexCapacity = chunk.IsDetailed ? maxCells * 36 : maxCells * 6;
@@ -384,48 +464,38 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         Mesh mesh = new Mesh { name = "PixelBlock_Released_Mesh" };
         Vector3[] vertices = new Vector3[24];
         Color32[] colors = new Color32[24];
-        Vector2[] uvs = new Vector2[24];
-        int[] indices =
-        {
-            0, 1, 2, 0, 2, 3,
-            4, 5, 6, 4, 6, 7,
-            8, 9, 10, 8, 10, 11,
-            12, 13, 14, 12, 14, 15,
-            16, 17, 18, 16, 18, 19,
-            20, 21, 22, 20, 22, 23
-        };
 
         Vector3 frontMin = new Vector3(-half, -half, -halfDepth);
         Vector3 frontMax = new Vector3(half, half, -halfDepth);
         Vector3 backMin = new Vector3(-half, -half, halfDepth);
         Vector3 backMax = new Vector3(half, half, halfDepth);
 
-        FillFace(vertices, uvs, 0, rotationY,
+        FillFace(vertices, 0, rotationY,
             new Vector3(frontMin.x, frontMin.y, frontMin.z),
             new Vector3(frontMin.x, frontMax.y, frontMin.z),
             new Vector3(frontMax.x, frontMax.y, frontMin.z),
             new Vector3(frontMax.x, frontMin.y, frontMin.z));
-        FillFace(vertices, uvs, 4, rotationY,
+        FillFace(vertices, 4, rotationY,
             new Vector3(backMax.x, backMin.y, backMax.z),
             new Vector3(backMax.x, backMax.y, backMax.z),
             new Vector3(backMin.x, backMax.y, backMax.z),
             new Vector3(backMin.x, backMin.y, backMax.z));
-        FillFace(vertices, uvs, 8, rotationY,
+        FillFace(vertices, 8, rotationY,
             new Vector3(frontMin.x, frontMin.y, frontMin.z),
             new Vector3(backMin.x, backMin.y, backMin.z),
             new Vector3(backMin.x, backMax.y, backMax.z),
             new Vector3(frontMin.x, frontMax.y, frontMin.z));
-        FillFace(vertices, uvs, 12, rotationY,
+        FillFace(vertices, 12, rotationY,
             new Vector3(frontMax.x, frontMin.y, frontMin.z),
             new Vector3(frontMax.x, frontMax.y, frontMin.z),
             new Vector3(backMax.x, backMax.y, backMax.z),
             new Vector3(backMax.x, backMin.y, backMax.z));
-        FillFace(vertices, uvs, 16, rotationY,
+        FillFace(vertices, 16, rotationY,
             new Vector3(frontMin.x, frontMax.y, frontMin.z),
             new Vector3(backMin.x, backMax.y, backMax.z),
             new Vector3(backMax.x, backMax.y, backMax.z),
             new Vector3(frontMax.x, frontMax.y, frontMin.z));
-        FillFace(vertices, uvs, 20, rotationY,
+        FillFace(vertices, 20, rotationY,
             new Vector3(frontMin.x, frontMin.y, frontMin.z),
             new Vector3(frontMax.x, frontMin.y, frontMin.z),
             new Vector3(backMax.x, backMin.y, backMax.z),
@@ -436,25 +506,20 @@ public sealed class TextureBlockSpawner : MonoBehaviour
 
         mesh.vertices = vertices;
         mesh.colors32 = colors;
-        mesh.uv = uvs;
-        mesh.triangles = indices;
+        mesh.uv = ReleasedBlockUvs;
+        mesh.triangles = ReleasedBlockIndices;
         mesh.RecalculateNormals();
         mesh.RecalculateBounds();
         return mesh;
     }
 
-    private static void FillFace(Vector3[] vertices, Vector2[] uvs, int startIndex, float rotationY, Vector3 a,
-        Vector3 b, Vector3 c, Vector3 d)
+    private static void FillFace(Vector3[] vertices, int startIndex, float rotationY, Vector3 a, Vector3 b, Vector3 c,
+        Vector3 d)
     {
         vertices[startIndex] = RotateY(a, rotationY);
         vertices[startIndex + 1] = RotateY(b, rotationY);
         vertices[startIndex + 2] = RotateY(c, rotationY);
         vertices[startIndex + 3] = RotateY(d, rotationY);
-
-        uvs[startIndex] = new Vector2(0f, 0f);
-        uvs[startIndex + 1] = new Vector2(0f, 1f);
-        uvs[startIndex + 2] = new Vector2(1f, 1f);
-        uvs[startIndex + 3] = new Vector2(1f, 0f);
     }
 
     private static Vector3 RotateY(Vector3 point, float degrees)

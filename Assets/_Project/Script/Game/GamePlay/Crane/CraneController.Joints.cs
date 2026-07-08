@@ -11,6 +11,8 @@ namespace Crusher
                 if (_joints[i] != null)
                     _joints[i].gameObject.SetActive(i < _activeJointCount);
             }
+
+            RefreshActiveReach();
         }
 
         private void RefreshActiveSegmentData()
@@ -30,6 +32,16 @@ namespace Crusher
             }
 
             CacheSawRotationOffset();
+            RefreshActiveReach();
+        }
+
+        private void RefreshActiveReach()
+        {
+            float reach = 0f;
+            for (int i = 0; i < _activeJointCount; i++)
+                reach += _segmentLengths[i];
+
+            _activeReach = reach;
         }
 
         private void CacheSawRotationOffset()
