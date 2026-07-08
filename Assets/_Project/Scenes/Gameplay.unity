@@ -635,13 +635,12 @@ MonoBehaviour:
   _renderVoxelDetailFromStart: 1
   _detailVoxelScale: 0.94
   _voxelRandomYRotation: 20
-  _maxPhysicsDebrisPerFrame: 1
+  _maxPhysicsDebrisPerFrame: 4
   _chunkSize: 20
   _maxChunkRebuildsPerFrame: 8
+  _prewarmReleasedBlockCount: 50
   _centerTexture: 1
   _spawnOnAwake: 1
-  _debrisLifetime: 5
-  _debrisPoolPrewarm: 50
 --- !u!1 &988305463
 GameObject:
   m_ObjectHideFlags: 0
@@ -1469,6 +1468,14 @@ PrefabInstance:
     - target: {fileID: 3968589527393570256, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: m_Name
       value: BlockCrane
+      objectReference: {fileID: 0}
+    - target: {fileID: 4023507068888422110, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
+      propertyPath: m_Size.y
+      value: 0.20407888
+      objectReference: {fileID: 0}
+    - target: {fileID: 4023507068888422110, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
+      propertyPath: m_Center.y
+      value: 0.10203944
       objectReference: {fileID: 0}
     - target: {fileID: 4781819893291555063, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: m_Enabled
