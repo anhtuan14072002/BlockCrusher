@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 namespace Crusher
@@ -8,9 +9,12 @@ namespace Crusher
     {
         [SerializeField] private Joystick _joystick;
         [SerializeField] private Button _addJointButton;
+        [SerializeField] private Button _switchToolButton;
 
         [Space] [SerializeField] private float _sawMoveSpeed = 3.5f;
-        [SerializeField, Range(0.05f, 1f)] private float _sawContactMoveMultiplier = 0.35f;
+        [FormerlySerializedAs("_sawContactMoveMultiplier")]
+        [SerializeField, Range(0.05f, 1f)] private float _sawCrowdedMoveMultiplier = 0.2f;
+        [SerializeField, Min(1)] private int _sawCrowdedBlockCount = 8;
         [SerializeField] private Vector2 _targetXBounds = new Vector2(-3.8f, 3.8f);
         [SerializeField] private Vector2 _targetYBounds = new Vector2(-2.6f, 6.2f);
         [SerializeField] private int _ikIterations = 16;
@@ -22,6 +26,8 @@ namespace Crusher
         [SerializeField] private List<Transform> _joints = new List<Transform>(8);
         [SerializeField] private Transform _saw;
         [SerializeField] private SawBlockCutter _sawCutter;
+        [SerializeField] private GameObject _sawHead;
+        [SerializeField] private GameObject _suctionDevice;
 
         private Vector3[] _solvePositions;
         private float[] _segmentLengths;
@@ -31,6 +37,8 @@ namespace Crusher
         private Vector3 _rootLocalPosition;
         private Vector3 _sawTarget;
         private float _activeReach;
+        private SuctionDevice _suctionDeviceComponent;
+        private bool _useSuctionDevice;
 
         private void Awake()
         {
@@ -55,6 +63,9 @@ namespace Crusher
             DetachSawFromJoints();
             ApplyActiveJointCount();
             CacheSawCutter();
+            CacheToolHeads();
+            ApplyToolHeadState();
+            BindButtons();
 
             _sawTarget = GetSawPosition();
         }
@@ -89,6 +100,12 @@ namespace Crusher
             SolveJointsToSaw();
             CacheSawRotationOffset();
             ApplySawAtPosition(lockedSawPosition);
+        }
+
+        public void SwitchToolHead()
+        {
+            _useSuctionDevice = !_useSuctionDevice;
+            ApplyToolHeadState();
         }
     }
 }

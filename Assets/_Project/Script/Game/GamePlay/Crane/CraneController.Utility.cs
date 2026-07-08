@@ -33,6 +33,39 @@ namespace Crusher
                 _sawCutter = _saw.GetComponent<SawBlockCutter>();
         }
 
+        private void CacheToolHeads()
+        {
+            if (_sawHead == null && _saw != null)
+            {
+                SawBlockCutter sawHead = _saw.GetComponentInChildren<SawBlockCutter>(true);
+                _sawHead = sawHead != null ? sawHead.gameObject : _saw.gameObject;
+            }
+
+            if (_suctionDevice == null && _saw != null)
+            {
+                SuctionDevice suctionDevice = _saw.GetComponentInChildren<SuctionDevice>(true);
+                if (suctionDevice != null)
+                    _suctionDevice = suctionDevice.gameObject;
+            }
+
+            _suctionDeviceComponent = _suctionDevice != null ? _suctionDevice.GetComponent<SuctionDevice>() : null;
+        }
+
+        private void ApplyToolHeadState()
+        {
+            if (_sawHead != null)
+                _sawHead.SetActive(!_useSuctionDevice);
+
+            if (_suctionDevice != null)
+                _suctionDevice.SetActive(_useSuctionDevice);
+        }
+
+        private void BindButtons()
+        {
+            if (_switchToolButton != null)
+                _switchToolButton.onClick.AddListener(SwitchToolHead);
+        }
+
         private float GetActiveReach()
         {
             return _activeReach;

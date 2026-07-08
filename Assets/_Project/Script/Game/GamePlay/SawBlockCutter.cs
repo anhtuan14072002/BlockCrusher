@@ -19,8 +19,10 @@ public sealed class SawBlockCutter : MonoBehaviour
     private float _resistanceUntil;
     private readonly Dictionary<Collider, PixelBlock> _blockCache = new Dictionary<Collider, PixelBlock>(128);
     private readonly Dictionary<Collider, TextureBlockChunk> _chunkCache = new Dictionary<Collider, TextureBlockChunk>(16);
+    private readonly HashSet<PixelBlock> _contactBlocks = new HashSet<PixelBlock>();
 
     public bool IsResisting => Time.time < _resistanceUntil;
+    public int ContactBlockCount => _contactBlocks.Count;
 
     private void Awake()
     {
@@ -81,6 +83,7 @@ public sealed class SawBlockCutter : MonoBehaviour
     {
         _blockCache.Clear();
         _chunkCache.Clear();
+        _contactBlocks.Clear();
     }
 
     private void ReleaseAndPush(Collider other)
@@ -103,6 +106,7 @@ public sealed class SawBlockCutter : MonoBehaviour
         }
 
         RegisterResistance();
+        _contactBlocks.Add(block);
         block.Release();
 
         block.ApplySawCompression(transform.position, _pressDirection, _pressSpeed, contactPoint, _compressionForce,
@@ -116,6 +120,10 @@ public sealed class SawBlockCutter : MonoBehaviour
 
     private void ClearCache(Collider other)
     {
+        PixelBlock block = GetBlock(other);
+        if (block != null)
+            _contactBlocks.Remove(block);
+
         _blockCache.Remove(other);
         _chunkCache.Remove(other);
     }
