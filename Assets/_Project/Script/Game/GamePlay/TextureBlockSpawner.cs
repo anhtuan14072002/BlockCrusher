@@ -59,19 +59,23 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     [SerializeField, Range(0.75f, 1f)] private float _detailVoxelScale = 0.94f;
     [SerializeField, Range(0f, 30f)] private float _voxelRandomYRotation = 20f;
     [SerializeField, Range(0, 32)] private int _maxPhysicsDebrisPerFrame = 8;
+    [SerializeField, Range(8, 64)] private int _chunkSize = 24;
+    [SerializeField, Range(1, 8)] private int _maxChunkRebuildsPerFrame = 2;
     [SerializeField] private bool _centerTexture = true;
     [SerializeField] private bool _spawnOnAwake = true;
 
     private readonly List<ChunkRuntime> _chunks = new();
+    private readonly List<int> _dirtyChunks = new(16);
     private NativeArray<Color32> _cellColors;
     private NativeArray<byte> _cellSolid;
+    private byte[] _chunkDirty;
     private Transform _runtimeParent;
     private Material _runtimeChunkMaterial;
     private Vector3 _offset;
     private int _gridWidth;
     private int _gridHeight;
+    private int _chunkColumns;
     private float _cellSize;
-    private int _dirtyChunkIndex = -1;
     private int _physicsDebrisFrame = -1;
     private int _physicsDebrisSpawnedThisFrame;
 
@@ -151,12 +155,21 @@ public sealed class TextureBlockSpawner : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (_dirtyChunkIndex < 0)
+        if (_dirtyChunks.Count == 0)
             return;
 
-        int chunkIndex = _dirtyChunkIndex;
-        _dirtyChunkIndex = -1;
-        RebuildChunk(chunkIndex);
+        int rebuildCount = Mathf.Min(_maxChunkRebuildsPerFrame, _dirtyChunks.Count);
+        for (int i = 0; i < rebuildCount; i++)
+        {
+            int lastIndex = _dirtyChunks.Count - 1;
+            int chunkIndex = _dirtyChunks[lastIndex];
+            _dirtyChunks.RemoveAt(lastIndex);
+
+            if (_chunkDirty != null && chunkIndex >= 0 && chunkIndex < _chunkDirty.Length)
+                _chunkDirty[chunkIndex] = 0;
+
+            RebuildChunk(chunkIndex);
+        }
     }
 
     [ContextMenu("Spawn")]
@@ -217,6 +230,8 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     {
         DisposeCells();
         _chunks.Clear();
+        _dirtyChunks.Clear();
+        _chunkDirty = null;
 
         Transform parent = _container != null ? _container : transform;
 
@@ -269,19 +284,27 @@ public sealed class TextureBlockSpawner : MonoBehaviour
                         tangentialForce, spinDirection, bladeRadius, sideDamping, maxVelocity);
                 }
 
+                MarkCellChunkDirty(x, y);
                 releasedAny = true;
             }
         }
 
-        if (releasedAny && _chunks.Count > 0)
-            MarkChunkDirty(0);
-
         return releasedAny;
     }
 
-    private void MarkChunkDirty(int chunkIndex)
+    private void MarkCellChunkDirty(int cellX, int cellY)
     {
-        _dirtyChunkIndex = chunkIndex;
+        if (_chunks.Count == 0 || _chunkDirty == null || _chunkColumns <= 0)
+            return;
+
+        int chunkX = cellX / _chunkSize;
+        int chunkY = cellY / _chunkSize;
+        int chunkIndex = chunkY * _chunkColumns + chunkX;
+        if ((uint)chunkIndex >= (uint)_chunks.Count || _chunkDirty[chunkIndex] != 0)
+            return;
+
+        _chunkDirty[chunkIndex] = 1;
+        _dirtyChunks.Add(chunkIndex);
     }
 
     private bool TryConsumePhysicsDebrisBudget()
@@ -306,38 +329,56 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     private void CreateChunks()
     {
         Material material = _runtimeChunkMaterial;
+        _chunkColumns = Mathf.CeilToInt(_gridWidth / (float)_chunkSize);
+        int chunkRows = Mathf.CeilToInt(_gridHeight / (float)_chunkSize);
+        int chunkCount = _chunkColumns * chunkRows;
+        _chunkDirty = new byte[chunkCount];
 
-        GameObject chunkObject = new GameObject("TextureChunk");
-        chunkObject.transform.SetParent(_runtimeParent, false);
-
-        MeshFilter meshFilter = chunkObject.AddComponent<MeshFilter>();
-        MeshRenderer meshRenderer = chunkObject.AddComponent<MeshRenderer>();
-        TextureBlockChunk chunk = chunkObject.AddComponent<TextureBlockChunk>();
-        Mesh mesh = new Mesh { name = "TextureChunk_Mesh" };
-        mesh.MarkDynamic();
-
-        meshFilter.sharedMesh = mesh;
-        meshRenderer.sharedMaterial = material;
-        chunk.Initialize(this);
-
-        _chunks.Add(new ChunkRuntime
+        for (int chunkY = 0; chunkY < chunkRows; chunkY++)
         {
-            Mesh = mesh,
-            Renderer = meshRenderer,
-            StartX = 0,
-            StartY = 0,
-            Width = _gridWidth,
-            Height = _gridHeight,
-            IsDetailed = _renderVoxelDetailFromStart
-        });
+            for (int chunkX = 0; chunkX < _chunkColumns; chunkX++)
+            {
+                int startX = chunkX * _chunkSize;
+                int startY = chunkY * _chunkSize;
+                int width = Mathf.Min(_chunkSize, _gridWidth - startX);
+                int height = Mathf.Min(_chunkSize, _gridHeight - startY);
 
-        RebuildChunk(0);
+                GameObject chunkObject = new GameObject("TextureChunk_" + chunkX + "_" + chunkY);
+                chunkObject.transform.SetParent(_runtimeParent, false);
+
+                MeshFilter meshFilter = chunkObject.AddComponent<MeshFilter>();
+                MeshRenderer meshRenderer = chunkObject.AddComponent<MeshRenderer>();
+                TextureBlockChunk chunk = chunkObject.AddComponent<TextureBlockChunk>();
+                Mesh mesh = new Mesh { name = "TextureChunk_Mesh_" + chunkX + "_" + chunkY };
+                mesh.MarkDynamic();
+
+                meshFilter.sharedMesh = mesh;
+                meshRenderer.sharedMaterial = material;
+                chunk.Initialize(this);
+
+                _chunks.Add(new ChunkRuntime
+                {
+                    Mesh = mesh,
+                    Renderer = meshRenderer,
+                    StartX = startX,
+                    StartY = startY,
+                    Width = width,
+                    Height = height,
+                    IsDetailed = _renderVoxelDetailFromStart
+                });
+            }
+        }
+
+        for (int i = 0; i < _chunks.Count; i++)
+            RebuildChunk(i);
     }
 
     private void RebuildChunk(int chunkIndex)
     {
+        if ((uint)chunkIndex >= (uint)_chunks.Count)
+            return;
+
         ChunkRuntime chunk = _chunks[chunkIndex];
-        _dirtyChunkIndex = -1;
         int maxCells = chunk.Width * chunk.Height;
         int vertexCapacity = chunk.IsDetailed ? maxCells * 24 : maxCells * 4;
         int indexCapacity = chunk.IsDetailed ? maxCells * 36 : maxCells * 6;
