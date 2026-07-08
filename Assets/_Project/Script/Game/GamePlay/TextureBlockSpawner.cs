@@ -61,13 +61,24 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     [SerializeField, Range(0, 32)] private int _maxPhysicsDebrisPerFrame = 8;
     [SerializeField, Range(8, 64)] private int _chunkSize = 24;
     [SerializeField, Range(1, 8)] private int _maxChunkRebuildsPerFrame = 2;
+    [SerializeField, Min(0)] private int _prewarmReleasedBlockCount = 50;
     [SerializeField] private bool _centerTexture = true;
     [SerializeField] private bool _spawnOnAwake = true;
 
     private readonly List<ChunkRuntime> _chunks = new();
     private readonly List<int> _dirtyChunks = new(16);
+    private readonly List<int> _scheduledChunkRebuilds = new(8);
+    private readonly List<JobHandle> _scheduledChunkHandles = new(8);
+    private readonly Stack<ReleasedBlockRuntime> _releasedBlockPool = new(50);
+    private readonly List<ReleasedBlockRuntime> _activeReleasedBlocks = new(64);
+    private readonly Dictionary<PixelBlock, ReleasedBlockRuntime> _releasedBlockLookup = new(64);
     private NativeArray<Color32> _cellColors;
     private NativeArray<byte> _cellSolid;
+    private NativeArray<Vector3> _collisionPreviousPositions;
+    private NativeArray<Vector3> _collisionPositions;
+    private NativeArray<Vector3> _collisionVelocities;
+    private NativeArray<Vector2> _collisionHalfExtents;
+    private NativeArray<byte> _collisionResolved;
     private byte[] _chunkDirty;
     private Transform _runtimeParent;
     private Material _runtimeChunkMaterial;
@@ -101,36 +112,6 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         return releasedAny;
     }
 
-    public static void ResolveGridCollisionForActiveSpawners(Transform blockTransform, Rigidbody blockRigidbody,
-        Vector3 previousWorldPosition)
-    {
-        Vector3 position = blockRigidbody.position;
-        Vector3 velocity = blockRigidbody.linearVelocity;
-        Vector3 scale = blockTransform.lossyScale;
-        float halfWidth = Mathf.Abs(scale.x) * 0.5f;
-        float halfHeight = Mathf.Abs(scale.y) * 0.5f;
-        bool resolved = false;
-
-        for (int i = ActiveSpawners.Count - 1; i >= 0; i--)
-        {
-            TextureBlockSpawner spawner = ActiveSpawners[i];
-            if (spawner == null)
-            {
-                ActiveSpawners.RemoveAt(i);
-                continue;
-            }
-
-            resolved |= spawner.ResolveGridCollisionSwept(previousWorldPosition, ref position, ref velocity, halfWidth,
-                halfHeight);
-        }
-
-        if (!resolved)
-            return;
-
-        blockRigidbody.position = position;
-        blockRigidbody.linearVelocity = velocity;
-    }
-
     private void OnEnable()
     {
         if (!ActiveSpawners.Contains(this))
@@ -150,7 +131,15 @@ public sealed class TextureBlockSpawner : MonoBehaviour
 
     private void OnDestroy()
     {
+        DisposeChunks();
+        DisposeReleasedBlockPool();
+        DisposeCollisionBuffers();
         DisposeCells();
+    }
+
+    private void FixedUpdate()
+    {
+        ResolveActiveReleasedBlockCollisions();
     }
 
     private void LateUpdate()
@@ -159,6 +148,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             return;
 
         int rebuildCount = Mathf.Min(_maxChunkRebuildsPerFrame, _dirtyChunks.Count);
+        _scheduledChunkRebuilds.Clear();
         for (int i = 0; i < rebuildCount; i++)
         {
             int lastIndex = _dirtyChunks.Count - 1;
@@ -168,8 +158,10 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             if (_chunkDirty != null && chunkIndex >= 0 && chunkIndex < _chunkDirty.Length)
                 _chunkDirty[chunkIndex] = 0;
 
-            RebuildChunk(chunkIndex);
+            _scheduledChunkRebuilds.Add(chunkIndex);
         }
+
+        ScheduleAndApplyChunkRebuilds();
     }
 
     [ContextMenu("Spawn")]
@@ -223,21 +215,30 @@ public sealed class TextureBlockSpawner : MonoBehaviour
 
         _runtimeChunkMaterial = ResolveChunkMaterial();
         CreateChunks();
+        PrewarmReleasedBlockPool();
     }
 
     [ContextMenu("Clear")]
     public void Clear()
     {
         DisposeCells();
+        DisposeChunks();
         _chunks.Clear();
         _dirtyChunks.Clear();
+        _scheduledChunkRebuilds.Clear();
+        _scheduledChunkHandles.Clear();
         _chunkDirty = null;
+        ReleaseAllActiveBlocksToPool();
 
         Transform parent = _container != null ? _container : transform;
 
         for (int i = parent.childCount - 1; i >= 0; i--)
         {
             Transform child = parent.GetChild(i);
+            if (Application.isPlaying && child.GetComponent<PixelBlock>() is PixelBlock pixelBlock &&
+                _releasedBlockLookup.ContainsKey(pixelBlock))
+                continue;
+
             if (Application.isPlaying)
                 Destroy(child.gameObject);
             else
@@ -356,72 +357,114 @@ public sealed class TextureBlockSpawner : MonoBehaviour
                 meshRenderer.sharedMaterial = material;
                 chunk.Initialize(this);
 
-                _chunks.Add(new ChunkRuntime
-                {
-                    Mesh = mesh,
-                    Renderer = meshRenderer,
-                    StartX = startX,
-                    StartY = startY,
-                    Width = width,
-                    Height = height,
-                    IsDetailed = _renderVoxelDetailFromStart
-                });
+                _chunks.Add(CreateChunkRuntime(mesh, meshRenderer, startX, startY, width, height,
+                    _renderVoxelDetailFromStart));
             }
         }
 
+        _scheduledChunkRebuilds.Clear();
         for (int i = 0; i < _chunks.Count; i++)
-            RebuildChunk(i);
+            _scheduledChunkRebuilds.Add(i);
+
+        ScheduleAndApplyChunkRebuilds();
     }
 
-    private void RebuildChunk(int chunkIndex)
+    private ChunkRuntime CreateChunkRuntime(Mesh mesh, MeshRenderer renderer, int startX, int startY, int width,
+        int height, bool isDetailed)
     {
-        if ((uint)chunkIndex >= (uint)_chunks.Count)
+        int maxCells = width * height;
+        int vertexCapacity = isDetailed ? maxCells * 24 : maxCells * 4;
+        int indexCapacity = isDetailed ? maxCells * 36 : maxCells * 6;
+
+        return new ChunkRuntime
+        {
+            Mesh = mesh,
+            Renderer = renderer,
+            StartX = startX,
+            StartY = startY,
+            Width = width,
+            Height = height,
+            IsDetailed = isDetailed,
+            Visited = new NativeArray<byte>(maxCells, Allocator.Persistent),
+            Vertices = new NativeList<Vector3>(vertexCapacity, Allocator.Persistent),
+            Colors = new NativeList<Color32>(vertexCapacity, Allocator.Persistent),
+            Uvs = new NativeList<Vector2>(vertexCapacity, Allocator.Persistent),
+            Indices = new NativeList<int>(indexCapacity, Allocator.Persistent)
+        };
+    }
+
+    private void ScheduleAndApplyChunkRebuilds()
+    {
+        if (_scheduledChunkRebuilds.Count == 0)
             return;
 
-        ChunkRuntime chunk = _chunks[chunkIndex];
-        int maxCells = chunk.Width * chunk.Height;
-        int vertexCapacity = chunk.IsDetailed ? maxCells * 24 : maxCells * 4;
-        int indexCapacity = chunk.IsDetailed ? maxCells * 36 : maxCells * 6;
-        NativeArray<byte> visited = new NativeArray<byte>(maxCells, Allocator.TempJob);
-        NativeList<Vector3> vertices = new NativeList<Vector3>(vertexCapacity, Allocator.TempJob);
-        NativeList<Color32> colors = new NativeList<Color32>(vertexCapacity, Allocator.TempJob);
-        NativeList<Vector2> uvs = new NativeList<Vector2>(vertexCapacity, Allocator.TempJob);
-        NativeList<int> indices = new NativeList<int>(indexCapacity, Allocator.TempJob);
+        _scheduledChunkHandles.Clear();
 
-        BuildChunkMeshJob meshJob = new BuildChunkMeshJob
+        for (int i = 0; i < _scheduledChunkRebuilds.Count; i++)
         {
-            CellColors = _cellColors,
-            CellSolid = _cellSolid,
-            Visited = visited,
-            Vertices = vertices,
-            Colors = colors,
-            Uvs = uvs,
-            Indices = indices,
-            GridWidth = _gridWidth,
-            StartX = chunk.StartX,
-            StartY = chunk.StartY,
-            ChunkWidth = chunk.Width,
-            ChunkHeight = chunk.Height,
-            CellSize = _cellSize,
-            Offset = _offset,
-            UseVoxelDetail = chunk.IsDetailed ? (byte)1 : (byte)0,
-            DetailVoxelScale = _detailVoxelScale,
-            RandomYRotation = _voxelRandomYRotation,
-            DetailDepth = _chunkColliderDepth
-        };
+            int chunkIndex = _scheduledChunkRebuilds[i];
+            if ((uint)chunkIndex >= (uint)_chunks.Count)
+                continue;
 
-        meshJob.Schedule().Complete();
+            ChunkRuntime chunk = _chunks[chunkIndex];
+            chunk.Vertices.Clear();
+            chunk.Colors.Clear();
+            chunk.Uvs.Clear();
+            chunk.Indices.Clear();
 
+            BuildChunkMeshJob meshJob = new BuildChunkMeshJob
+            {
+                CellColors = _cellColors,
+                CellSolid = _cellSolid,
+                Visited = chunk.Visited,
+                Vertices = chunk.Vertices,
+                Colors = chunk.Colors,
+                Uvs = chunk.Uvs,
+                Indices = chunk.Indices,
+                GridWidth = _gridWidth,
+                StartX = chunk.StartX,
+                StartY = chunk.StartY,
+                ChunkWidth = chunk.Width,
+                ChunkHeight = chunk.Height,
+                CellSize = _cellSize,
+                Offset = _offset,
+                UseVoxelDetail = chunk.IsDetailed ? (byte)1 : (byte)0,
+                DetailVoxelScale = _detailVoxelScale,
+                RandomYRotation = _voxelRandomYRotation,
+                DetailDepth = _chunkColliderDepth
+            };
+
+            _scheduledChunkHandles.Add(meshJob.Schedule());
+        }
+
+        JobHandle combinedHandle = default;
+        for (int i = 0; i < _scheduledChunkHandles.Count; i++)
+            combinedHandle = JobHandle.CombineDependencies(combinedHandle, _scheduledChunkHandles[i]);
+
+        combinedHandle.Complete();
+
+        for (int i = 0; i < _scheduledChunkRebuilds.Count; i++)
+        {
+            int chunkIndex = _scheduledChunkRebuilds[i];
+            if ((uint)chunkIndex >= (uint)_chunks.Count)
+                continue;
+
+            ApplyChunkMesh(_chunks[chunkIndex]);
+        }
+    }
+
+    private void ApplyChunkMesh(ChunkRuntime chunk)
+    {
         Mesh mesh = chunk.Mesh;
         mesh.Clear();
 
-        if (vertices.Length > 0)
+        if (chunk.Vertices.Length > 0)
         {
-            mesh.indexFormat = vertices.Length > 65535 ? IndexFormat.UInt32 : IndexFormat.UInt16;
-            mesh.SetVertices(vertices.AsArray());
-            mesh.SetColors(colors.AsArray());
-            mesh.SetUVs(0, uvs.AsArray());
-            mesh.SetIndices(indices.AsArray(), MeshTopology.Triangles, 0);
+            mesh.indexFormat = chunk.Vertices.Length > 65535 ? IndexFormat.UInt32 : IndexFormat.UInt16;
+            mesh.SetVertices(chunk.Vertices.AsArray());
+            mesh.SetColors(chunk.Colors.AsArray());
+            mesh.SetUVs(0, chunk.Uvs.AsArray());
+            mesh.SetIndices(chunk.Indices.AsArray(), MeshTopology.Triangles, 0);
             if (chunk.IsDetailed)
                 mesh.RecalculateNormals();
             mesh.RecalculateBounds();
@@ -431,12 +474,28 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         {
             chunk.Renderer.enabled = false;
         }
+    }
 
-        vertices.Dispose();
-        colors.Dispose();
-        uvs.Dispose();
-        indices.Dispose();
-        visited.Dispose();
+    private void DisposeChunks()
+    {
+        for (int i = 0; i < _chunks.Count; i++)
+        {
+            ChunkRuntime chunk = _chunks[i];
+            if (chunk.Visited.IsCreated)
+                chunk.Visited.Dispose();
+            if (chunk.Vertices.IsCreated)
+                chunk.Vertices.Dispose();
+            if (chunk.Colors.IsCreated)
+                chunk.Colors.Dispose();
+            if (chunk.Uvs.IsCreated)
+                chunk.Uvs.Dispose();
+            if (chunk.Indices.IsCreated)
+                chunk.Indices.Dispose();
+            if (chunk.Mesh != null)
+                DestroyUnityObject(chunk.Mesh);
+        }
+
+        _chunks.Clear();
     }
 
     private Material ResolveChunkMaterial()
@@ -465,46 +524,42 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         float pressSpeed, float outwardForce, float tangentialForce, float spinDirection, float bladeRadius,
         float sideDamping, float maxVelocity)
     {
-        GameObject block = Instantiate(_blockPrefab, _runtimeParent);
+        ReleasedBlockRuntime runtime = GetReleasedBlockRuntime();
+        GameObject block = runtime.Block;
         block.name = "PixelBlock_Released";
         block.transform.localPosition = localPosition;
         block.transform.localRotation = Quaternion.identity;
         block.transform.localScale = Vector3.one * _cellSize;
-        ConfigureReleasedBlockVisual(block, color, localPosition);
+        block.SetActive(true);
 
-        PixelBlock pixelBlock = block.GetComponent<PixelBlock>();
-        if (pixelBlock == null)
-            pixelBlock = block.AddComponent<PixelBlock>();
-
+        PixelBlock pixelBlock = runtime.PixelBlock;
+        ConfigureReleasedBlockVisual(runtime, color, localPosition);
         pixelBlock.Initialize(color, false);
         pixelBlock.Release();
         pixelBlock.ApplySawCompression(sawCenter, pressDirection, pressSpeed, block.transform.position, outwardForce,
             tangentialForce, spinDirection, bladeRadius, sideDamping, maxVelocity);
+        runtime.PreviousWorldPosition = runtime.Rigidbody.position;
     }
 
-    private void ConfigureReleasedBlockVisual(GameObject block, Color32 color, Vector3 localPosition)
+    private void ConfigureReleasedBlockVisual(ReleasedBlockRuntime runtime, Color32 color, Vector3 localPosition)
     {
-        MeshFilter meshFilter = block.GetComponent<MeshFilter>();
-        MeshRenderer meshRenderer = block.GetComponent<MeshRenderer>();
-        if (meshFilter == null || meshRenderer == null)
+        if (runtime.Mesh == null || runtime.Renderer == null)
             return;
 
         int cellX = Mathf.RoundToInt((localPosition.x - _offset.x) / _cellSize);
         int cellY = Mathf.RoundToInt((localPosition.y - _offset.y) / _cellSize);
-        meshFilter.sharedMesh = CreateReleasedBlockMesh(color, cellX, cellY);
-        meshRenderer.sharedMaterial = _runtimeChunkMaterial != null ? _runtimeChunkMaterial : ResolveChunkMaterial();
-        meshRenderer.SetPropertyBlock(null);
+        UpdateReleasedBlockMesh(runtime, color, cellX, cellY);
+        runtime.Renderer.sharedMaterial = _runtimeChunkMaterial != null ? _runtimeChunkMaterial : ResolveChunkMaterial();
+        runtime.Renderer.SetPropertyBlock(null);
     }
 
-    private Mesh CreateReleasedBlockMesh(Color32 color, int cellX, int cellY)
+    private void UpdateReleasedBlockMesh(ReleasedBlockRuntime runtime, Color32 color, int cellX, int cellY)
     {
         float halfDepth = _chunkColliderDepth / Mathf.Max(_cellSize, 0.0001f) * 0.5f;
         float half = _detailVoxelScale * 0.5f;
         float rotationY = GetVoxelRotationY(cellX, cellY, _voxelRandomYRotation);
-
-        Mesh mesh = new Mesh { name = "PixelBlock_Released_Mesh" };
-        Vector3[] vertices = new Vector3[24];
-        Color32[] colors = new Color32[24];
+        Vector3[] vertices = runtime.Vertices;
+        Color32[] colors = runtime.Colors;
 
         Vector3 frontMin = new Vector3(-half, -half, -halfDepth);
         Vector3 frontMax = new Vector3(half, half, -halfDepth);
@@ -545,13 +600,209 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         for (int i = 0; i < colors.Length; i++)
             colors[i] = color;
 
-        mesh.vertices = vertices;
-        mesh.colors32 = colors;
-        mesh.uv = ReleasedBlockUvs;
-        mesh.triangles = ReleasedBlockIndices;
-        mesh.RecalculateNormals();
-        mesh.RecalculateBounds();
-        return mesh;
+        runtime.Mesh.vertices = vertices;
+        runtime.Mesh.colors32 = colors;
+        runtime.Mesh.RecalculateNormals();
+        runtime.Mesh.RecalculateBounds();
+    }
+
+    internal void ReturnReleasedBlock(PixelBlock pixelBlock)
+    {
+        if (!_releasedBlockLookup.TryGetValue(pixelBlock, out ReleasedBlockRuntime runtime))
+            return;
+
+        if (_activeReleasedBlocks.Remove(runtime))
+        {
+            pixelBlock.RecycleToPool();
+            runtime.Block.transform.SetParent(_runtimeParent, false);
+            _releasedBlockPool.Push(runtime);
+        }
+    }
+
+    private void PrewarmReleasedBlockPool()
+    {
+        if (!Application.isPlaying || _blockPrefab == null || _runtimeParent == null)
+            return;
+
+        while (_releasedBlockPool.Count + _activeReleasedBlocks.Count < _prewarmReleasedBlockCount)
+            _releasedBlockPool.Push(CreateReleasedBlockRuntime());
+    }
+
+    private ReleasedBlockRuntime GetReleasedBlockRuntime()
+    {
+        ReleasedBlockRuntime runtime = _releasedBlockPool.Count > 0 ? _releasedBlockPool.Pop() : CreateReleasedBlockRuntime();
+        runtime.Block.transform.SetParent(_runtimeParent, false);
+        _activeReleasedBlocks.Add(runtime);
+        return runtime;
+    }
+
+    private ReleasedBlockRuntime CreateReleasedBlockRuntime()
+    {
+        GameObject block = Instantiate(_blockPrefab, _runtimeParent);
+        block.name = "PixelBlock_Released_Pooled";
+
+        MeshFilter meshFilter = block.GetComponent<MeshFilter>();
+        MeshRenderer meshRenderer = block.GetComponent<MeshRenderer>();
+        PixelBlock pixelBlock = block.GetComponent<PixelBlock>();
+        if (pixelBlock == null)
+            pixelBlock = block.AddComponent<PixelBlock>();
+        Rigidbody blockRigidbody = block.GetComponent<Rigidbody>();
+
+        Vector3[] vertices = new Vector3[24];
+        Color32[] colors = new Color32[24];
+        Mesh mesh = null;
+        if (meshFilter != null)
+        {
+            mesh = new Mesh { name = "PixelBlock_Released_Mesh" };
+            mesh.MarkDynamic();
+            mesh.vertices = vertices;
+            mesh.colors32 = colors;
+            mesh.uv = ReleasedBlockUvs;
+            mesh.triangles = ReleasedBlockIndices;
+            meshFilter.sharedMesh = mesh;
+        }
+
+        ReleasedBlockRuntime runtime = new ReleasedBlockRuntime
+        {
+            Block = block,
+            Transform = block.transform,
+            Rigidbody = blockRigidbody,
+            PixelBlock = pixelBlock,
+            Renderer = meshRenderer,
+            Mesh = mesh,
+            Vertices = vertices,
+            Colors = colors
+        };
+
+        pixelBlock.SetPoolOwner(this);
+        _releasedBlockLookup.Add(pixelBlock, runtime);
+        pixelBlock.RecycleToPool();
+        return runtime;
+    }
+
+    private void ResolveActiveReleasedBlockCollisions()
+    {
+        int blockCount = _activeReleasedBlocks.Count;
+        if (blockCount == 0 || !_cellSolid.IsCreated || _runtimeParent == null)
+            return;
+
+        EnsureCollisionBufferCapacity(blockCount);
+
+        for (int i = 0; i < blockCount; i++)
+        {
+            ReleasedBlockRuntime runtime = _activeReleasedBlocks[i];
+            Rigidbody blockRigidbody = runtime.Rigidbody;
+            Vector3 scale = runtime.Transform.lossyScale;
+
+            _collisionPreviousPositions[i] = runtime.PreviousWorldPosition;
+            _collisionPositions[i] = blockRigidbody.position;
+            _collisionVelocities[i] = blockRigidbody.linearVelocity;
+            _collisionHalfExtents[i] = new Vector2(Mathf.Abs(scale.x) * 0.5f, Mathf.Abs(scale.y) * 0.5f);
+            _collisionResolved[i] = 0;
+        }
+
+        ResolveGridCollisionJob collisionJob = new ResolveGridCollisionJob
+        {
+            CellSolid = _cellSolid,
+            PreviousWorldPositions = _collisionPreviousPositions,
+            WorldPositions = _collisionPositions,
+            Velocities = _collisionVelocities,
+            HalfExtents = _collisionHalfExtents,
+            Resolved = _collisionResolved,
+            WorldToLocal = _runtimeParent.worldToLocalMatrix,
+            LocalToWorld = _runtimeParent.localToWorldMatrix,
+            GridWidth = _gridWidth,
+            GridHeight = _gridHeight,
+            CellSize = _cellSize,
+            Offset = _offset
+        };
+
+        collisionJob.Schedule(blockCount, 64).Complete();
+
+        for (int i = 0; i < blockCount; i++)
+        {
+            ReleasedBlockRuntime runtime = _activeReleasedBlocks[i];
+            if (_collisionResolved[i] != 0)
+            {
+                runtime.Rigidbody.position = _collisionPositions[i];
+                runtime.Rigidbody.linearVelocity = _collisionVelocities[i];
+            }
+
+            runtime.PreviousWorldPosition = _collisionPositions[i];
+        }
+    }
+
+    private void EnsureCollisionBufferCapacity(int capacity)
+    {
+        if (_collisionPositions.IsCreated && _collisionPositions.Length >= capacity)
+            return;
+
+        DisposeCollisionBuffers();
+
+        int bufferCapacity = Mathf.NextPowerOfTwo(capacity);
+        _collisionPreviousPositions = new NativeArray<Vector3>(bufferCapacity, Allocator.Persistent);
+        _collisionPositions = new NativeArray<Vector3>(bufferCapacity, Allocator.Persistent);
+        _collisionVelocities = new NativeArray<Vector3>(bufferCapacity, Allocator.Persistent);
+        _collisionHalfExtents = new NativeArray<Vector2>(bufferCapacity, Allocator.Persistent);
+        _collisionResolved = new NativeArray<byte>(bufferCapacity, Allocator.Persistent);
+    }
+
+    private void ReleaseAllActiveBlocksToPool()
+    {
+        for (int i = _activeReleasedBlocks.Count - 1; i >= 0; i--)
+        {
+            ReleasedBlockRuntime runtime = _activeReleasedBlocks[i];
+            runtime.PixelBlock.RecycleToPool();
+            runtime.Block.transform.SetParent(_runtimeParent, false);
+            _releasedBlockPool.Push(runtime);
+        }
+
+        _activeReleasedBlocks.Clear();
+    }
+
+    private void DisposeReleasedBlockPool()
+    {
+        foreach (ReleasedBlockRuntime runtime in _releasedBlockPool)
+            DisposeReleasedBlockRuntime(runtime);
+
+        for (int i = 0; i < _activeReleasedBlocks.Count; i++)
+            DisposeReleasedBlockRuntime(_activeReleasedBlocks[i]);
+
+        _releasedBlockPool.Clear();
+        _activeReleasedBlocks.Clear();
+        _releasedBlockLookup.Clear();
+    }
+
+    private static void DisposeReleasedBlockRuntime(ReleasedBlockRuntime runtime)
+    {
+        if (runtime.Mesh != null)
+            DestroyUnityObject(runtime.Mesh);
+    }
+
+    private static void DestroyUnityObject(Object target)
+    {
+        if (Application.isPlaying)
+            Destroy(target);
+        else
+            DestroyImmediate(target);
+    }
+
+    private void DisposeCollisionBuffers()
+    {
+        if (_collisionPreviousPositions.IsCreated)
+            _collisionPreviousPositions.Dispose();
+
+        if (_collisionPositions.IsCreated)
+            _collisionPositions.Dispose();
+
+        if (_collisionVelocities.IsCreated)
+            _collisionVelocities.Dispose();
+
+        if (_collisionHalfExtents.IsCreated)
+            _collisionHalfExtents.Dispose();
+
+        if (_collisionResolved.IsCreated)
+            _collisionResolved.Dispose();
     }
 
     private static void FillFace(Vector3[] vertices, int startIndex, float rotationY, Vector3 a, Vector3 b, Vector3 c,
@@ -584,101 +835,6 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         return (normalized * 2f - 1f) * maxAngle;
     }
 
-    private bool ResolveGridCollisionSwept(Vector3 previousWorldPosition, ref Vector3 worldPosition,
-        ref Vector3 velocity, float halfWidth, float halfHeight)
-    {
-        if (!_cellSolid.IsCreated || _runtimeParent == null)
-            return false;
-
-        Vector3 fromLocal = _runtimeParent.InverseTransformPoint(previousWorldPosition);
-        Vector3 toLocal = _runtimeParent.InverseTransformPoint(worldPosition);
-        float distance = Vector2.Distance(new Vector2(fromLocal.x, fromLocal.y), new Vector2(toLocal.x, toLocal.y));
-        int steps = Mathf.Clamp(Mathf.CeilToInt(distance / Mathf.Max(_cellSize * 0.35f, 0.0001f)), 1, 12);
-
-        bool resolved = false;
-
-        for (int i = 1; i <= steps; i++)
-        {
-            float t = i / (float)steps;
-            Vector3 sampleWorldPosition = Vector3.Lerp(previousWorldPosition, worldPosition, t);
-
-            if (!ResolveGridCollision(ref sampleWorldPosition, ref velocity, halfWidth, halfHeight))
-                continue;
-
-            worldPosition = sampleWorldPosition;
-            resolved = true;
-            break;
-        }
-
-        return resolved;
-    }
-
-    private bool ResolveGridCollision(ref Vector3 worldPosition, ref Vector3 velocity, float halfWidth,
-        float halfHeight)
-    {
-        if (!_cellSolid.IsCreated || _runtimeParent == null)
-            return false;
-
-        Vector3 localPosition = _runtimeParent.InverseTransformPoint(worldPosition);
-        Vector3 parentScale = _runtimeParent.lossyScale;
-        float halfWidthLocal = halfWidth / Mathf.Max(Mathf.Abs(parentScale.x), 0.0001f);
-        float halfHeightLocal = halfHeight / Mathf.Max(Mathf.Abs(parentScale.y), 0.0001f);
-        float cellHalf = _cellSize * 0.5f;
-        int centerX = Mathf.RoundToInt((localPosition.x - _offset.x) / _cellSize);
-        int centerY = Mathf.RoundToInt((localPosition.y - _offset.y) / _cellSize);
-        int radiusX = Mathf.CeilToInt((halfWidthLocal + cellHalf) / _cellSize) + 1;
-        int radiusY = Mathf.CeilToInt((halfHeightLocal + cellHalf) / _cellSize) + 1;
-        int minX = Mathf.Max(0, centerX - radiusX);
-        int maxX = Mathf.Min(_gridWidth - 1, centerX + radiusX);
-        int minY = Mathf.Max(0, centerY - radiusY);
-        int maxY = Mathf.Min(_gridHeight - 1, centerY + radiusY);
-        bool resolved = false;
-
-        for (int y = minY; y <= maxY; y++)
-        {
-            for (int x = minX; x <= maxX; x++)
-            {
-                int cellIndex = y * _gridWidth + x;
-                if (_cellSolid[cellIndex] == 0)
-                    continue;
-
-                Vector3 cellLocal = GetCellLocalPosition(x, y);
-                float deltaX = localPosition.x - cellLocal.x;
-                float deltaY = localPosition.y - cellLocal.y;
-                float overlapX = halfWidthLocal + cellHalf - Mathf.Abs(deltaX);
-                float overlapY = halfHeightLocal + cellHalf - Mathf.Abs(deltaY);
-                if (overlapX <= 0f || overlapY <= 0f)
-                    continue;
-
-                Vector3 localNormal;
-                if (overlapX < overlapY)
-                {
-                    float sign = deltaX >= 0f ? 1f : -1f;
-                    localPosition.x += overlapX * sign;
-                    localNormal = new Vector3(sign, 0f, 0f);
-                }
-                else
-                {
-                    float sign = deltaY >= 0f ? 1f : -1f;
-                    localPosition.y += overlapY * sign;
-                    localNormal = new Vector3(0f, sign, 0f);
-                }
-
-                Vector3 worldNormal = _runtimeParent.TransformDirection(localNormal).normalized;
-                float normalVelocity = Vector3.Dot(velocity, worldNormal);
-                if (normalVelocity < 0f)
-                    velocity -= worldNormal * normalVelocity;
-
-                resolved = true;
-            }
-        }
-
-        if (resolved)
-            worldPosition = _runtimeParent.TransformPoint(localPosition);
-
-        return resolved;
-    }
-
     private void DisposeCells()
     {
         if (_cellColors.IsCreated)
@@ -692,11 +848,173 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     {
         public Mesh Mesh;
         public MeshRenderer Renderer;
+        public NativeArray<byte> Visited;
+        public NativeList<Vector3> Vertices;
+        public NativeList<Color32> Colors;
+        public NativeList<Vector2> Uvs;
+        public NativeList<int> Indices;
         public int StartX;
         public int StartY;
         public int Width;
         public int Height;
         public bool IsDetailed;
+    }
+
+    private sealed class ReleasedBlockRuntime
+    {
+        public GameObject Block;
+        public Transform Transform;
+        public Rigidbody Rigidbody;
+        public PixelBlock PixelBlock;
+        public MeshRenderer Renderer;
+        public Mesh Mesh;
+        public Vector3[] Vertices;
+        public Color32[] Colors;
+        public Vector3 PreviousWorldPosition;
+    }
+
+    [BurstCompile]
+    private struct ResolveGridCollisionJob : IJobParallelFor
+    {
+        [ReadOnly] public NativeArray<byte> CellSolid;
+        [ReadOnly] public NativeArray<Vector3> PreviousWorldPositions;
+        public NativeArray<Vector3> WorldPositions;
+        public NativeArray<Vector3> Velocities;
+        [ReadOnly] public NativeArray<Vector2> HalfExtents;
+        [WriteOnly] public NativeArray<byte> Resolved;
+        public Matrix4x4 WorldToLocal;
+        public Matrix4x4 LocalToWorld;
+        public int GridWidth;
+        public int GridHeight;
+        public float CellSize;
+        public Vector3 Offset;
+
+        public void Execute(int index)
+        {
+            Vector3 worldPosition = WorldPositions[index];
+            Vector3 velocity = Velocities[index];
+            Vector2 halfExtents = HalfExtents[index];
+            bool resolved = ResolveGridCollisionSwept(PreviousWorldPositions[index], ref worldPosition, ref velocity,
+                halfExtents.x, halfExtents.y);
+
+            WorldPositions[index] = worldPosition;
+            Velocities[index] = velocity;
+            Resolved[index] = resolved ? (byte)1 : (byte)0;
+        }
+
+        private bool ResolveGridCollisionSwept(Vector3 previousWorldPosition, ref Vector3 worldPosition,
+            ref Vector3 velocity, float halfWidth, float halfHeight)
+        {
+            Vector3 fromLocal = TransformPoint(WorldToLocal, previousWorldPosition);
+            Vector3 toLocal = TransformPoint(WorldToLocal, worldPosition);
+            float dx = toLocal.x - fromLocal.x;
+            float dy = toLocal.y - fromLocal.y;
+            float distance = Mathf.Sqrt(dx * dx + dy * dy);
+            int steps = Mathf.Clamp(Mathf.CeilToInt(distance / Mathf.Max(CellSize * 0.35f, 0.0001f)), 1, 12);
+
+            for (int i = 1; i <= steps; i++)
+            {
+                float t = i / (float)steps;
+                Vector3 sampleWorldPosition = Vector3.Lerp(previousWorldPosition, worldPosition, t);
+
+                if (!ResolveGridCollision(ref sampleWorldPosition, ref velocity, halfWidth, halfHeight))
+                    continue;
+
+                worldPosition = sampleWorldPosition;
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool ResolveGridCollision(ref Vector3 worldPosition, ref Vector3 velocity, float halfWidth,
+            float halfHeight)
+        {
+            Vector3 localPosition = TransformPoint(WorldToLocal, worldPosition);
+            float parentScaleX = Mathf.Max(GetColumnLength(LocalToWorld, 0), 0.0001f);
+            float parentScaleY = Mathf.Max(GetColumnLength(LocalToWorld, 1), 0.0001f);
+            float halfWidthLocal = halfWidth / parentScaleX;
+            float halfHeightLocal = halfHeight / parentScaleY;
+            float cellHalf = CellSize * 0.5f;
+            int centerX = Mathf.RoundToInt((localPosition.x - Offset.x) / CellSize);
+            int centerY = Mathf.RoundToInt((localPosition.y - Offset.y) / CellSize);
+            int radiusX = Mathf.CeilToInt((halfWidthLocal + cellHalf) / CellSize) + 1;
+            int radiusY = Mathf.CeilToInt((halfHeightLocal + cellHalf) / CellSize) + 1;
+            int minX = Mathf.Max(0, centerX - radiusX);
+            int maxX = Mathf.Min(GridWidth - 1, centerX + radiusX);
+            int minY = Mathf.Max(0, centerY - radiusY);
+            int maxY = Mathf.Min(GridHeight - 1, centerY + radiusY);
+            bool resolved = false;
+
+            for (int y = minY; y <= maxY; y++)
+            {
+                for (int x = minX; x <= maxX; x++)
+                {
+                    int cellIndex = y * GridWidth + x;
+                    if (CellSolid[cellIndex] == 0)
+                        continue;
+
+                    Vector3 cellLocal = Offset + new Vector3(x * CellSize, y * CellSize, 0f);
+                    float deltaX = localPosition.x - cellLocal.x;
+                    float deltaY = localPosition.y - cellLocal.y;
+                    float overlapX = halfWidthLocal + cellHalf - Mathf.Abs(deltaX);
+                    float overlapY = halfHeightLocal + cellHalf - Mathf.Abs(deltaY);
+                    if (overlapX <= 0f || overlapY <= 0f)
+                        continue;
+
+                    Vector3 localNormal;
+                    if (overlapX < overlapY)
+                    {
+                        float sign = deltaX >= 0f ? 1f : -1f;
+                        localPosition.x += overlapX * sign;
+                        localNormal = new Vector3(sign, 0f, 0f);
+                    }
+                    else
+                    {
+                        float sign = deltaY >= 0f ? 1f : -1f;
+                        localPosition.y += overlapY * sign;
+                        localNormal = new Vector3(0f, sign, 0f);
+                    }
+
+                    Vector3 worldNormal = TransformVector(LocalToWorld, localNormal).normalized;
+                    float normalVelocity = Vector3.Dot(velocity, worldNormal);
+                    if (normalVelocity < 0f)
+                        velocity -= worldNormal * normalVelocity;
+
+                    resolved = true;
+                }
+            }
+
+            if (resolved)
+                worldPosition = TransformPoint(LocalToWorld, localPosition);
+
+            return resolved;
+        }
+
+        private static Vector3 TransformPoint(Matrix4x4 matrix, Vector3 point)
+        {
+            return new Vector3(
+                matrix.m00 * point.x + matrix.m01 * point.y + matrix.m02 * point.z + matrix.m03,
+                matrix.m10 * point.x + matrix.m11 * point.y + matrix.m12 * point.z + matrix.m13,
+                matrix.m20 * point.x + matrix.m21 * point.y + matrix.m22 * point.z + matrix.m23);
+        }
+
+        private static Vector3 TransformVector(Matrix4x4 matrix, Vector3 vector)
+        {
+            return new Vector3(
+                matrix.m00 * vector.x + matrix.m01 * vector.y + matrix.m02 * vector.z,
+                matrix.m10 * vector.x + matrix.m11 * vector.y + matrix.m12 * vector.z,
+                matrix.m20 * vector.x + matrix.m21 * vector.y + matrix.m22 * vector.z);
+        }
+
+        private static float GetColumnLength(Matrix4x4 matrix, int column)
+        {
+            Vector3 columnVector = column == 0
+                ? new Vector3(matrix.m00, matrix.m10, matrix.m20)
+                : new Vector3(matrix.m01, matrix.m11, matrix.m21);
+
+            return columnVector.magnitude;
+        }
     }
 
     [BurstCompile]
@@ -756,6 +1074,9 @@ public sealed class TextureBlockSpawner : MonoBehaviour
 
         public void Execute()
         {
+            for (int i = 0; i < Visited.Length; i++)
+                Visited[i] = 0;
+
             for (int y = 0; y < ChunkHeight; y++)
             {
                 for (int x = 0; x < ChunkWidth; x++)

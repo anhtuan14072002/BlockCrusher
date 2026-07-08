@@ -640,6 +640,8 @@ MonoBehaviour:
   _maxChunkRebuildsPerFrame: 8
   _centerTexture: 1
   _spawnOnAwake: 1
+  _debrisLifetime: 5
+  _debrisPoolPrewarm: 50
 --- !u!1 &988305463
 GameObject:
   m_ObjectHideFlags: 0

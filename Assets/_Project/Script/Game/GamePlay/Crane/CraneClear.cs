@@ -43,7 +43,12 @@ public sealed class CraneClear : MonoBehaviour
     private void Clear(Collider other)
     {
         PixelBlock block = GetBlock(other);
-        if (block != null && _clearedBlocks.Add(block))
+        if (block == null || !_clearedBlocks.Add(block))
+            return;
+
+        if (block.ReturnToPool())
+            _clearedBlocks.Remove(block);
+        else
             Destroy(block.gameObject);
     }
 

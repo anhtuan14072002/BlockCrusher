@@ -15,22 +15,13 @@ public sealed class PixelBlock : MonoBehaviour
     private Renderer _renderer;
     private Transform _transform;
     private MaterialPropertyBlock _propertyBlock;
+    private TextureBlockSpawner _poolOwner;
     private bool _released;
-    private Vector3 _previousPhysicsPosition;
 
     private void Awake()
     {
         CacheComponents();
         Freeze();
-    }
-
-    private void FixedUpdate()
-    {
-        if (!_released)
-            return;
-
-        TextureBlockSpawner.ResolveGridCollisionForActiveSpawners(_transform, _rigidbody, _previousPhysicsPosition);
-        _previousPhysicsPosition = _rigidbody.position;
     }
 
     public void Initialize(Color32 color, bool applyColor)
@@ -59,8 +50,28 @@ public sealed class PixelBlock : MonoBehaviour
         ConfigureRigidbody();
         _rigidbody.isKinematic = false;
         _rigidbody.useGravity = true;
-        _previousPhysicsPosition = _rigidbody.position;
         _rigidbody.WakeUp();
+    }
+
+    public bool ReturnToPool()
+    {
+        if (_poolOwner == null)
+            return false;
+
+        _poolOwner.ReturnReleasedBlock(this);
+        return true;
+    }
+
+    internal void SetPoolOwner(TextureBlockSpawner poolOwner)
+    {
+        _poolOwner = poolOwner;
+    }
+
+    internal void RecycleToPool()
+    {
+        CacheComponents();
+        Freeze();
+        gameObject.SetActive(false);
     }
 
     public void ApplySawCompression(Vector3 sawCenter, Vector3 sawMoveDirection, float pressSpeed, Vector3 contactPoint,
@@ -108,7 +119,6 @@ public sealed class PixelBlock : MonoBehaviour
         _rigidbody.useGravity = false;
         _rigidbody.linearVelocity = Vector3.zero;
         _rigidbody.angularVelocity = Vector3.zero;
-        _previousPhysicsPosition = _rigidbody.position;
     }
 
     private void ConfigureRigidbody()
