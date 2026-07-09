@@ -4,8 +4,8 @@ using System.Collections.Generic;
 [RequireComponent(typeof(BoxCollider))]
 public sealed class CraneClear : MonoBehaviour
 {
-    private readonly Dictionary<Collider, PixelBlock> _blockCache = new Dictionary<Collider, PixelBlock>(128);
-    private readonly HashSet<PixelBlock> _clearedBlocks = new HashSet<PixelBlock>();
+    private readonly Dictionary<Collider, PixelBlock> _blockCache = new (128);
+    private readonly HashSet<PixelBlock> _clearedBlocks = new();
 
     private void Awake()
     {
@@ -43,8 +43,7 @@ public sealed class CraneClear : MonoBehaviour
     private void Clear(Collider other)
     {
         PixelBlock block = GetBlock(other);
-        if (block == null || !_clearedBlocks.Add(block))
-            return;
+        if (block == null || !_clearedBlocks.Add(block)) return;
 
         if (block.ReturnToPool())
             _clearedBlocks.Remove(block);

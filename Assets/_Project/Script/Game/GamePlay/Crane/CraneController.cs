@@ -22,19 +22,22 @@ namespace Crusher
         [SerializeField] private List<Transform> _joints = new List<Transform>(8);
         [SerializeField] private Transform _saw;
         [SerializeField] private SawBlockCutter _sawCutter;
+        [SerializeField] private SuctionDevice _suctionDevice;
+        [SerializeField] private Button _switchToolButton;
 
         private Vector3[] _solvePositions;
         private float[] _segmentLengths;
         private Quaternion[] _jointRotationOffsets;
         private Quaternion _sawRotationOffset = Quaternion.identity;
         private Transform _rootParent;
-        private Vector3 _rootLocalPosition;
+        private Vector3 _rootLocalPosition;                                        
         private Vector3 _sawTarget;
         private float _activeReach;
+        private bool _isSuctionMode;
 
         private void Awake()
         {
-            Application.targetFrameRate = 60;
+            Application.targetFrameRate = 120;
             if (_joystick == null)
             {
                 _joystick = FindFirstObjectByType<Joystick>();
@@ -43,6 +46,11 @@ namespace Crusher
             else
             {
                 _joystick.gameObject.SetActive(true);
+            }
+
+            if (_switchToolButton != null)
+            {
+                _switchToolButton.onClick.AddListener(ToggleTool);
             }
 
             int existingJointCount = GetExistingJointCount();
@@ -57,6 +65,8 @@ namespace Crusher
             CacheSawCutter();
 
             _sawTarget = GetSawPosition();
+            
+            SetToolActive(false);
         }
 
         private void Update()
@@ -89,6 +99,18 @@ namespace Crusher
             SolveJointsToSaw();
             CacheSawRotationOffset();
             ApplySawAtPosition(lockedSawPosition);
+        }
+
+        public void ToggleTool()
+        {
+            _isSuctionMode = !_isSuctionMode;
+            SetToolActive(_isSuctionMode);
+        }
+
+        private void SetToolActive(bool isSuction)
+        {
+            if (_sawCutter != null) _sawCutter.gameObject.SetActive(!isSuction);
+            if (_suctionDevice != null) _suctionDevice.gameObject.SetActive(isSuction);
         }
     }
 }
