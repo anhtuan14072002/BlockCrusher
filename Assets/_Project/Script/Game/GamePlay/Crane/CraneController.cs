@@ -14,6 +14,7 @@ namespace Crusher
         [SerializeField] private Vector2 _targetXBounds = new Vector2(-3.8f, 3.8f);
         [SerializeField] private Vector2 _targetYBounds = new Vector2(-2.6f, 6.2f);
         [SerializeField] private int _ikIterations = 16;
+        [SerializeField] private Camera _movementCamera;
 
         [Space] [SerializeField] private int _activeJointCount = 4;
         [SerializeField] private int _maxJointCount = 7;
@@ -29,15 +30,18 @@ namespace Crusher
         private float[] _segmentLengths;
         private Quaternion[] _jointRotationOffsets;
         private Quaternion _sawRotationOffset = Quaternion.identity;
+        private Transform _movementCameraTransform;
         private Transform _rootParent;
         private Vector3 _rootLocalPosition;                                        
         private Vector3 _sawTarget;
+        private Vector3 _lastSawMoveDirection;
         private float _activeReach;
         private bool _isSuctionMode;
-
+        private bool _useSawInputRotation = true;
+        
         private void Awake()
         {
-            Application.targetFrameRate = 120;
+            Application.targetFrameRate = 60;
             if (_joystick == null)
             {
                 _joystick = FindFirstObjectByType<Joystick>();
@@ -47,6 +51,8 @@ namespace Crusher
             {
                 _joystick.gameObject.SetActive(true);
             }
+
+            CacheMovementCamera();
 
             if (_switchToolButton != null)
             {
@@ -95,10 +101,12 @@ namespace Crusher
             InsertJointBeforeLast(insertIndex, storageIndex, insertedJoint);
             _activeJointCount++;
             ApplyActiveJointCount();
+            _useSawInputRotation = false;
             SeedZigZagPoseToSaw();
             SolveJointsToSaw();
             CacheSawRotationOffset();
             ApplySawAtPosition(lockedSawPosition);
+            _useSawInputRotation = true;
         }
 
         public void ToggleTool()

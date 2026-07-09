@@ -2103,6 +2103,10 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 1560647562}
     - target: {fileID: 8972793132794875421, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
+      propertyPath: _ikIterations
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 8972793132794875421, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: _maxJointCount
       value: 19
       objectReference: {fileID: 0}

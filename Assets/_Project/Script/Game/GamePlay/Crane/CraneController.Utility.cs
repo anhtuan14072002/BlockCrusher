@@ -27,6 +27,36 @@ namespace Crusher
             return _saw != null ? _saw.position : transform.position;
         }
 
+        private void CacheMovementCamera()
+        {
+            if (_movementCamera == null)
+                _movementCamera = Camera.main;
+
+            if (_movementCamera != null)
+                _movementCameraTransform = _movementCamera.transform;
+        }
+
+        private Vector3 GetSawMoveDirection(Vector2 input)
+        {
+            if (_movementCameraTransform == null)
+                return new Vector3(input.x, input.y, 0f);
+
+            Vector3 screenRight = _movementCameraTransform.right;
+            screenRight.z = 0f;
+
+            Vector3 screenUp = _movementCameraTransform.up;
+            screenUp.z = 0f;
+
+            if (screenRight.sqrMagnitude <= 0.0001f || screenUp.sqrMagnitude <= 0.0001f)
+                return new Vector3(input.x, input.y, 0f);
+
+            Vector3 moveDirection = screenRight.normalized * input.x + screenUp.normalized * input.y;
+            if (moveDirection.sqrMagnitude > 1f)
+                moveDirection.Normalize();
+
+            return moveDirection;
+        }
+
         private void CacheSawCutter()
         {
             if (_sawCutter == null && _saw != null)
