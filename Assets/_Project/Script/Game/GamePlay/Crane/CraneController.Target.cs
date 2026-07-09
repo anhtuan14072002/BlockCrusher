@@ -6,6 +6,7 @@ namespace Crusher
     {
         private void MoveSawTarget(Vector2 input)
         {
+            Vector3 currentPosition = GetSawPosition();
             float moveMultiplier = GetSawMoveMultiplier();
             Vector3 proposedTarget = _sawTarget + new Vector3(input.x, input.y, 0f) * (_sawMoveSpeed * moveMultiplier * Time.deltaTime);
             _sawTarget = proposedTarget;
@@ -15,6 +16,11 @@ namespace Crusher
 
             if (_useSuctionDevice && _suctionDeviceComponent != null)
                 _sawTarget = _suctionDeviceComponent.ClampSawTarget(GetSawPosition(), _sawTarget);
+
+            Vector3 moveDelta = _sawTarget - currentPosition;
+            moveDelta.z = 0f;
+            if (moveDelta.sqrMagnitude > 0.0001f)
+                _sawMoveDirection = moveDelta.normalized;
         }
 
         private float GetSawMoveMultiplier()
@@ -40,7 +46,7 @@ namespace Crusher
 
             Vector3 sawDirection = sawPosition - lastJoint.position;
             if (sawDirection.sqrMagnitude > 0.0001f)
-                _saw.rotation = GetSegmentRotation(sawDirection) * _sawRotationOffset;
+                _saw.rotation = GetSawRotation(sawDirection);
         }
     }
 }

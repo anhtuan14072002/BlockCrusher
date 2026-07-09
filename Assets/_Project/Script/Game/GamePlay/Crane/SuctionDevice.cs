@@ -14,9 +14,9 @@ public sealed class SuctionDevice : MonoBehaviour
     private const float MovementSkin = 0.01f;
     private const int SweepIterations = 6;
 
-    private readonly Dictionary<Collider, PixelBlock> _blockCache = new Dictionary<Collider, PixelBlock>(128);
-    private readonly Dictionary<PixelBlock, Rigidbody> _rigidbodyCache = new Dictionary<PixelBlock, Rigidbody>(128);
-    private readonly HashSet<PixelBlock> _consumedBlocks = new HashSet<PixelBlock>();
+    private readonly Dictionary<Collider, PixelBlock> _blockCache = new(128);
+    private readonly Dictionary<PixelBlock, Rigidbody> _rigidbodyCache = new(128);
+    private readonly HashSet<PixelBlock> _consumedBlocks = new();
 
     private void Awake()
     {

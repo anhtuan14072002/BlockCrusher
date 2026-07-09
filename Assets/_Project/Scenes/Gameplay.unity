@@ -597,6 +597,28 @@ GameObject:
   m_CorrespondingSourceObject: {fileID: 5318974516778464816, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
   m_PrefabInstance: {fileID: 2834538000516026221}
   m_PrefabAsset: {fileID: 0}
+--- !u!64 &635625927
+MeshCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 635625922}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 5
+  m_Convex: 1
+  m_CookingOptions: 30
+  m_Mesh: {fileID: 4300000, guid: dd79a548ce4cd8548a2b940c93b4e848, type: 2}
 --- !u!4 &794559455 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 2205370603045977694, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
@@ -1045,8 +1067,8 @@ Transform:
   m_GameObject: {fileID: 1138386190}
   serializedVersion: 2
   m_LocalRotation: {x: -0.7071068, y: 0, z: 0, w: 0.7071068}
-  m_LocalPosition: {x: 0, y: 0.138, z: 0}
-  m_LocalScale: {x: 1000, y: 1000, z: 1000}
+  m_LocalPosition: {x: 0, y: 0.578, z: 0}
+  m_LocalScale: {x: 1000, y: 1000, z: 1004.0062}
   m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 3000001902}
@@ -1123,8 +1145,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.0014234734, y: 0.0013027726, z: 0.0012417479}
-  m_Center: {x: -6.9307726e-11, y: 0.00043595073, z: 0.00020930475}
+  m_Size: {x: 0.0014234734, y: 0.0013027726, z: 0.0017656618}
+  m_Center: {x: -6.9307726e-11, y: 0.00043595073, z: -0.00005265349}
 --- !u!114 &1138386198
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1138,10 +1160,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _suctionPoint: {fileID: 1138386191}
-  _suctionForce: 18
-  _maxBlockVelocity: 8
-  _consumeDistance: 0.18
-  _chunkReleaseRadius: 0.45
+  _suctionForce: 15
+  _maxBlockVelocity: 5
+  _consumeDistance: 6.6
+  _movementBlockRadius: 0.25
+  _suctionAngle: 50.4
 --- !u!1 &1202792750
 GameObject:
   m_ObjectHideFlags: 0
@@ -2201,7 +2224,8 @@ PrefabInstance:
       propertyPath: _sawCrowdedMoveMultiplier
       value: 0.05
       objectReference: {fileID: 0}
-    m_RemovedComponents: []
+    m_RemovedComponents:
+    - {fileID: 3874013574092171956, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
     m_RemovedGameObjects: []
     m_AddedGameObjects:
     - targetCorrespondingSourceObject: {fileID: 2205370603045977694, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
@@ -2210,7 +2234,10 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 2697512586575510461, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1138386191}
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 5318974516778464816, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 635625927}
   m_SourcePrefab: {fileID: 100100000, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:

@@ -75,5 +75,11 @@ namespace Crusher
         {
             return Quaternion.Euler(0f, 0f, Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg);
         }
+
+        private Quaternion GetSawRotation(Vector3 fallbackDirection)
+        {
+            Vector3 direction = _sawMoveDirection.sqrMagnitude > 0.0001f ? _sawMoveDirection : fallbackDirection;
+            return GetSegmentRotation(direction) * _sawRotationOffset;
+        }
     }
 }

@@ -77,7 +77,7 @@ namespace Crusher
             _saw.position = _solvePositions[_activeJointCount];
 
             if (sawDirection.sqrMagnitude > 0.0001f)
-                _saw.rotation = GetSegmentRotation(sawDirection) * _sawRotationOffset;
+                _saw.rotation = GetSawRotation(sawDirection);
         }
 
         private void SeedZigZagPoseToSaw()

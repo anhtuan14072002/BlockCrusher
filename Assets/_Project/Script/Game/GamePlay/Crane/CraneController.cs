@@ -36,6 +36,7 @@ namespace Crusher
         private Transform _rootParent;
         private Vector3 _rootLocalPosition;
         private Vector3 _sawTarget;
+        private Vector3 _sawMoveDirection;
         private float _activeReach;
         private SuctionDevice _suctionDeviceComponent;
         private bool _useSuctionDevice;
