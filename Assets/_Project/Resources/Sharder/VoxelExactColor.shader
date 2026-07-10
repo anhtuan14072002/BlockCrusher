@@ -3,6 +3,7 @@ Shader "BlockCrusher/VoxelExactColor"
     Properties
     {
         _EdgeColor ("Edge Color", Color) = (0,0,0,1)
+        _Color ("Color", Color) = (1,1,1,1)
         _EdgeStrength ("Edge Strength", Range(0,1)) = 0.45
         _EdgeWidth ("Edge Width", Range(0.001,0.15)) = 0.035
     }
@@ -21,6 +22,7 @@ Shader "BlockCrusher/VoxelExactColor"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile_instancing
 
             #include "UnityCG.cginc"
 
@@ -28,11 +30,16 @@ Shader "BlockCrusher/VoxelExactColor"
             half _EdgeStrength;
             half _EdgeWidth;
 
+            UNITY_INSTANCING_BUFFER_START(Props)
+                UNITY_DEFINE_INSTANCED_PROP(fixed4, _Color)
+            UNITY_INSTANCING_BUFFER_END(Props)
+
             struct appdata
             {
                 float4 vertex : POSITION;
                 fixed4 color : COLOR;
                 float2 uv : TEXCOORD0;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct v2f
@@ -40,11 +47,14 @@ Shader "BlockCrusher/VoxelExactColor"
                 float4 vertex : SV_POSITION;
                 fixed4 color : COLOR;
                 float2 uv : TEXCOORD0;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             v2f vert(appdata v)
             {
                 v2f o;
+                UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_TRANSFER_INSTANCE_ID(v, o);
                 o.vertex = UnityObjectToClipPos(v.vertex);
                 o.color = v.color;
                 o.uv = v.uv;
@@ -53,7 +63,8 @@ Shader "BlockCrusher/VoxelExactColor"
 
             fixed4 frag(v2f i) : SV_Target
             {
-                fixed4 color = i.color;
+                UNITY_SETUP_INSTANCE_ID(i);
+                fixed4 color = i.color * UNITY_ACCESS_INSTANCED_PROP(Props, _Color);
                 color.a = 1;
 
                 #ifndef UNITY_COLORSPACE_GAMMA

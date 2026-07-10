@@ -55,6 +55,8 @@ public sealed class SawBlockCutter : MonoBehaviour
 
         _previousPosition = currentPosition;
 
+        TextureBlockSpawner.ApplySawForceForActiveSpawners(currentPosition, _bladePushRadius, _compressionForce);
+
         if (ReleaseAlongMovement(previousPosition, currentPosition))
             RegisterResistance();
     }

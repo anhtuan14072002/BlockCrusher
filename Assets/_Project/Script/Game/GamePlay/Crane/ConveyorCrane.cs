@@ -1,5 +1,4 @@
 using UnityEngine;
-using System.Collections.Generic;
 
 [RequireComponent(typeof(BoxCollider))]
 public sealed class ConveyorCrane : MonoBehaviour
@@ -9,15 +8,14 @@ public sealed class ConveyorCrane : MonoBehaviour
     [SerializeField] private float _acceleration = 12f;
 
     private Vector3 _direction;
-    private readonly Dictionary<Collider, PixelBlock> _blockCache = new Dictionary<Collider, PixelBlock>(128);
-    private readonly Dictionary<PixelBlock, Rigidbody> _rigidbodyCache = new Dictionary<PixelBlock, Rigidbody>(128);
+    private BoxCollider _conveyorCollider;
 
     private void Awake()
     {
         CacheDirection();
 
-        Collider conveyorCollider = GetComponent<Collider>();
-        conveyorCollider.isTrigger = true;
+        _conveyorCollider = GetComponent<BoxCollider>();
+        _conveyorCollider.isTrigger = true;
     }
 
     private void OnValidate()
@@ -29,33 +27,11 @@ public sealed class ConveyorCrane : MonoBehaviour
             conveyorCollider.isTrigger = true;
     }
 
-    private void OnTriggerStay(Collider other)
+    private void FixedUpdate()
     {
-        PixelBlock block = GetBlock(other);
-        if (block == null)
-            return;
-
-        block.Release();
-
-        Rigidbody blockRigidbody = GetRigidbody(block);
-        Vector3 velocity = blockRigidbody.linearVelocity;
-        float currentSpeed = Vector3.Dot(velocity, _direction);
-        float nextSpeed = Mathf.MoveTowards(currentSpeed, _speed, _acceleration * Time.fixedDeltaTime);
-        blockRigidbody.linearVelocity = velocity + _direction * (nextSpeed - currentSpeed);
-    }
-
-    private void OnTriggerExit(Collider other)
-    {
-        if (_blockCache.TryGetValue(other, out PixelBlock block))
-            _rigidbodyCache.Remove(block);
-
-        _blockCache.Remove(other);
-    }
-
-    private void OnDisable()
-    {
-        _blockCache.Clear();
-        _rigidbodyCache.Clear();
+        if (_conveyorCollider != null)
+            TextureBlockSpawner.ApplyConveyorForActiveSpawners(_conveyorCollider.bounds, _direction, _speed,
+                _acceleration, Time.fixedDeltaTime);
     }
 
     private void CacheDirection()
@@ -63,23 +39,4 @@ public sealed class ConveyorCrane : MonoBehaviour
         _direction = _worldDirection.sqrMagnitude > 0.0001f ? _worldDirection.normalized : Vector3.right;
     }
 
-    private PixelBlock GetBlock(Collider other)
-    {
-        if (_blockCache.TryGetValue(other, out PixelBlock block))
-            return block;
-
-        block = other.GetComponentInParent<PixelBlock>();
-        _blockCache.Add(other, block);
-        return block;
-    }
-
-    private Rigidbody GetRigidbody(PixelBlock block)
-    {
-        if (_rigidbodyCache.TryGetValue(block, out Rigidbody blockRigidbody))
-            return blockRigidbody;
-
-        blockRigidbody = block.GetComponent<Rigidbody>();
-        _rigidbodyCache.Add(block, blockRigidbody);
-        return blockRigidbody;
-    }
 }

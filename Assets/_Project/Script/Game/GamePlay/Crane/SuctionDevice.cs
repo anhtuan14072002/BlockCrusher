@@ -16,22 +16,13 @@ namespace Crusher
 
         private const float MovementSkin = 0.01f;
         private const int SweepIterations = 6;
-        private Collider[] _colliders = new Collider[64];
-
         private void FixedUpdate()
         {
             if (!gameObject.activeInHierarchy) return;
             Transform refTransform = _suctionPoint != null ? _suctionPoint : transform;
-
-            Vector3 boxCenter = refTransform.position + refTransform.right * (_suctionBoxSize.x / 2f);
-            int count = Physics.OverlapBoxNonAlloc(boxCenter, _suctionBoxSize / 2f, _colliders, refTransform.rotation);
-
-            for (int i = 0; i < count; i++)
-            {
-                PixelBlock block = _colliders[i].GetComponentInParent<PixelBlock>();
-                if (block != null)
-                    PullBlock(refTransform, block);
-            }
+            TextureBlockSpawner.ApplySuctionForActiveSpawners(refTransform.position, refTransform.rotation, _suctionBoxSize,
+                _suctionForce, _suctionAcceleration, _maxBlockVelocity, _arrivalDamping, _destroyRadius,
+                Time.fixedDeltaTime);
         }
 
         public Vector3 ClampSawTarget(Vector3 sawPosition, Vector3 targetSawPosition)
@@ -61,42 +52,6 @@ namespace Crusher
             return Mathf.Abs(sawDelta.x) >= Mathf.Abs(sawDelta.y)
                 ? SweepSawTarget(xTarget, yMove)
                 : SweepSawTarget(yTarget, xMove);
-        }
-
-        private void PullBlock(Transform refTransform, PixelBlock block)
-        {
-            block.Release();
-
-            Vector3 directionToMouth = refTransform.position - block.transform.position;
-            directionToMouth.z = 0f;
-            float distance = directionToMouth.magnitude;
-            if (distance <= 0.0001f)
-                return;
-
-            Vector3 pullDirection = directionToMouth / distance;
-            if (IsBlockedByTexture(refTransform.position, -pullDirection, distance))
-                return;
-
-            if (distance < _destroyRadius)
-            {
-                if (!block.ReturnToPool())
-                    block.gameObject.SetActive(false);
-
-                return;
-            }
-
-            if (!block.TryGetComponent<Rigidbody>(out var rb))
-                return;
-
-            Vector3 targetVelocity = pullDirection * Mathf.Min(_suctionForce * distance, _maxBlockVelocity);
-            Vector3 smoothedVelocity = Vector3.MoveTowards(rb.linearVelocity, targetVelocity,
-                _suctionAcceleration * Time.fixedDeltaTime);
-
-            if (distance <= _destroyRadius * 2.5f)
-                smoothedVelocity = Vector3.Lerp(smoothedVelocity, targetVelocity,
-                    _arrivalDamping * Time.fixedDeltaTime);
-
-            rb.linearVelocity = Vector3.ClampMagnitude(smoothedVelocity, _maxBlockVelocity);
         }
 
         private bool IsBlockedByTexture(Vector3 suctionPosition, Vector3 directionToBlock, float blockDistance)

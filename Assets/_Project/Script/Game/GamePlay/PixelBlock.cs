@@ -1,6 +1,6 @@
 using UnityEngine;
 
-[RequireComponent(typeof(Rigidbody))]
+// [RequireComponent(typeof(Rigidbody))]
 public sealed class PixelBlock : MonoBehaviour
 {
     private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
@@ -64,11 +64,7 @@ public sealed class PixelBlock : MonoBehaviour
 
     public bool ReturnToPool()
     {
-        if (_poolOwner == null)
-            return false;
-
-        _poolOwner.ReturnReleasedBlock(this);
-        return true;
+        return false;
     }
 
     internal void SetPoolOwner(TextureBlockSpawner poolOwner)

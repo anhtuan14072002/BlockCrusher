@@ -682,7 +682,6 @@ GameObject:
   m_Component:
   - component: {fileID: 925441448}
   - component: {fileID: 925441449}
-  - component: {fileID: 925441450}
   m_Layer: 0
   m_Name: TextureBlockSpawner
   m_TagString: Untagged
@@ -718,7 +717,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _texture: {fileID: 2800000, guid: 30bdbcc2c36ec3649ae74df6d6e86e46, type: 3}
-  _blockPrefab: {fileID: 612727279210085569, guid: 3f4ebe89b85f2a147bdba89bc394f76d, type: 3}
   _container: {fileID: 925441448}
   _chunkMaterial: {fileID: 2100000, guid: 27e4bb3294908924e9d6a58207d8f342, type: 2}
   _pixelSize: 0.12
@@ -729,25 +727,17 @@ MonoBehaviour:
   _renderVoxelDetailFromStart: 1
   _detailVoxelScale: 0.94
   _voxelRandomYRotation: 20
+  _maxPhysicsDebrisPerFrame: 8
   _chunkSize: 56
   _maxChunkRebuildsPerFrame: 8
-  _prewarmReleasedBlockCount: 50
-  _releasedBlockMass: 0.01
+  _releasedBlockCapacity: 256
+  _releasedBlockGravity: 3
+  _releasedBlockDamping: 2.5
+  _releasedBlockRestitution: 0.5
+  _releasedBlockFriction: 0.2
   _centerTexture: 1
   _spawnOnAwake: 1
-  _debrisEntitySpawner: {fileID: 925441450}
---- !u!114 &925441450
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 925441447}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f15ebd19aad6f094795872c9949aa4dd, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  _pixelBlockPrefab: {fileID: 4019640833441348614, guid: 3f4ebe89b85f2a147bdba89bc394f76d, type: 3}
 --- !u!1 &972235226
 GameObject:
   m_ObjectHideFlags: 0
@@ -2154,6 +2144,10 @@ PrefabInstance:
       propertyPath: _addJointButton
       value: 
       objectReference: {fileID: 3000000105}
+    - target: {fileID: 8972793132794875421, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
+      propertyPath: _movementCamera
+      value: 
+      objectReference: {fileID: 1912903403}
     - target: {fileID: 8972793132794875421, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: _switchToolButton
       value: 
