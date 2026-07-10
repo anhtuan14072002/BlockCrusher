@@ -4,13 +4,16 @@ using UnityEngine;
 public sealed class SawBlockCutter : MonoBehaviour
 {
     [SerializeField] private float _compressionForce = 9f;
-    [SerializeField] private float _bladeTangentialForce = 6f;
+    [SerializeField] private float _bladeTangentialForce = 32f;
     [SerializeField] private float _bladeSpinDirection = 1f;
+    [SerializeField] private float _bladeSpinSpeed = 900f;
     [SerializeField] private float _bladePushRadius = 0.55f;
     [SerializeField] private float _maxSawVelocity = 8f;
+    [SerializeField] private float _cutSweepStep = 0.08f;
     [SerializeField, Range(0f, 1f)] private float _sideDampingOnContact = 0.35f;
-    [SerializeField] private float _maxBlockVelocity = 4f;
+    [SerializeField] private float _maxBlockVelocity = 11f;
     [SerializeField] private float _resistanceDuration = 0.08f;
+    [SerializeField] private Transform _bladeVisual;
 
     private Vector3 _previousPosition;
     private Vector3 _sawVelocity;
@@ -24,14 +27,24 @@ public sealed class SawBlockCutter : MonoBehaviour
 
     private void Awake()
     {
+        _bladeVisual ??= transform;
         _previousPosition = transform.position;
+    }
+
+    private void Update()
+    {
+        if (_bladeVisual == null || _bladeSpinSpeed == 0f)
+            return;
+
+        _bladeVisual.Rotate(0f, 0f, _bladeSpinSpeed * Mathf.Sign(_bladeSpinDirection) * Time.deltaTime, Space.Self);
     }
 
     private void FixedUpdate()
     {
+        Vector3 previousPosition = _previousPosition;
         Vector3 currentPosition = transform.position;
         float inverseDeltaTime = Time.fixedDeltaTime > 0f ? 1f / Time.fixedDeltaTime : 0f;
-        _sawVelocity = (currentPosition - _previousPosition) * inverseDeltaTime;
+        _sawVelocity = (currentPosition - previousPosition) * inverseDeltaTime;
 
         if (_sawVelocity.sqrMagnitude > _maxSawVelocity * _maxSawVelocity)
             _sawVelocity = _sawVelocity.normalized * _maxSawVelocity;
@@ -42,8 +55,7 @@ public sealed class SawBlockCutter : MonoBehaviour
 
         _previousPosition = currentPosition;
 
-        if (TextureBlockSpawner.ReleaseAtWorldForActiveSpawners(currentPosition, _pressDirection, _pressSpeed, _compressionForce,
-                _bladeTangentialForce, _bladeSpinDirection, _bladePushRadius, _sideDampingOnContact, _maxBlockVelocity))
+        if (ReleaseAlongMovement(previousPosition, currentPosition))
             RegisterResistance();
     }
 
@@ -112,6 +124,25 @@ public sealed class SawBlockCutter : MonoBehaviour
     private void RegisterResistance()
     {
         _resistanceUntil = Time.time + _resistanceDuration;
+    }
+
+    private bool ReleaseAlongMovement(Vector3 from, Vector3 to)
+    {
+        Vector3 delta = to - from;
+        delta.z = 0f;
+        float distance = delta.magnitude;
+        int steps = Mathf.Max(1, Mathf.CeilToInt(distance / Mathf.Max(_cutSweepStep, 0.01f)));
+        bool releasedAny = false;
+
+        for (int i = 1; i <= steps; i++)
+        {
+            Vector3 samplePosition = Vector3.Lerp(from, to, i / (float)steps);
+            releasedAny |= TextureBlockSpawner.ReleaseAtWorldForActiveSpawners(samplePosition, _pressDirection,
+                _pressSpeed, _compressionForce, _bladeTangentialForce, _bladeSpinDirection, _bladePushRadius,
+                _sideDampingOnContact, _maxBlockVelocity);
+        }
+
+        return releasedAny;
     }
 
     private void ClearCache(Collider other)

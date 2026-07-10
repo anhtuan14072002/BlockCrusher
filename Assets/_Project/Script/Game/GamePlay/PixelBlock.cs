@@ -6,7 +6,8 @@ public sealed class PixelBlock : MonoBehaviour
     private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
     private static readonly int ColorId = Shader.PropertyToID("_Color");
 
-    [SerializeField] private float _mass = 0.05f;
+    [SerializeField] private float _mass = 0.02f;
+    [SerializeField] private float _gravityMultiplier = 0.3f;
     [SerializeField] private float _linearDamping = 2.5f;
     [SerializeField] private float _angularDamping = 4f;
     [SerializeField] private float _sleepThreshold = 0.08f;
@@ -22,6 +23,14 @@ public sealed class PixelBlock : MonoBehaviour
     {
         CacheComponents();
         Freeze();
+    }
+
+    private void FixedUpdate()
+    {
+        if (!_released || _gravityMultiplier <= 0f)
+            return;
+
+        _rigidbody.AddForce(Physics.gravity * _gravityMultiplier, ForceMode.Acceleration);
     }
 
     public void Initialize(Color32 color, bool applyColor)
@@ -49,7 +58,7 @@ public sealed class PixelBlock : MonoBehaviour
         _released = true;
         ConfigureRigidbody();
         _rigidbody.isKinematic = false;
-        _rigidbody.useGravity = true;
+        _rigidbody.useGravity = false;
         _rigidbody.WakeUp();
     }
 
@@ -65,6 +74,13 @@ public sealed class PixelBlock : MonoBehaviour
     internal void SetPoolOwner(TextureBlockSpawner poolOwner)
     {
         _poolOwner = poolOwner;
+    }
+
+    internal void SetMass(float mass)
+    {
+        _mass = mass;
+        CacheComponents();
+        _rigidbody.mass = _mass;
     }
 
     internal void RecycleToPool()
@@ -99,16 +115,30 @@ public sealed class PixelBlock : MonoBehaviour
         if (outwardSpeed < 0f)
             velocity -= outward * outwardSpeed;
 
-        float tangentSpeed = Vector3.Dot(velocity, tangent);
-        velocity -= tangent * tangentSpeed * (radiusPush * (1f - sideDamping));
-
         float pushScale = 1f + radiusPush * 1.25f;
         float targetOutwardSpeed = outwardForce * 0.08f * pushScale * speedScale;
         if (outwardSpeed < targetOutwardSpeed)
             velocity += outward * (targetOutwardSpeed - Mathf.Max(outwardSpeed, 0f));
 
-        velocity += tangent * (tangentialForce * 0.006f * pushScale);
+        Vector3 digDirection = Vector3.up + tangent * 0.1f;
+        digDirection.Normalize();
+
+        float digSpeed = Vector3.Dot(velocity, digDirection);
+        if (digSpeed < 0f)
+            velocity -= digDirection * digSpeed;
+
+        float bladeCarrySpeed = tangentialForce * 0.42f * pushScale * speedScale * radiusPush;
+        if (digSpeed < bladeCarrySpeed)
+            velocity += digDirection * (bladeCarrySpeed - Mathf.Max(digSpeed, 0f));
+
+        velocity -= outward * Vector3.Dot(velocity, outward) * sideDamping * radiusPush * 0.15f;
         _rigidbody.linearVelocity = Vector3.ClampMagnitude(velocity, maxVelocity);
+
+        float targetAngularSpeed = tangentialForce * Mathf.Sign(spinDirection) * radiusPush;
+        Vector3 angularVelocity = _rigidbody.angularVelocity;
+        if (Mathf.Abs(angularVelocity.z) < Mathf.Abs(targetAngularSpeed))
+            angularVelocity.z = targetAngularSpeed;
+        _rigidbody.angularVelocity = angularVelocity;
     }
 
     private void Freeze()

@@ -62,6 +62,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     [SerializeField, Range(8, 64)] private int _chunkSize = 24;
     [SerializeField, Range(1, 8)] private int _maxChunkRebuildsPerFrame = 2;
     [SerializeField, Min(0)] private int _prewarmReleasedBlockCount = 50;
+    [SerializeField, Min(0.0001f)] private float _releasedBlockMass = 0.02f;
     [SerializeField] private bool _centerTexture = true;
     [SerializeField] private bool _spawnOnAwake = true;
 
@@ -110,6 +111,24 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         }
 
         return releasedAny;
+    }
+
+    public static bool HasSolidAtWorldForActiveSpawners(Vector3 worldPoint, float radius)
+    {
+        for (int i = ActiveSpawners.Count - 1; i >= 0; i--)
+        {
+            TextureBlockSpawner spawner = ActiveSpawners[i];
+            if (spawner == null)
+            {
+                ActiveSpawners.RemoveAt(i);
+                continue;
+            }
+
+            if (spawner.HasSolidAtWorld(worldPoint, radius))
+                return true;
+        }
+
+        return false;
     }
 
     private void OnEnable()
@@ -291,6 +310,39 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         }
 
         return releasedAny;
+    }
+
+    public bool HasSolidAtWorld(Vector3 worldPoint, float radius)
+    {
+        if (!_cellSolid.IsCreated || _runtimeParent == null)
+            return false;
+
+        Vector3 localPoint = _runtimeParent.InverseTransformPoint(worldPoint);
+        float radiusSqr = radius * radius;
+        int centerX = Mathf.RoundToInt((localPoint.x - _offset.x) / _cellSize);
+        int centerY = Mathf.RoundToInt((localPoint.y - _offset.y) / _cellSize);
+        int radiusCells = Mathf.Max(1, Mathf.CeilToInt(radius / _cellSize));
+        int minX = Mathf.Max(0, centerX - radiusCells);
+        int maxX = Mathf.Min(_gridWidth - 1, centerX + radiusCells);
+        int minY = Mathf.Max(0, centerY - radiusCells);
+        int maxY = Mathf.Min(_gridHeight - 1, centerY + radiusCells);
+
+        for (int y = minY; y <= maxY; y++)
+        {
+            for (int x = minX; x <= maxX; x++)
+            {
+                int cellIndex = y * _gridWidth + x;
+                if (_cellSolid[cellIndex] == 0)
+                    continue;
+
+                Vector3 cellLocal = GetCellLocalPosition(x, y);
+                Vector3 delta = cellLocal - localPoint;
+                if (delta.x * delta.x + delta.y * delta.y <= radiusSqr)
+                    return true;
+            }
+        }
+
+        return false;
     }
 
     private void MarkCellChunkDirty(int cellX, int cellY)
@@ -534,6 +586,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
 
         PixelBlock pixelBlock = runtime.PixelBlock;
         ConfigureReleasedBlockVisual(runtime, color, localPosition);
+        pixelBlock.SetMass(_releasedBlockMass);
         pixelBlock.Initialize(color, false);
         pixelBlock.Release();
         pixelBlock.ApplySawCompression(sawCenter, pressDirection, pressSpeed, block.transform.position, outwardForce,
@@ -675,6 +728,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         };
 
         pixelBlock.SetPoolOwner(this);
+        pixelBlock.SetMass(_releasedBlockMass);
         _releasedBlockLookup.Add(pixelBlock, runtime);
         pixelBlock.RecycleToPool();
         return runtime;

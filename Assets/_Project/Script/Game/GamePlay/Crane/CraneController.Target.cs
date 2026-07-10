@@ -13,6 +13,9 @@ namespace Crusher
             _sawTarget.x = Mathf.Clamp(_sawTarget.x, _targetXBounds.x, _targetXBounds.y);
             _sawTarget.y = Mathf.Clamp(_sawTarget.y, _targetYBounds.x, _targetYBounds.y);
             ClampSawTargetToReach();
+
+            if (_isSuctionMode && _suctionDevice != null)
+                _sawTarget = _suctionDevice.ClampSawTarget(GetSawPosition(), _sawTarget);
         }
 
         private void ApplySawAtPosition(Vector3 sawPosition)

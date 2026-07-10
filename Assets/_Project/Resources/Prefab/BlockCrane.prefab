@@ -788,12 +788,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _compressionForce: 6
-  _bladeTangentialForce: 6
+  _bladeTangentialForce: 32
   _bladeSpinDirection: 1
   _bladePushRadius: 0.55
   _maxSawVelocity: 4
   _sideDampingOnContact: 0.35
-  _maxBlockVelocity: 4
+  _maxBlockVelocity: 11
   _resistanceDuration: 0.08
 --- !u!135 &3874013574092171956
 SphereCollider:
