@@ -30,6 +30,25 @@
       "source": "local-tarball",
       "dependencies": {}
     },
+    "com.trove.common": {
+      "version": "0.3.6",
+      "depth": 0,
+      "source": "registry",
+      "dependencies": {
+        "com.unity.entities": "1.4.2"
+      },
+      "url": "https://package.openupm.com"
+    },
+    "com.trove.tweens": {
+      "version": "0.3.3",
+      "depth": 0,
+      "source": "registry",
+      "dependencies": {
+        "com.unity.entities": "1.4.2",
+        "com.trove.common": "0.3.4"
+      },
+      "url": "https://package.openupm.com"
+    },
     "com.tuna.comon": {
       "version": "https://github.com/anhtuan14072002/Core.git?path=/com.tuna.comon",
       "depth": 0,
@@ -185,6 +204,18 @@
       "dependencies": {
         "com.unity.mathematics": "1.2.1",
         "com.unity.modules.jsonserialize": "1.0.0"
+      },
+      "url": "https://packages.unity.com"
+    },
+    "com.unity.charactercontroller": {
+      "version": "1.4.2",
+      "depth": 0,
+      "source": "registry",
+      "dependencies": {
+        "com.unity.physics": "1.3.15",
+        "com.unity.entities": "1.3.15",
+        "com.unity.modules.physics": "1.0.0",
+        "com.unity.modules.uielements": "1.0.0"
       },
       "url": "https://packages.unity.com"
     },

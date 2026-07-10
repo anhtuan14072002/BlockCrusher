@@ -730,14 +730,12 @@ MonoBehaviour:
   _maxPhysicsDebrisPerFrame: 8
   _chunkSize: 56
   _maxChunkRebuildsPerFrame: 8
-  _releasedBlockCapacity: 256
   _releasedBlockGravity: 3
   _releasedBlockDamping: 2.5
   _releasedBlockRestitution: 0.5
   _releasedBlockFriction: 0.2
   _centerTexture: 1
   _spawnOnAwake: 1
-  _pixelBlockPrefab: {fileID: 4019640833441348614, guid: 3f4ebe89b85f2a147bdba89bc394f76d, type: 3}
 --- !u!1 &972235226
 GameObject:
   m_ObjectHideFlags: 0

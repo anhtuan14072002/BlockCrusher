@@ -1,7 +1,9 @@
 using System.Collections.Generic;
 using Unity.Burst;
 using Unity.Collections;
+using Unity.Entities;
 using Unity.Jobs;
+using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -60,7 +62,6 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     [SerializeField, Range(0, 32)] private int _maxPhysicsDebrisPerFrame = 8;
     [SerializeField, Range(8, 64)] private int _chunkSize = 24;
     [SerializeField, Range(1, 8)] private int _maxChunkRebuildsPerFrame = 2;
-    [SerializeField, Min(1)] private int _releasedBlockCapacity = 256;
     [SerializeField] private float _releasedBlockGravity = 3f;
     [SerializeField, Range(0f, 20f)] private float _releasedBlockDamping = 2.5f;
     [SerializeField, Range(0f, 1f)] private float _releasedBlockRestitution = 0.5f;
@@ -74,14 +75,16 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     private readonly List<JobHandle> _scheduledChunkHandles = new(8);
     private NativeArray<Color32> _cellColors;
     private NativeArray<byte> _cellSolid;
-    private NativeList<Vector3> _positions;
-    private NativeList<Vector3> _velocities;
-    private NativeList<Color32> _colors;
     private Mesh _releasedBlockMesh;
     private Material _releasedBlockMaterial;
     private Matrix4x4[] _instanceMatrices;
     private Vector4[] _instanceColors;
     private MaterialPropertyBlock _instancePropertyBlock;
+    private World _ecsWorld;
+    private EntityManager _entityManager;
+    private Entity _ecsOwner;
+    private EntityQuery _releasedBlockQuery;
+    private bool _hasReleasedBlockQuery;
     private byte[] _chunkDirty;
     private Transform _runtimeParent;
     private Material _runtimeChunkMaterial;
@@ -167,6 +170,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             spawner._sawForcePosition = sawPosition;
             spawner._sawForceRadius = radius;
             spawner._sawForceStrength = strength;
+            spawner.UpdateEcsSpawnerData();
         }
     }
 
@@ -192,11 +196,12 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         DisposeChunks();
         DisposeReleasedBlocks();
         DisposeCells();
+        DestroyEcsOwner();
     }
 
     private void FixedUpdate()
     {
-        ResolveActiveReleasedBlockCollisions();
+        UpdateEcsSpawnerData();
     }
 
     private void LateUpdate()
@@ -273,6 +278,8 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         texturePixels.Dispose();
 
         _runtimeChunkMaterial = ResolveChunkMaterial();
+        CreateEcsOwner();
+        SyncAllCellsToEcs();
         CreateChunks();
         CreateReleasedBlockRendering();
     }
@@ -287,12 +294,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         _scheduledChunkRebuilds.Clear();
         _scheduledChunkHandles.Clear();
         _chunkDirty = null;
-        if (_positions.IsCreated)
-            _positions.Clear();
-        if (_velocities.IsCreated)
-            _velocities.Clear();
-        if (_colors.IsCreated)
-            _colors.Clear();
+        ClearReleasedBlockEntities();
 
         Transform parent = _container != null ? _container : transform;
 
@@ -339,6 +341,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
 
                 Color32 color = _cellColors[cellIndex];
                 _cellSolid[cellIndex] = 0;
+                SetEcsCellSolid(cellIndex, 0);
                 if (TryConsumePhysicsDebrisBudget())
                 {
                     SpawnReleasedBlock(cellLocal, color, worldPoint, pressDirection, pressSpeed, outwardForce,
@@ -634,45 +637,23 @@ public sealed class TextureBlockSpawner : MonoBehaviour
                            (tangentialForce * 0.42f * pushScale * speedScale * radiusPush);
         velocity -= outward * Vector3.Dot(velocity, outward) * sideDamping * radiusPush * 0.15f;
 
-        _positions.Add(position);
-        _velocities.Add(Vector3.ClampMagnitude(velocity, maxVelocity));
-        _colors.Add(color);
-    }
-
-    private void ResolveActiveReleasedBlockCollisions()
-    {
-        if (!_positions.IsCreated || _positions.Length == 0 || !_cellSolid.IsCreated || _runtimeParent == null)
+        if (!HasValidEcsOwner())
             return;
 
-        new ResolveGridCollisionJob
+        Entity block = _entityManager.CreateEntity(ComponentType.ReadWrite<ReleasedBlockData>());
+        Vector3 clampedVelocity = Vector3.ClampMagnitude(velocity, maxVelocity);
+        _entityManager.SetComponentData(block, new ReleasedBlockData
         {
-            CellSolid = _cellSolid,
-            WorldPositions = _positions.AsArray(),
-            Velocities = _velocities.AsArray(),
-            WorldToLocal = _runtimeParent.worldToLocalMatrix,
-            LocalToWorld = _runtimeParent.localToWorldMatrix,
-            GridWidth = _gridWidth,
-            GridHeight = _gridHeight,
-            CellSize = _cellSize,
-            Offset = _offset,
-            DeltaTime = Time.fixedDeltaTime,
-            Gravity = _releasedBlockGravity,
-            Damping = _releasedBlockDamping,
-            Restitution = _releasedBlockRestitution,
-            Friction = _releasedBlockFriction,
-            SawPosition = _sawForcePosition,
-            SawRadius = _sawForceRadius,
-            SawForce = _sawForceStrength
-        }.Schedule(_positions.Length, 64).Complete();
+            Owner = _ecsOwner,
+            Position = new float3(position.x, position.y, position.z),
+            Velocity = new float3(clampedVelocity.x, clampedVelocity.y, clampedVelocity.z),
+            Color = new float4(color.r / 255f, color.g / 255f, color.b / 255f, color.a / 255f)
+        });
     }
 
     private void CreateReleasedBlockRendering()
     {
         DisposeReleasedBlocks();
-        int capacity = Mathf.Max(1, _releasedBlockCapacity);
-        _positions = new NativeList<Vector3>(capacity, Allocator.Persistent);
-        _velocities = new NativeList<Vector3>(capacity, Allocator.Persistent);
-        _colors = new NativeList<Color32>(capacity, Allocator.Persistent);
         _releasedBlockMaterial = _runtimeChunkMaterial != null ? _runtimeChunkMaterial : ResolveChunkMaterial();
         if (_releasedBlockMaterial != null)
             _releasedBlockMaterial.enableInstancing = true;
@@ -708,23 +689,55 @@ public sealed class TextureBlockSpawner : MonoBehaviour
 
     private void RenderReleasedBlocks()
     {
-        if (!_positions.IsCreated || _positions.Length == 0 || _releasedBlockMesh == null || _releasedBlockMaterial == null)
+        if (!HasValidEcsOwner() || _releasedBlockMesh == null || _releasedBlockMaterial == null)
             return;
-        int count = _positions.Length;
+
+        using NativeArray<ReleasedBlockData> blocks =
+            _releasedBlockQuery.ToComponentDataArray<ReleasedBlockData>(Allocator.Temp);
+        int count = CountOwnedBlocks(blocks);
+        if (count == 0)
+            return;
+
         EnsureInstanceCapacity(Mathf.Min(count, 1023));
-        for (int start = 0; start < count; start += 1023)
+        int batchCount = 0;
+        for (int i = 0; i < blocks.Length; i++)
         {
-            int batchCount = Mathf.Min(1023, count - start);
-            for (int i = 0; i < batchCount; i++)
-            {
-                _instanceMatrices[i] = Matrix4x4.TRS(_positions[start + i], Quaternion.identity, Vector3.one * _cellSize);
-                _instanceColors[i] = (Color)_colors[start + i];
-            }
-            _instancePropertyBlock.Clear();
-            _instancePropertyBlock.SetVectorArray(ColorId, _instanceColors);
-            Graphics.DrawMeshInstanced(_releasedBlockMesh, 0, _releasedBlockMaterial, _instanceMatrices, batchCount,
-                _instancePropertyBlock, ShadowCastingMode.Off, false, gameObject.layer);
+            ReleasedBlockData block = blocks[i];
+            if (block.Owner != _ecsOwner)
+                continue;
+
+            _instanceMatrices[batchCount] = Matrix4x4.TRS(ToVector3(block.Position), Quaternion.identity,
+                Vector3.one * _cellSize);
+            _instanceColors[batchCount] = ToVector4(block.Color);
+            batchCount++;
+
+            if (batchCount < 1023)
+                continue;
+
+            DrawReleasedBlockBatch(batchCount);
+            batchCount = 0;
         }
+
+        if (batchCount > 0)
+            DrawReleasedBlockBatch(batchCount);
+    }
+
+    private void DrawReleasedBlockBatch(int batchCount)
+    {
+        _instancePropertyBlock.Clear();
+        _instancePropertyBlock.SetVectorArray(ColorId, _instanceColors);
+        Graphics.DrawMeshInstanced(_releasedBlockMesh, 0, _releasedBlockMaterial, _instanceMatrices, batchCount,
+            _instancePropertyBlock, ShadowCastingMode.Off, false, gameObject.layer);
+    }
+
+    private int CountOwnedBlocks(NativeArray<ReleasedBlockData> blocks)
+    {
+        int count = 0;
+        for (int i = 0; i < blocks.Length; i++)
+            if (blocks[i].Owner == _ecsOwner)
+                count++;
+
+        return count;
     }
 
     private void EnsureInstanceCapacity(int capacity)
@@ -735,71 +748,216 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         _instanceColors = new Vector4[_instanceMatrices.Length];
     }
 
-    private void DespawnReleasedBlock(int index)
+    private void CreateEcsOwner()
     {
-        int last = _positions.Length - 1;
-        if (index != last)
+        World world = World.DefaultGameObjectInjectionWorld;
+        if (world == null || !world.IsCreated)
+            return;
+
+        _ecsWorld = world;
+        _entityManager = world.EntityManager;
+        ClearReleasedBlockEntities();
+        if (_entityManager.Exists(_ecsOwner))
+            _entityManager.DestroyEntity(_ecsOwner);
+        if (_hasReleasedBlockQuery)
         {
-            _positions[index] = _positions[last];
-            _velocities[index] = _velocities[last];
-            _colors[index] = _colors[last];
+            _releasedBlockQuery.Dispose();
+            _hasReleasedBlockQuery = false;
         }
-        _positions.RemoveAt(last);
-        _velocities.RemoveAt(last);
-        _colors.RemoveAt(last);
+
+        _ecsOwner = _entityManager.CreateEntity(ComponentType.ReadWrite<TextureBlockSpawnerData>());
+        _entityManager.AddBuffer<TextureBlockCell>(_ecsOwner);
+        _releasedBlockQuery = _entityManager.CreateEntityQuery(ComponentType.ReadWrite<ReleasedBlockData>());
+        _hasReleasedBlockQuery = true;
+        UpdateEcsSpawnerData();
+    }
+
+    private void UpdateEcsSpawnerData()
+    {
+        if (!HasValidEcsOwner() || _runtimeParent == null)
+            return;
+
+        _entityManager.SetComponentData(_ecsOwner, new TextureBlockSpawnerData
+        {
+            GridWidth = _gridWidth,
+            GridHeight = _gridHeight,
+            CellSize = _cellSize,
+            Offset = new float3(_offset.x, _offset.y, _offset.z),
+            WorldToLocal = ToFloat4x4(_runtimeParent.worldToLocalMatrix),
+            LocalToWorld = ToFloat4x4(_runtimeParent.localToWorldMatrix),
+            Gravity = _releasedBlockGravity,
+            Damping = _releasedBlockDamping,
+            Restitution = _releasedBlockRestitution,
+            Friction = _releasedBlockFriction,
+            SawPosition = new float3(_sawForcePosition.x, _sawForcePosition.y, _sawForcePosition.z),
+            SawRadius = _sawForceRadius,
+            SawForce = _sawForceStrength
+        });
+    }
+
+    private void SyncAllCellsToEcs()
+    {
+        if (!HasValidEcsOwner() || !_cellSolid.IsCreated)
+            return;
+
+        DynamicBuffer<TextureBlockCell> cells = _entityManager.GetBuffer<TextureBlockCell>(_ecsOwner);
+        cells.ResizeUninitialized(_cellSolid.Length);
+        for (int i = 0; i < _cellSolid.Length; i++)
+            cells[i] = new TextureBlockCell { Solid = _cellSolid[i] };
+    }
+
+    private void SetEcsCellSolid(int cellIndex, byte solid)
+    {
+        if (!HasValidEcsOwner())
+            return;
+
+        DynamicBuffer<TextureBlockCell> cells = _entityManager.GetBuffer<TextureBlockCell>(_ecsOwner);
+        if ((uint)cellIndex < (uint)cells.Length)
+            cells[cellIndex] = new TextureBlockCell { Solid = solid };
+    }
+
+    private bool HasValidEcsOwner()
+    {
+        return _ecsWorld != null && _ecsWorld.IsCreated && _entityManager.Exists(_ecsOwner);
+    }
+
+    private void ClearReleasedBlockEntities()
+    {
+        if (_ecsWorld == null || !_ecsWorld.IsCreated || !_hasReleasedBlockQuery)
+            return;
+
+        using NativeArray<Entity> entities = _releasedBlockQuery.ToEntityArray(Allocator.Temp);
+        for (int i = 0; i < entities.Length; i++)
+        {
+            Entity entity = entities[i];
+            ReleasedBlockData block = _entityManager.GetComponentData<ReleasedBlockData>(entity);
+            if (block.Owner == _ecsOwner)
+                _entityManager.DestroyEntity(entity);
+        }
+    }
+
+    private static float4x4 ToFloat4x4(Matrix4x4 matrix)
+    {
+        return new float4x4(
+            new float4(matrix.m00, matrix.m10, matrix.m20, matrix.m30),
+            new float4(matrix.m01, matrix.m11, matrix.m21, matrix.m31),
+            new float4(matrix.m02, matrix.m12, matrix.m22, matrix.m32),
+            new float4(matrix.m03, matrix.m13, matrix.m23, matrix.m33));
+    }
+
+    private static Vector3 ToVector3(float3 value)
+    {
+        return new Vector3(value.x, value.y, value.z);
+    }
+
+    private static Vector4 ToVector4(float4 value)
+    {
+        return new Vector4(value.x, value.y, value.z, value.w);
+    }
+
+    private void DestroyEcsOwner()
+    {
+        if (_ecsWorld == null || !_ecsWorld.IsCreated)
+            return;
+
+        ClearReleasedBlockEntities();
+        if (_entityManager.Exists(_ecsOwner))
+            _entityManager.DestroyEntity(_ecsOwner);
+
+        _ecsOwner = Entity.Null;
+        if (_hasReleasedBlockQuery)
+        {
+            _releasedBlockQuery.Dispose();
+            _hasReleasedBlockQuery = false;
+        }
+    }
+
+    private void DespawnReleasedBlock(Entity entity)
+    {
+        if (HasValidEcsOwner() && _entityManager.Exists(entity))
+            _entityManager.DestroyEntity(entity);
     }
 
     private void DespawnInBounds(Bounds bounds)
     {
-        for (int i = _positions.Length - 1; i >= 0; i--)
-            if (bounds.Contains(_positions[i]))
-                DespawnReleasedBlock(i);
+        if (!HasValidEcsOwner())
+            return;
+
+        using NativeArray<Entity> entities = _releasedBlockQuery.ToEntityArray(Allocator.Temp);
+        using NativeArray<ReleasedBlockData> blocks =
+            _releasedBlockQuery.ToComponentDataArray<ReleasedBlockData>(Allocator.Temp);
+        for (int i = 0; i < blocks.Length; i++)
+            if (blocks[i].Owner == _ecsOwner && bounds.Contains(ToVector3(blocks[i].Position)))
+                DespawnReleasedBlock(entities[i]);
     }
 
     private void ApplyConveyor(Bounds bounds, Vector3 direction, float speed, float acceleration, float deltaTime)
     {
-        for (int i = 0; i < _positions.Length; i++)
+        if (!HasValidEcsOwner())
+            return;
+
+        using NativeArray<Entity> entities = _releasedBlockQuery.ToEntityArray(Allocator.Temp);
+        using NativeArray<ReleasedBlockData> blocks =
+            _releasedBlockQuery.ToComponentDataArray<ReleasedBlockData>(Allocator.Temp);
+        for (int i = 0; i < blocks.Length; i++)
         {
-            if (!bounds.Contains(_positions[i]))
+            ReleasedBlockData block = blocks[i];
+            if (block.Owner != _ecsOwner || !bounds.Contains(ToVector3(block.Position)))
                 continue;
-            Vector3 velocity = _velocities[i];
+
+            Vector3 velocity = ToVector3(block.Velocity);
             float currentSpeed = Vector3.Dot(velocity, direction);
-            _velocities[i] = velocity + direction * (Mathf.MoveTowards(currentSpeed, speed, acceleration * deltaTime) - currentSpeed);
+            Vector3 newVelocity = velocity + direction *
+                (Mathf.MoveTowards(currentSpeed, speed, acceleration * deltaTime) - currentSpeed);
+            block.Velocity = new float3(newVelocity.x, newVelocity.y, newVelocity.z);
+            _entityManager.SetComponentData(entities[i], block);
         }
     }
 
     private void ApplySuction(Vector3 origin, Quaternion rotation, Vector3 boxSize, float force, float acceleration,
         float maxVelocity, float arrivalDamping, float destroyRadius, float deltaTime)
     {
+        if (!HasValidEcsOwner())
+            return;
+
         Quaternion inverseRotation = Quaternion.Inverse(rotation);
         Vector3 halfSize = boxSize * 0.5f;
-        for (int i = _positions.Length - 1; i >= 0; i--)
+        using NativeArray<Entity> entities = _releasedBlockQuery.ToEntityArray(Allocator.Temp);
+        using NativeArray<ReleasedBlockData> blocks =
+            _releasedBlockQuery.ToComponentDataArray<ReleasedBlockData>(Allocator.Temp);
+        for (int i = 0; i < blocks.Length; i++)
         {
-            Vector3 local = inverseRotation * (_positions[i] - origin - rotation * new Vector3(boxSize.x * 0.5f, 0f, 0f));
+            ReleasedBlockData block = blocks[i];
+            if (block.Owner != _ecsOwner)
+                continue;
+
+            Vector3 position = ToVector3(block.Position);
+            Vector3 local = inverseRotation * (position - origin - rotation * new Vector3(boxSize.x * 0.5f, 0f, 0f));
             if (Mathf.Abs(local.x) > halfSize.x || Mathf.Abs(local.y) > halfSize.y || Mathf.Abs(local.z) > halfSize.z)
                 continue;
-            Vector3 direction = origin - _positions[i];
+
+            Vector3 direction = origin - position;
             direction.z = 0f;
             float distance = direction.magnitude;
             if (distance < destroyRadius)
             {
-                DespawnReleasedBlock(i);
+                DespawnReleasedBlock(entities[i]);
                 continue;
             }
             direction /= distance;
             Vector3 targetVelocity = direction * Mathf.Min(force * distance, maxVelocity);
-            Vector3 velocity = Vector3.MoveTowards(_velocities[i], targetVelocity, acceleration * deltaTime);
+            Vector3 velocity = Vector3.MoveTowards(ToVector3(block.Velocity), targetVelocity, acceleration * deltaTime);
             if (distance <= destroyRadius * 2.5f)
                 velocity = Vector3.Lerp(velocity, targetVelocity, arrivalDamping * deltaTime);
-            _velocities[i] = Vector3.ClampMagnitude(velocity, maxVelocity);
+            Vector3 clampedVelocity = Vector3.ClampMagnitude(velocity, maxVelocity);
+            block.Velocity = new float3(clampedVelocity.x, clampedVelocity.y, clampedVelocity.z);
+            _entityManager.SetComponentData(entities[i], block);
         }
     }
 
     private void DisposeReleasedBlocks()
     {
-        if (_positions.IsCreated) _positions.Dispose();
-        if (_velocities.IsCreated) _velocities.Dispose();
-        if (_colors.IsCreated) _colors.Dispose();
+        ClearReleasedBlockEntities();
         if (_releasedBlockMesh != null) DestroyUnityObject(_releasedBlockMesh);
         _releasedBlockMesh = null;
     }
@@ -862,168 +1020,6 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         public int Width;
         public int Height;
         public bool IsDetailed;
-    }
-
-    [BurstCompile]
-    private struct ResolveGridCollisionJob : IJobParallelFor
-    {
-        [ReadOnly] public NativeArray<byte> CellSolid;
-        public NativeArray<Vector3> WorldPositions;
-        public NativeArray<Vector3> Velocities;
-        public Matrix4x4 WorldToLocal;
-        public Matrix4x4 LocalToWorld;
-        public int GridWidth;
-        public int GridHeight;
-        public float CellSize;
-        public Vector3 Offset;
-        public float DeltaTime;
-        public float Gravity;
-        public float Damping;
-        public float Restitution;
-        public float Friction;
-        public Vector3 SawPosition;
-        public float SawRadius;
-        public float SawForce;
-
-        public void Execute(int index)
-        {
-            Vector3 previousWorldPosition = WorldPositions[index];
-            Vector3 velocity = Velocities[index];
-            velocity.y -= Gravity * DeltaTime;
-            Vector3 sawDelta = previousWorldPosition - SawPosition;
-            sawDelta.z = 0f;
-            float sawDistance = sawDelta.magnitude;
-if (sawDistance > 0.0001f && sawDistance < SawRadius)
-    velocity += sawDelta * ((SawRadius - sawDistance) / (SawRadius * sawDistance) * SawForce * DeltaTime);
-            if (sawDistance > 0.0001f && sawDistance < SawRadius)
-                velocity += sawDelta * ((SawRadius - sawDistance) / (SawRadius * sawDistance) * SawForce * DeltaTime);
-            velocity *= 1f / (1f + Damping * DeltaTime);
-            Vector3 worldPosition = previousWorldPosition + velocity * DeltaTime;
-            if (ResolveGridCollisionSwept(previousWorldPosition, ref worldPosition, CellSize * 0.5f,
-                    CellSize * 0.5f, out Vector3 collisionNormal))
-            {
-                velocity = Vector3.Reflect(velocity, collisionNormal) * Restitution;
-                Vector3 tangentVelocity = velocity - collisionNormal * Vector3.Dot(velocity, collisionNormal);
-                velocity -= tangentVelocity * Friction;
-            }
-
-            WorldPositions[index] = worldPosition;
-            Velocities[index] = velocity;
-        }
-
-        private bool ResolveGridCollisionSwept(Vector3 previousWorldPosition, ref Vector3 worldPosition,
-            float halfWidth, float halfHeight, out Vector3 collisionNormal)
-        {
-            collisionNormal = Vector3.zero;
-            Vector3 fromLocal = TransformPoint(WorldToLocal, previousWorldPosition);
-            Vector3 toLocal = TransformPoint(WorldToLocal, worldPosition);
-            float dx = toLocal.x - fromLocal.x;
-            float dy = toLocal.y - fromLocal.y;
-            float distance = Mathf.Sqrt(dx * dx + dy * dy);
-            int steps = Mathf.Clamp(Mathf.CeilToInt(distance / Mathf.Max(CellSize * 0.35f, 0.0001f)), 1, 12);
-
-            for (int i = 1; i <= steps; i++)
-            {
-                float t = i / (float)steps;
-                Vector3 sampleWorldPosition = Vector3.Lerp(previousWorldPosition, worldPosition, t);
-
-                if (!ResolveGridCollision(ref sampleWorldPosition, halfWidth, halfHeight, out collisionNormal))
-                    continue;
-
-                worldPosition = sampleWorldPosition;
-                return true;
-            }
-
-            return false;
-        }
-
-        private bool ResolveGridCollision(ref Vector3 worldPosition, float halfWidth, float halfHeight,
-            out Vector3 collisionNormal)
-        {
-            collisionNormal = Vector3.zero;
-            Vector3 localPosition = TransformPoint(WorldToLocal, worldPosition);
-            float parentScaleX = Mathf.Max(GetColumnLength(LocalToWorld, 0), 0.0001f);
-            float parentScaleY = Mathf.Max(GetColumnLength(LocalToWorld, 1), 0.0001f);
-            float halfWidthLocal = halfWidth / parentScaleX;
-            float halfHeightLocal = halfHeight / parentScaleY;
-            float cellHalf = CellSize * 0.5f;
-            int centerX = Mathf.RoundToInt((localPosition.x - Offset.x) / CellSize);
-            int centerY = Mathf.RoundToInt((localPosition.y - Offset.y) / CellSize);
-            int radiusX = Mathf.CeilToInt((halfWidthLocal + cellHalf) / CellSize) + 1;
-            int radiusY = Mathf.CeilToInt((halfHeightLocal + cellHalf) / CellSize) + 1;
-            int minX = Mathf.Max(0, centerX - radiusX);
-            int maxX = Mathf.Min(GridWidth - 1, centerX + radiusX);
-            int minY = Mathf.Max(0, centerY - radiusY);
-            int maxY = Mathf.Min(GridHeight - 1, centerY + radiusY);
-            bool resolved = false;
-
-            for (int y = minY; y <= maxY; y++)
-            {
-                for (int x = minX; x <= maxX; x++)
-                {
-                    int cellIndex = y * GridWidth + x;
-                    if (CellSolid[cellIndex] == 0)
-                        continue;
-
-                    Vector3 cellLocal = Offset + new Vector3(x * CellSize, y * CellSize, 0f);
-                    float deltaX = localPosition.x - cellLocal.x;
-                    float deltaY = localPosition.y - cellLocal.y;
-                    float overlapX = halfWidthLocal + cellHalf - Mathf.Abs(deltaX);
-                    float overlapY = halfHeightLocal + cellHalf - Mathf.Abs(deltaY);
-                    if (overlapX <= 0f || overlapY <= 0f)
-                        continue;
-
-                    Vector3 localNormal;
-                    if (overlapX < overlapY)
-                    {
-                        float sign = deltaX >= 0f ? 1f : -1f;
-                        localPosition.x += overlapX * sign;
-                        localNormal = new Vector3(sign, 0f, 0f);
-                    }
-                    else
-                    {
-                        float sign = deltaY >= 0f ? 1f : -1f;
-                        localPosition.y += overlapY * sign;
-                        localNormal = new Vector3(0f, sign, 0f);
-                    }
-
-                    Vector3 worldNormal = TransformVector(LocalToWorld, localNormal).normalized;
-                    collisionNormal = worldNormal;
-
-                    resolved = true;
-                }
-            }
-
-            if (resolved)
-                worldPosition = TransformPoint(LocalToWorld, localPosition);
-
-            return resolved;
-        }
-
-        private static Vector3 TransformPoint(Matrix4x4 matrix, Vector3 point)
-        {
-            return new Vector3(
-                matrix.m00 * point.x + matrix.m01 * point.y + matrix.m02 * point.z + matrix.m03,
-                matrix.m10 * point.x + matrix.m11 * point.y + matrix.m12 * point.z + matrix.m13,
-                matrix.m20 * point.x + matrix.m21 * point.y + matrix.m22 * point.z + matrix.m23);
-        }
-
-        private static Vector3 TransformVector(Matrix4x4 matrix, Vector3 vector)
-        {
-            return new Vector3(
-                matrix.m00 * vector.x + matrix.m01 * vector.y + matrix.m02 * vector.z,
-                matrix.m10 * vector.x + matrix.m11 * vector.y + matrix.m12 * vector.z,
-                matrix.m20 * vector.x + matrix.m21 * vector.y + matrix.m22 * vector.z);
-        }
-
-        private static float GetColumnLength(Matrix4x4 matrix, int column)
-        {
-            Vector3 columnVector = column == 0
-                ? new Vector3(matrix.m00, matrix.m10, matrix.m20)
-                : new Vector3(matrix.m01, matrix.m11, matrix.m21);
-
-            return columnVector.magnitude;
-        }
     }
 
     [BurstCompile]
