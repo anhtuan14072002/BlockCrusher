@@ -682,6 +682,7 @@ GameObject:
   m_Component:
   - component: {fileID: 925441448}
   - component: {fileID: 925441449}
+  - component: {fileID: 925441450}
   m_Layer: 0
   m_Name: TextureBlockSpawner
   m_TagString: Untagged
@@ -728,13 +729,25 @@ MonoBehaviour:
   _renderVoxelDetailFromStart: 1
   _detailVoxelScale: 0.94
   _voxelRandomYRotation: 20
-  _maxPhysicsDebrisPerFrame: 4
-  _chunkSize: 20
+  _chunkSize: 56
   _maxChunkRebuildsPerFrame: 8
   _prewarmReleasedBlockCount: 50
   _releasedBlockMass: 0.01
   _centerTexture: 1
   _spawnOnAwake: 1
+  _debrisEntitySpawner: {fileID: 925441450}
+--- !u!114 &925441450
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 925441447}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f15ebd19aad6f094795872c9949aa4dd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &972235226
 GameObject:
   m_ObjectHideFlags: 0
@@ -2145,7 +2158,8 @@ PrefabInstance:
       propertyPath: _switchToolButton
       value: 
       objectReference: {fileID: 1459862940}
-    m_RemovedComponents: []
+    m_RemovedComponents:
+    - {fileID: 3874013574092171956, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
     m_RemovedGameObjects: []
     m_AddedGameObjects:
     - targetCorrespondingSourceObject: {fileID: 2697512586575510461, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
