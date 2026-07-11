@@ -481,6 +481,7 @@ MonoBehaviour:
   _targetXBounds: {x: -2.5, y: 2.5}
   _targetYBounds: {x: -999, y: 999}
   _ikIterations: 16
+  _movementCamera: {fileID: 0}
   _activeJointCount: 4
   _maxJointCount: 12
   _segmentLength: 1.15
@@ -492,6 +493,8 @@ MonoBehaviour:
   - {fileID: 5376737346290170962}
   _saw: {fileID: 2697512586575510461}
   _sawCutter: {fileID: 4966511422805033284}
+  _suctionDevice: {fileID: 0}
+  _switchToolButton: {fileID: 0}
 --- !u!1 &3997305388676016931
 GameObject:
   m_ObjectHideFlags: 0
@@ -699,7 +702,6 @@ GameObject:
   - component: {fileID: 8656057058012223946}
   - component: {fileID: 5036314113799944389}
   - component: {fileID: 4966511422805033284}
-  - component: {fileID: 3874013574092171956}
   m_Layer: 0
   m_Name: SawHead
   m_TagString: Untagged
@@ -790,32 +792,14 @@ MonoBehaviour:
   _compressionForce: 6
   _bladeTangentialForce: 32
   _bladeSpinDirection: 1
+  _bladeSpinSpeed: 900
   _bladePushRadius: 0.55
   _maxSawVelocity: 4
+  _cutSweepStep: 0.08
   _sideDampingOnContact: 0.35
   _maxBlockVelocity: 11
   _resistanceDuration: 0.08
---- !u!135 &3874013574092171956
-SphereCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5318974516778464816}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 3
-  m_Radius: 1
-  m_Center: {x: -0.00000017881393, y: 0.075695634, z: 0}
+  _bladeVisual: {fileID: 0}
 --- !u!1 &5336779717085325733
 GameObject:
   m_ObjectHideFlags: 0
