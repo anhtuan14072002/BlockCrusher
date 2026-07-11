@@ -901,6 +901,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             velocity.Linear = new float3(linear.x, linear.y, 0f);
             velocity.Angular.z += spinDirection * tangentialForce * radiusPush * 0.15f;
             _entityManager.SetComponentData(entities[i], velocity);
+            WakeReleasedBlock(entities[i], blocks[i]);
         }
     }
 
@@ -1127,6 +1128,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             velocity.Linear += conveyorDirection *
                                (Mathf.MoveTowards(currentSpeed, speed, acceleration * deltaTime) - currentSpeed);
             _entityManager.SetComponentData(entities[i], velocity);
+            WakeReleasedBlock(entities[i], blocks[i]);
         }
     }
 
@@ -1177,7 +1179,15 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             movedVelocity = Vector3.ClampMagnitude(movedVelocity, maxVelocity);
             velocity.Linear = new float3(movedVelocity.x, movedVelocity.y, movedVelocity.z);
             _entityManager.SetComponentData(entities[i], velocity);
+            WakeReleasedBlock(entities[i], blocks[i]);
         }
+    }
+
+    private void WakeReleasedBlock(Entity entity, ReleasedBlockComponent block)
+    {
+        block.SettledTime = 0f;
+        _entityManager.SetComponentData(entity, block);
+        _entityManager.SetComponentData(entity, new PhysicsGravityFactor { Value = 1f });
     }
 
     private void DestroyReleasedBlockEntityAt(int index)
