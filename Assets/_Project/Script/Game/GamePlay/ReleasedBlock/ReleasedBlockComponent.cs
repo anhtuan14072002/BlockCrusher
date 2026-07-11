@@ -11,7 +11,6 @@ public struct ReleasedBlockComponent : IComponentData
     public float4 Color;
     public float LockedZ;
     public float MaxPlanarSpeed;
-    public float SettledTime;
 }
 
 [BurstCompile]
@@ -21,19 +20,14 @@ public partial struct ReleasedBlockPlanarConstraintSystem : ISystem
     [BurstCompile]
     public void OnUpdate(ref SystemState state)
     {
-        state.Dependency = new PlanarConstraintJob
-        {
-            DeltaTime = SystemAPI.Time.DeltaTime
-        }.ScheduleParallel(state.Dependency);
+        state.Dependency = new PlanarConstraintJob().ScheduleParallel(state.Dependency);
     }
 
     [BurstCompile]
     private partial struct PlanarConstraintJob : IJobEntity
     {
-        public float DeltaTime;
-
         private void Execute(ref LocalTransform transform, ref PhysicsVelocity velocity,
-            ref PhysicsGravityFactor gravity, ref ReleasedBlockComponent block)
+            in ReleasedBlockComponent block)
         {
             transform.Position.z = block.LockedZ;
             velocity.Linear.z = 0f;
@@ -46,23 +40,6 @@ public partial struct ReleasedBlockPlanarConstraintSystem : ISystem
                 velocity.Linear.x = planar.x;
                 velocity.Linear.y = planar.y;
             }
-
-            float motionSq = math.lengthsq(velocity.Linear.xy);
-            bool nearlyStill = motionSq < 0.0025f && math.abs(velocity.Angular.z) < 0.15f;
-            if (!nearlyStill)
-            {
-                block.SettledTime = 0f;
-                gravity.Value = 1f;
-                return;
-            }
-
-            block.SettledTime += DeltaTime;
-            if (block.SettledTime < 0.2f)
-                return;
-
-            gravity.Value = 0f;
-            velocity.Linear = float3.zero;
-            velocity.Angular = float3.zero;
         }
     }
 }
