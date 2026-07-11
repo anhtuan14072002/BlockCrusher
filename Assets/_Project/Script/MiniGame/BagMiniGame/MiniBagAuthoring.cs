@@ -9,6 +9,7 @@ namespace Wizard
         public bool _isDrag;
 
         public bool _isCreate;
+        private const float StoneScale = 0.3f;
         private MiniStoneGameAuthoring _stoneGame;
         private float _timer;
 
@@ -57,11 +58,8 @@ namespace Wizard
             if (_timer < _stoneGame.ElapsedTime) return;
             _timer = 0f;
 
-            if (!_stoneGame.TryConsumeStone(out GameObject stonePrefab)) return;
-
             Transform bagTransform = _bagPrefab != null ? _bagPrefab.transform : transform;
-            GameObject stone = Instantiate(stonePrefab, bagTransform.position, Quaternion.identity);
-            stone.transform.localScale = Vector3.one * 0.3f;
+            _stoneGame.TrySpawnStone(bagTransform.position, StoneScale);
         }
 
         class Baker : Baker<MiniBagAuthoring>

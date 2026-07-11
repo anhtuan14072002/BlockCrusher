@@ -269,8 +269,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7d30452787ad2494ab0432629429b7e7, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   _managers: []
 --- !u!1001 &265193734
 PrefabInstance:
@@ -682,6 +682,7 @@ GameObject:
   m_Component:
   - component: {fileID: 925441448}
   - component: {fileID: 925441449}
+  - component: {fileID: 925441450}
   m_Layer: 0
   m_Name: TextureBlockSpawner
   m_TagString: Untagged
@@ -730,12 +731,29 @@ MonoBehaviour:
   _maxPhysicsDebrisPerFrame: 8
   _chunkSize: 56
   _maxChunkRebuildsPerFrame: 8
-  _releasedBlockGravity: 3
   _releasedBlockDamping: 2.5
-  _releasedBlockRestitution: 0.5
-  _releasedBlockFriction: 0.2
+  _releasedBlockAngularDamping: 4
+  _releasedBlockMass: 0.4
+  _maxReleasedPhysicsBlocks: 5000
+  _physicsFriction: 0.6
+  _physicsRestitution: 0.02
+  _releasedBlockAuthoring: {fileID: 925441450}
   _centerTexture: 1
   _spawnOnAwake: 1
+--- !u!114 &925441450
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 925441447}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9449c34003822d4d87ed1051bdc6d82, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  _releasedBlockPrefab: {fileID: 612727279210085569, guid: 3f4ebe89b85f2a147bdba89bc394f76d, type: 3}
+  _scale: 0.12
 --- !u!1 &972235226
 GameObject:
   m_ObjectHideFlags: 0

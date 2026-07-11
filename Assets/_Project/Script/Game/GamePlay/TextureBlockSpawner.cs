@@ -4,53 +4,22 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
+using Unity.Physics;
+using Unity.Transforms;
 using UnityEngine;
 using UnityEngine.Rendering;
+using Collider = Unity.Physics.Collider;
+using PhysicsMaterial = Unity.Physics.Material;
+using RenderMaterial = UnityEngine.Material;
 
 public sealed class TextureBlockSpawner : MonoBehaviour
 {
     private static readonly List<TextureBlockSpawner> ActiveSpawners = new();
-    private static readonly Vector2[] ReleasedBlockUvs =
-    {
-        new Vector2(0f, 0f),
-        new Vector2(0f, 1f),
-        new Vector2(1f, 1f),
-        new Vector2(1f, 0f),
-        new Vector2(0f, 0f),
-        new Vector2(0f, 1f),
-        new Vector2(1f, 1f),
-        new Vector2(1f, 0f),
-        new Vector2(0f, 0f),
-        new Vector2(0f, 1f),
-        new Vector2(1f, 1f),
-        new Vector2(1f, 0f),
-        new Vector2(0f, 0f),
-        new Vector2(0f, 1f),
-        new Vector2(1f, 1f),
-        new Vector2(1f, 0f),
-        new Vector2(0f, 0f),
-        new Vector2(0f, 1f),
-        new Vector2(1f, 1f),
-        new Vector2(1f, 0f),
-        new Vector2(0f, 0f),
-        new Vector2(0f, 1f),
-        new Vector2(1f, 1f),
-        new Vector2(1f, 0f)
-    };
-
-    private static readonly int[] ReleasedBlockIndices =
-    {
-        0, 1, 2, 0, 2, 3,
-        4, 5, 6, 4, 6, 7,
-        8, 9, 10, 8, 10, 11,
-        12, 13, 14, 12, 14, 15,
-        16, 17, 18, 16, 18, 19,
-        20, 21, 22, 20, 22, 23
-    };
+    private static int _nextOwnerId = 1;
 
     [SerializeField] private Texture2D _texture;
     [SerializeField] private Transform _container;
-    [SerializeField] private Material _chunkMaterial;
+    [SerializeField] private RenderMaterial _chunkMaterial;
     [SerializeField] private float _pixelSize = 0.12f;
     [SerializeField, Range(1, 16)] private int _sampleStep = 1;
     [SerializeField, Range(0f, 1f)] private float _alphaThreshold = 0.1f;
@@ -62,10 +31,13 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     [SerializeField, Range(0, 32)] private int _maxPhysicsDebrisPerFrame = 8;
     [SerializeField, Range(8, 64)] private int _chunkSize = 24;
     [SerializeField, Range(1, 8)] private int _maxChunkRebuildsPerFrame = 2;
-    [SerializeField] private float _releasedBlockGravity = 3f;
     [SerializeField, Range(0f, 20f)] private float _releasedBlockDamping = 2.5f;
-    [SerializeField, Range(0f, 1f)] private float _releasedBlockRestitution = 0.5f;
-    [SerializeField, Range(0f, 1f)] private float _releasedBlockFriction = 0.2f;
+    [SerializeField, Range(0f, 20f)] private float _releasedBlockAngularDamping = 4f;
+    [SerializeField, Range(0.01f, 10f)] private float _releasedBlockMass = 0.4f;
+    [SerializeField, Range(128, 10000)] private int _maxReleasedPhysicsBlocks = 5000;
+    [SerializeField, Range(0f, 1f)] private float _physicsFriction = 0.6f;
+    [SerializeField, Range(0f, 1f)] private float _physicsRestitution = 0.02f;
+    [SerializeField] private ReleasedBlockAuthoring _releasedBlockAuthoring;
     [SerializeField] private bool _centerTexture = true;
     [SerializeField] private bool _spawnOnAwake = true;
 
@@ -73,33 +45,33 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     private readonly List<int> _dirtyChunks = new(16);
     private readonly List<int> _scheduledChunkRebuilds = new(8);
     private readonly List<JobHandle> _scheduledChunkHandles = new(8);
+    private readonly List<Entity> _releasedBlockEntities = new(1024);
+    private readonly Matrix4x4[] _renderMatrices = new Matrix4x4[1023];
+    private readonly Vector4[] _renderColors = new Vector4[1023];
     private NativeArray<Color32> _cellColors;
     private NativeArray<byte> _cellSolid;
-    private Mesh _releasedBlockMesh;
-    private Material _releasedBlockMaterial;
-    private Matrix4x4[] _instanceMatrices;
-    private Vector4[] _instanceColors;
-    private MaterialPropertyBlock _instancePropertyBlock;
     private World _ecsWorld;
     private EntityManager _entityManager;
-    private Entity _ecsOwner;
     private EntityQuery _releasedBlockQuery;
-    private bool _hasReleasedBlockQuery;
+    private BlobAssetReference<Collider> _releasedBlockCollider;
+    private Mesh _releasedBlockMesh;
+    private RenderMaterial _releasedBlockMaterial;
+    private MaterialPropertyBlock _releasedBlockPropertyBlock;
     private byte[] _chunkDirty;
     private Transform _runtimeParent;
-    private Material _runtimeChunkMaterial;
+    private RenderMaterial _runtimeChunkMaterial;
     private Vector3 _offset;
+    private int _ownerId;
     private int _gridWidth;
     private int _gridHeight;
     private int _chunkColumns;
     private float _cellSize;
+    private float _releasedBlockScale = 1f;
     private int _physicsDebrisFrame = -1;
     private int _physicsDebrisSpawnedThisFrame;
-    private Vector3 _sawForcePosition;
-    private float _sawForceRadius;
-    private float _sawForceStrength;
-
+    private bool _hasReleasedBlockQuery;
     private static readonly int ColorId = Shader.PropertyToID("_Color");
+    private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
 
     public static bool ReleaseAtWorldForActiveSpawners(Vector3 worldPoint, Vector3 pressDirection, float pressSpeed,
         float outwardForce, float tangentialForce, float spinDirection, float bladeRadius, float sideDamping,
@@ -162,20 +134,11 @@ public sealed class TextureBlockSpawner : MonoBehaviour
                 destroyRadius, deltaTime);
     }
 
-    public static void ApplySawForceForActiveSpawners(Vector3 sawPosition, float radius, float strength)
-    {
-        for (int i = 0; i < ActiveSpawners.Count; i++)
-        {
-            TextureBlockSpawner spawner = ActiveSpawners[i];
-            spawner._sawForcePosition = sawPosition;
-            spawner._sawForceRadius = radius;
-            spawner._sawForceStrength = strength;
-            spawner.UpdateEcsSpawnerData();
-        }
-    }
-
     private void OnEnable()
     {
+        if (_ownerId == 0)
+            _ownerId = _nextOwnerId++;
+
         if (!ActiveSpawners.Contains(this))
             ActiveSpawners.Add(this);
     }
@@ -195,18 +158,14 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     {
         DisposeChunks();
         DisposeReleasedBlocks();
+        DisposeReleasedBlockResources();
         DisposeCells();
-        DestroyEcsOwner();
-    }
-
-    private void FixedUpdate()
-    {
-        UpdateEcsSpawnerData();
+        DisposeEcsQuery();
     }
 
     private void LateUpdate()
     {
-        RenderReleasedBlocks();
+        DrawReleasedBlocks();
 
         if (_dirtyChunks.Count == 0)
             return;
@@ -278,10 +237,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         texturePixels.Dispose();
 
         _runtimeChunkMaterial = ResolveChunkMaterial();
-        CreateEcsOwner();
-        SyncAllCellsToEcs();
         CreateChunks();
-        CreateReleasedBlockRendering();
     }
 
     [ContextMenu("Clear")]
@@ -297,7 +253,6 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         ClearReleasedBlockEntities();
 
         Transform parent = _container != null ? _container : transform;
-
         for (int i = parent.childCount - 1; i >= 0; i--)
         {
             Transform child = parent.GetChild(i);
@@ -341,10 +296,9 @@ public sealed class TextureBlockSpawner : MonoBehaviour
 
                 Color32 color = _cellColors[cellIndex];
                 _cellSolid[cellIndex] = 0;
-                SetEcsCellSolid(cellIndex, 0);
                 if (TryConsumePhysicsDebrisBudget())
                 {
-                    SpawnReleasedBlock(cellLocal, color, worldPoint, pressDirection, pressSpeed, outwardForce,
+                    QueueReleasedBlockSpawn(cellLocal, color, worldPoint, pressDirection, pressSpeed, outwardForce,
                         tangentialForce, spinDirection, bladeRadius, sideDamping, maxVelocity);
                 }
 
@@ -425,7 +379,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
 
     private void CreateChunks()
     {
-        Material material = _runtimeChunkMaterial;
+        RenderMaterial material = _runtimeChunkMaterial;
         _chunkColumns = Mathf.CeilToInt(_gridWidth / (float)_chunkSize);
         int chunkRows = Mathf.CeilToInt(_gridHeight / (float)_chunkSize);
         int chunkCount = _chunkColumns * chunkRows;
@@ -485,7 +439,12 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             Vertices = new NativeList<Vector3>(vertexCapacity, Allocator.Persistent),
             Colors = new NativeList<Color32>(vertexCapacity, Allocator.Persistent),
             Uvs = new NativeList<Vector2>(vertexCapacity, Allocator.Persistent),
-            Indices = new NativeList<int>(indexCapacity, Allocator.Persistent)
+            Indices = new NativeList<int>(indexCapacity, Allocator.Persistent),
+            ColliderVisited = new NativeArray<byte>(maxCells, Allocator.Persistent),
+            ColliderVertices = new NativeList<Vector3>(maxCells * 24, Allocator.Persistent),
+            ColliderColors = new NativeList<Color32>(maxCells * 24, Allocator.Persistent),
+            ColliderUvs = new NativeList<Vector2>(maxCells * 24, Allocator.Persistent),
+            ColliderIndices = new NativeList<int>(maxCells * 36, Allocator.Persistent)
         };
     }
 
@@ -507,6 +466,10 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             chunk.Colors.Clear();
             chunk.Uvs.Clear();
             chunk.Indices.Clear();
+            chunk.ColliderVertices.Clear();
+            chunk.ColliderColors.Clear();
+            chunk.ColliderUvs.Clear();
+            chunk.ColliderIndices.Clear();
 
             BuildChunkMeshJob meshJob = new BuildChunkMeshJob
             {
@@ -525,12 +488,40 @@ public sealed class TextureBlockSpawner : MonoBehaviour
                 CellSize = _cellSize,
                 Offset = _offset,
                 UseVoxelDetail = chunk.IsDetailed ? (byte)1 : (byte)0,
+                ExtrudeMergedQuads = 0,
+                MergeAnySolid = 0,
                 DetailVoxelScale = _detailVoxelScale,
                 RandomYRotation = _voxelRandomYRotation,
                 DetailDepth = _chunkColliderDepth
             };
 
             _scheduledChunkHandles.Add(meshJob.Schedule());
+
+            BuildChunkMeshJob colliderJob = new BuildChunkMeshJob
+            {
+                CellColors = _cellColors,
+                CellSolid = _cellSolid,
+                Visited = chunk.ColliderVisited,
+                Vertices = chunk.ColliderVertices,
+                Colors = chunk.ColliderColors,
+                Uvs = chunk.ColliderUvs,
+                Indices = chunk.ColliderIndices,
+                GridWidth = _gridWidth,
+                StartX = chunk.StartX,
+                StartY = chunk.StartY,
+                ChunkWidth = chunk.Width,
+                ChunkHeight = chunk.Height,
+                CellSize = _cellSize,
+                Offset = _offset,
+                UseVoxelDetail = 0,
+                ExtrudeMergedQuads = 1,
+                MergeAnySolid = 1,
+                DetailVoxelScale = _detailVoxelScale,
+                RandomYRotation = 0f,
+                DetailDepth = _chunkColliderDepth
+            };
+
+            _scheduledChunkHandles.Add(colliderJob.Schedule());
         }
 
         JobHandle combinedHandle = default;
@@ -545,11 +536,13 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             if ((uint)chunkIndex >= (uint)_chunks.Count)
                 continue;
 
-            ApplyChunkMesh(_chunks[chunkIndex]);
+            ChunkRuntime chunk = _chunks[chunkIndex];
+            ApplyChunkMesh(ref chunk);
+            _chunks[chunkIndex] = chunk;
         }
     }
 
-    private void ApplyChunkMesh(ChunkRuntime chunk)
+    private void ApplyChunkMesh(ref ChunkRuntime chunk)
     {
         Mesh mesh = chunk.Mesh;
         mesh.Clear();
@@ -565,10 +558,73 @@ public sealed class TextureBlockSpawner : MonoBehaviour
                 mesh.RecalculateNormals();
             mesh.RecalculateBounds();
             chunk.Renderer.enabled = true;
+            ApplyChunkPhysicsCollider(ref chunk);
         }
         else
         {
             chunk.Renderer.enabled = false;
+            DestroyChunkPhysicsCollider(ref chunk);
+        }
+    }
+
+    private void ApplyChunkPhysicsCollider(ref ChunkRuntime chunk)
+    {
+        if (!EnsureEcsReady())
+            return;
+
+        if (chunk.ColliderVertices.Length == 0 || chunk.ColliderIndices.Length == 0)
+        {
+            DestroyChunkPhysicsCollider(ref chunk);
+            return;
+        }
+
+        int triangleCount = chunk.ColliderIndices.Length / 3;
+        NativeArray<float3> vertices = new NativeArray<float3>(chunk.ColliderVertices.Length, Allocator.Temp);
+        NativeArray<int3> triangles = new NativeArray<int3>(triangleCount, Allocator.Temp);
+
+        for (int i = 0; i < chunk.ColliderVertices.Length; i++)
+        {
+            Vector3 world = _runtimeParent.TransformPoint(chunk.ColliderVertices[i]);
+            vertices[i] = new float3(world.x, world.y, world.z);
+        }
+
+        for (int i = 0; i < triangleCount; i++)
+        {
+            int index = i * 3;
+            triangles[i] = new int3(chunk.ColliderIndices[index], chunk.ColliderIndices[index + 1],
+                chunk.ColliderIndices[index + 2]);
+        }
+
+        PhysicsMaterial physicsMaterial = CreatePhysicsMaterial();
+        BlobAssetReference<Collider> collider = Unity.Physics.MeshCollider.Create(vertices, triangles,
+            CollisionFilter.Default, physicsMaterial);
+        vertices.Dispose();
+        triangles.Dispose();
+
+        if (chunk.PhysicsCollider.IsCreated)
+            chunk.PhysicsCollider.Dispose();
+        chunk.PhysicsCollider = collider;
+
+        if (chunk.PhysicsEntity == Entity.Null || !_entityManager.Exists(chunk.PhysicsEntity))
+        {
+            chunk.PhysicsEntity = _entityManager.CreateEntity(typeof(LocalTransform), typeof(PhysicsCollider));
+            _entityManager.SetComponentData(chunk.PhysicsEntity,
+                LocalTransform.FromPositionRotationScale(float3.zero, quaternion.identity, 1f));
+        }
+
+        _entityManager.SetComponentData(chunk.PhysicsEntity, new PhysicsCollider { Value = chunk.PhysicsCollider });
+    }
+
+    private void DestroyChunkPhysicsCollider(ref ChunkRuntime chunk)
+    {
+        if (EnsureEcsReady() && chunk.PhysicsEntity != Entity.Null && _entityManager.Exists(chunk.PhysicsEntity))
+            _entityManager.DestroyEntity(chunk.PhysicsEntity);
+
+        chunk.PhysicsEntity = Entity.Null;
+        if (chunk.PhysicsCollider.IsCreated)
+        {
+            chunk.PhysicsCollider.Dispose();
+            chunk.PhysicsCollider = default;
         }
     }
 
@@ -587,6 +643,17 @@ public sealed class TextureBlockSpawner : MonoBehaviour
                 chunk.Uvs.Dispose();
             if (chunk.Indices.IsCreated)
                 chunk.Indices.Dispose();
+            if (chunk.ColliderVisited.IsCreated)
+                chunk.ColliderVisited.Dispose();
+            if (chunk.ColliderVertices.IsCreated)
+                chunk.ColliderVertices.Dispose();
+            if (chunk.ColliderColors.IsCreated)
+                chunk.ColliderColors.Dispose();
+            if (chunk.ColliderUvs.IsCreated)
+                chunk.ColliderUvs.Dispose();
+            if (chunk.ColliderIndices.IsCreated)
+                chunk.ColliderIndices.Dispose();
+            DestroyChunkPhysicsCollider(ref chunk);
             if (chunk.Mesh != null)
                 DestroyUnityObject(chunk.Mesh);
         }
@@ -594,18 +661,18 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         _chunks.Clear();
     }
 
-    private Material ResolveChunkMaterial()
+    private RenderMaterial ResolveChunkMaterial()
     {
         if (_chunkMaterial != null)
             return _chunkMaterial;
 
         Shader voxelShader = Shader.Find("BlockCrusher/VoxelExactColor");
         if (voxelShader != null)
-            return new Material(voxelShader);
+            return new RenderMaterial(voxelShader);
 
         Shader shader = Shader.Find("Sprites/Default");
         if (shader != null)
-            return new Material(shader);
+            return new RenderMaterial(shader);
 
         return null;
     }
@@ -615,10 +682,13 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         return _offset + new Vector3(x * _cellSize, y * _cellSize, 0f);
     }
 
-    private void SpawnReleasedBlock(Vector3 localPosition, Color32 color, Vector3 sawCenter, Vector3 pressDirection,
+    private void QueueReleasedBlockSpawn(Vector3 localPosition, Color32 color, Vector3 sawCenter, Vector3 pressDirection,
         float pressSpeed, float outwardForce, float tangentialForce, float spinDirection, float bladeRadius,
         float sideDamping, float maxVelocity)
     {
+        if (!EnsureReleasedBlockResources() || !EnsureEcsReady())
+            return;
+
         Vector3 position = _runtimeParent.TransformPoint(localPosition);
         Vector3 outward = position - sawCenter;
         outward.z = 0f;
@@ -636,86 +706,152 @@ public sealed class TextureBlockSpawner : MonoBehaviour
                            (Vector3.up + tangent * 0.1f).normalized *
                            (tangentialForce * 0.42f * pushScale * speedScale * radiusPush);
         velocity -= outward * Vector3.Dot(velocity, outward) * sideDamping * radiusPush * 0.15f;
-
-        if (!HasValidEcsOwner())
-            return;
-
-        Entity block = _entityManager.CreateEntity(ComponentType.ReadWrite<ReleasedBlockData>());
         Vector3 clampedVelocity = Vector3.ClampMagnitude(velocity, maxVelocity);
-        _entityManager.SetComponentData(block, new ReleasedBlockData
+
+        TrimReleasedBlockEntityList();
+        while (_releasedBlockEntities.Count >= _maxReleasedPhysicsBlocks && _releasedBlockEntities.Count > 0)
+            DestroyReleasedBlockEntityAt(0);
+
+        Entity entity = _entityManager.CreateEntity(typeof(LocalTransform), typeof(PhysicsCollider),
+            typeof(PhysicsMass), typeof(PhysicsVelocity), typeof(PhysicsDamping), typeof(PhysicsGravityFactor),
+            typeof(ReleasedBlockComponent));
+
+        _entityManager.SetComponentData(entity, LocalTransform.FromPositionRotationScale(
+            new float3(position.x, position.y, position.z), quaternion.identity, _releasedBlockScale));
+        _entityManager.SetComponentData(entity, new PhysicsCollider { Value = _releasedBlockCollider });
+        _entityManager.SetComponentData(entity,
+            PhysicsMass.CreateDynamic(_releasedBlockCollider.Value.MassProperties, _releasedBlockMass));
+        _entityManager.SetComponentData(entity, new PhysicsVelocity
         {
-            Owner = _ecsOwner,
-            Position = new float3(position.x, position.y, position.z),
-            Velocity = new float3(clampedVelocity.x, clampedVelocity.y, clampedVelocity.z),
-            Color = new float4(color.r / 255f, color.g / 255f, color.b / 255f, color.a / 255f)
+            Linear = new float3(clampedVelocity.x, clampedVelocity.y, clampedVelocity.z),
+            Angular = new float3(0f, 0f, spinDirection * tangentialForce * 0.35f)
         });
+        _entityManager.SetComponentData(entity, new PhysicsDamping
+        {
+            Linear = _releasedBlockDamping,
+            Angular = _releasedBlockAngularDamping
+        });
+        _entityManager.SetComponentData(entity, new PhysicsGravityFactor { Value = 1f });
+        _entityManager.SetComponentData(entity, new ReleasedBlockComponent
+        {
+            OwnerId = _ownerId,
+            Color = ToFloat4(color)
+        });
+        _releasedBlockEntities.Add(entity);
     }
 
-    private void CreateReleasedBlockRendering()
+    private bool EnsureReleasedBlockResources()
     {
-        DisposeReleasedBlocks();
-        _releasedBlockMaterial = _runtimeChunkMaterial != null ? _runtimeChunkMaterial : ResolveChunkMaterial();
-        if (_releasedBlockMaterial != null)
-            _releasedBlockMaterial.enableInstancing = true;
-        _releasedBlockMesh = CreateReleasedBlockMesh();
-        _instancePropertyBlock = new MaterialPropertyBlock();
+        if (_releasedBlockCollider.IsCreated && _releasedBlockMesh != null && _releasedBlockMaterial != null)
+            return true;
+
+        ReleasedBlockAuthoring authoring = ResolveReleasedBlockAuthoring();
+        GameObject prefab = authoring != null ? authoring.ReleasedBlockPrefab : null;
+        if (prefab == null)
+            return false;
+
+        MeshFilter meshFilter = prefab.GetComponentInChildren<MeshFilter>();
+        Renderer meshRenderer = prefab.GetComponentInChildren<Renderer>();
+        if (meshFilter == null || meshFilter.sharedMesh == null || meshRenderer == null)
+            return false;
+
+        _releasedBlockMesh = meshFilter.sharedMesh;
+        _releasedBlockMaterial = new RenderMaterial(meshRenderer.sharedMaterial != null
+            ? meshRenderer.sharedMaterial
+            : _runtimeChunkMaterial)
+        {
+            enableInstancing = true
+        };
+        _releasedBlockPropertyBlock ??= new MaterialPropertyBlock();
+        _releasedBlockScale = Mathf.Max(0.0001f, authoring.Scale);
+
+        Vector3 size = Vector3.one;
+        Vector3 center = Vector3.zero;
+        UnityEngine.BoxCollider box = prefab.GetComponentInChildren<UnityEngine.BoxCollider>();
+        if (box != null)
+        {
+            size = Vector3.Scale(box.size, box.transform.lossyScale);
+            center = Vector3.Scale(box.center, box.transform.lossyScale);
+        }
+        else
+        {
+            Bounds bounds = _releasedBlockMesh.bounds;
+            size = bounds.size;
+            center = bounds.center;
+        }
+
+        PhysicsMaterial physicsMaterial = CreatePhysicsMaterial();
+        _releasedBlockCollider = Unity.Physics.BoxCollider.Create(new BoxGeometry
+        {
+            Center = new float3(center.x, center.y, center.z),
+            Orientation = quaternion.identity,
+            Size = new float3(size.x, size.y, size.z),
+            BevelRadius = 0f
+        }, CollisionFilter.Default, physicsMaterial);
+
+        return _releasedBlockCollider.IsCreated;
     }
 
-    private Mesh CreateReleasedBlockMesh()
+    private ReleasedBlockAuthoring ResolveReleasedBlockAuthoring()
     {
-        float half = _detailVoxelScale * 0.5f;
-        float halfDepth = _chunkColliderDepth / Mathf.Max(_cellSize, 0.0001f) * 0.5f;
-        Vector3[] vertices = new Vector3[24];
-        FillFace(vertices, 0, 0f, new Vector3(-half, -half, -halfDepth), new Vector3(-half, half, -halfDepth),
-            new Vector3(half, half, -halfDepth), new Vector3(half, -half, -halfDepth));
-        FillFace(vertices, 4, 0f, new Vector3(half, -half, halfDepth), new Vector3(half, half, halfDepth),
-            new Vector3(-half, half, halfDepth), new Vector3(-half, -half, halfDepth));
-        FillFace(vertices, 8, 0f, new Vector3(-half, -half, -halfDepth), new Vector3(-half, -half, halfDepth),
-            new Vector3(-half, half, halfDepth), new Vector3(-half, half, -halfDepth));
-        FillFace(vertices, 12, 0f, new Vector3(half, -half, -halfDepth), new Vector3(half, half, -halfDepth),
-            new Vector3(half, half, halfDepth), new Vector3(half, -half, halfDepth));
-        FillFace(vertices, 16, 0f, new Vector3(-half, half, -halfDepth), new Vector3(-half, half, halfDepth),
-            new Vector3(half, half, halfDepth), new Vector3(half, half, -halfDepth));
-        FillFace(vertices, 20, 0f, new Vector3(-half, -half, -halfDepth), new Vector3(half, -half, -halfDepth),
-            new Vector3(half, -half, halfDepth), new Vector3(-half, -half, halfDepth));
-        Mesh mesh = new Mesh { name = "ReleasedBlock_InstancedMesh" };
-        mesh.vertices = vertices;
-        mesh.uv = ReleasedBlockUvs;
-        mesh.triangles = ReleasedBlockIndices;
-        mesh.RecalculateNormals();
-        mesh.RecalculateBounds();
-        return mesh;
+        if (_releasedBlockAuthoring == null)
+            _releasedBlockAuthoring = GetComponent<ReleasedBlockAuthoring>();
+
+        return _releasedBlockAuthoring;
     }
 
-    private void RenderReleasedBlocks()
+    private bool EnsureEcsReady()
     {
-        if (!HasValidEcsOwner() || _releasedBlockMesh == null || _releasedBlockMaterial == null)
+        World world = World.DefaultGameObjectInjectionWorld;
+        if (world == null || !world.IsCreated)
+            return false;
+
+        if (_ecsWorld != world || !_hasReleasedBlockQuery)
+        {
+            DisposeEcsQuery();
+            _ecsWorld = world;
+            _entityManager = world.EntityManager;
+            _releasedBlockQuery = _entityManager.CreateEntityQuery(
+                ComponentType.ReadOnly<ReleasedBlockComponent>(),
+                ComponentType.ReadOnly<LocalTransform>(),
+                ComponentType.ReadWrite<PhysicsVelocity>());
+            _hasReleasedBlockQuery = true;
+        }
+
+        return true;
+    }
+
+    private void DrawReleasedBlocks()
+    {
+        if (!EnsureEcsReady() || !EnsureReleasedBlockResources())
             return;
 
-        using NativeArray<ReleasedBlockData> blocks =
-            _releasedBlockQuery.ToComponentDataArray<ReleasedBlockData>(Allocator.Temp);
-        int count = CountOwnedBlocks(blocks);
-        if (count == 0)
-            return;
+        using NativeArray<LocalTransform> transforms =
+            _releasedBlockQuery.ToComponentDataArray<LocalTransform>(Allocator.Temp);
+        using NativeArray<ReleasedBlockComponent> blocks =
+            _releasedBlockQuery.ToComponentDataArray<ReleasedBlockComponent>(Allocator.Temp);
 
-        EnsureInstanceCapacity(Mathf.Min(count, 1023));
         int batchCount = 0;
         for (int i = 0; i < blocks.Length; i++)
         {
-            ReleasedBlockData block = blocks[i];
-            if (block.Owner != _ecsOwner)
+            if (blocks[i].OwnerId != _ownerId)
                 continue;
 
-            _instanceMatrices[batchCount] = Matrix4x4.TRS(ToVector3(block.Position), Quaternion.identity,
-                Vector3.one * _cellSize);
-            _instanceColors[batchCount] = ToVector4(block.Color);
+            LocalTransform transformData = transforms[i];
+            float3 position = transformData.Position;
+            quaternion rotation = transformData.Rotation;
+            _renderMatrices[batchCount] = Matrix4x4.TRS(
+                new Vector3(position.x, position.y, position.z),
+                new Quaternion(rotation.value.x, rotation.value.y, rotation.value.z, rotation.value.w),
+                Vector3.one * transformData.Scale);
+            _renderColors[batchCount] = blocks[i].Color;
             batchCount++;
 
-            if (batchCount < 1023)
-                continue;
-
-            DrawReleasedBlockBatch(batchCount);
-            batchCount = 0;
+            if (batchCount == _renderMatrices.Length)
+            {
+                DrawReleasedBlockBatch(batchCount);
+                batchCount = 0;
+            }
         }
 
         if (batchCount > 0)
@@ -724,215 +860,117 @@ public sealed class TextureBlockSpawner : MonoBehaviour
 
     private void DrawReleasedBlockBatch(int batchCount)
     {
-        _instancePropertyBlock.Clear();
-        _instancePropertyBlock.SetVectorArray(ColorId, _instanceColors);
-        Graphics.DrawMeshInstanced(_releasedBlockMesh, 0, _releasedBlockMaterial, _instanceMatrices, batchCount,
-            _instancePropertyBlock, ShadowCastingMode.Off, false, gameObject.layer);
+        _releasedBlockPropertyBlock.Clear();
+        _releasedBlockPropertyBlock.SetVectorArray(ColorId, _renderColors);
+        _releasedBlockPropertyBlock.SetVectorArray(BaseColorId, _renderColors);
+        Graphics.DrawMeshInstanced(_releasedBlockMesh, 0, _releasedBlockMaterial, _renderMatrices, batchCount,
+            _releasedBlockPropertyBlock, ShadowCastingMode.Off, false, gameObject.layer);
     }
 
-    private int CountOwnedBlocks(NativeArray<ReleasedBlockData> blocks)
+    private void TrimReleasedBlockEntityList()
     {
-        int count = 0;
-        for (int i = 0; i < blocks.Length; i++)
-            if (blocks[i].Owner == _ecsOwner)
-                count++;
-
-        return count;
-    }
-
-    private void EnsureInstanceCapacity(int capacity)
-    {
-        if (_instanceMatrices != null && _instanceMatrices.Length >= capacity)
-            return;
-        _instanceMatrices = new Matrix4x4[Mathf.NextPowerOfTwo(capacity)];
-        _instanceColors = new Vector4[_instanceMatrices.Length];
-    }
-
-    private void CreateEcsOwner()
-    {
-        World world = World.DefaultGameObjectInjectionWorld;
-        if (world == null || !world.IsCreated)
+        if (!EnsureEcsReady())
             return;
 
-        _ecsWorld = world;
-        _entityManager = world.EntityManager;
-        ClearReleasedBlockEntities();
-        if (_entityManager.Exists(_ecsOwner))
-            _entityManager.DestroyEntity(_ecsOwner);
-        if (_hasReleasedBlockQuery)
-        {
-            _releasedBlockQuery.Dispose();
-            _hasReleasedBlockQuery = false;
-        }
-
-        _ecsOwner = _entityManager.CreateEntity(ComponentType.ReadWrite<TextureBlockSpawnerData>());
-        _entityManager.AddBuffer<TextureBlockCell>(_ecsOwner);
-        _releasedBlockQuery = _entityManager.CreateEntityQuery(ComponentType.ReadWrite<ReleasedBlockData>());
-        _hasReleasedBlockQuery = true;
-        UpdateEcsSpawnerData();
-    }
-
-    private void UpdateEcsSpawnerData()
-    {
-        if (!HasValidEcsOwner() || _runtimeParent == null)
-            return;
-
-        _entityManager.SetComponentData(_ecsOwner, new TextureBlockSpawnerData
-        {
-            GridWidth = _gridWidth,
-            GridHeight = _gridHeight,
-            CellSize = _cellSize,
-            Offset = new float3(_offset.x, _offset.y, _offset.z),
-            WorldToLocal = ToFloat4x4(_runtimeParent.worldToLocalMatrix),
-            LocalToWorld = ToFloat4x4(_runtimeParent.localToWorldMatrix),
-            Gravity = _releasedBlockGravity,
-            Damping = _releasedBlockDamping,
-            Restitution = _releasedBlockRestitution,
-            Friction = _releasedBlockFriction,
-            SawPosition = new float3(_sawForcePosition.x, _sawForcePosition.y, _sawForcePosition.z),
-            SawRadius = _sawForceRadius,
-            SawForce = _sawForceStrength
-        });
-    }
-
-    private void SyncAllCellsToEcs()
-    {
-        if (!HasValidEcsOwner() || !_cellSolid.IsCreated)
-            return;
-
-        DynamicBuffer<TextureBlockCell> cells = _entityManager.GetBuffer<TextureBlockCell>(_ecsOwner);
-        cells.ResizeUninitialized(_cellSolid.Length);
-        for (int i = 0; i < _cellSolid.Length; i++)
-            cells[i] = new TextureBlockCell { Solid = _cellSolid[i] };
-    }
-
-    private void SetEcsCellSolid(int cellIndex, byte solid)
-    {
-        if (!HasValidEcsOwner())
-            return;
-
-        DynamicBuffer<TextureBlockCell> cells = _entityManager.GetBuffer<TextureBlockCell>(_ecsOwner);
-        if ((uint)cellIndex < (uint)cells.Length)
-            cells[cellIndex] = new TextureBlockCell { Solid = solid };
-    }
-
-    private bool HasValidEcsOwner()
-    {
-        return _ecsWorld != null && _ecsWorld.IsCreated && _entityManager.Exists(_ecsOwner);
+        for (int i = _releasedBlockEntities.Count - 1; i >= 0; i--)
+            if (!_entityManager.Exists(_releasedBlockEntities[i]))
+                _releasedBlockEntities.RemoveAt(i);
     }
 
     private void ClearReleasedBlockEntities()
     {
-        if (_ecsWorld == null || !_ecsWorld.IsCreated || !_hasReleasedBlockQuery)
+        if (!EnsureEcsReady())
+        {
+            _releasedBlockEntities.Clear();
             return;
+        }
+
+        for (int i = _releasedBlockEntities.Count - 1; i >= 0; i--)
+            DestroyReleasedBlockEntityAt(i);
 
         using NativeArray<Entity> entities = _releasedBlockQuery.ToEntityArray(Allocator.Temp);
+        using NativeArray<ReleasedBlockComponent> blocks =
+            _releasedBlockQuery.ToComponentDataArray<ReleasedBlockComponent>(Allocator.Temp);
         for (int i = 0; i < entities.Length; i++)
-        {
-            Entity entity = entities[i];
-            ReleasedBlockData block = _entityManager.GetComponentData<ReleasedBlockData>(entity);
-            if (block.Owner == _ecsOwner)
-                _entityManager.DestroyEntity(entity);
-        }
-    }
-
-    private static float4x4 ToFloat4x4(Matrix4x4 matrix)
-    {
-        return new float4x4(
-            new float4(matrix.m00, matrix.m10, matrix.m20, matrix.m30),
-            new float4(matrix.m01, matrix.m11, matrix.m21, matrix.m31),
-            new float4(matrix.m02, matrix.m12, matrix.m22, matrix.m32),
-            new float4(matrix.m03, matrix.m13, matrix.m23, matrix.m33));
-    }
-
-    private static Vector3 ToVector3(float3 value)
-    {
-        return new Vector3(value.x, value.y, value.z);
-    }
-
-    private static Vector4 ToVector4(float4 value)
-    {
-        return new Vector4(value.x, value.y, value.z, value.w);
-    }
-
-    private void DestroyEcsOwner()
-    {
-        if (_ecsWorld == null || !_ecsWorld.IsCreated)
-            return;
-
-        ClearReleasedBlockEntities();
-        if (_entityManager.Exists(_ecsOwner))
-            _entityManager.DestroyEntity(_ecsOwner);
-
-        _ecsOwner = Entity.Null;
-        if (_hasReleasedBlockQuery)
-        {
-            _releasedBlockQuery.Dispose();
-            _hasReleasedBlockQuery = false;
-        }
-    }
-
-    private void DespawnReleasedBlock(Entity entity)
-    {
-        if (HasValidEcsOwner() && _entityManager.Exists(entity))
-            _entityManager.DestroyEntity(entity);
+            if (blocks[i].OwnerId == _ownerId && _entityManager.Exists(entities[i]))
+                _entityManager.DestroyEntity(entities[i]);
     }
 
     private void DespawnInBounds(Bounds bounds)
     {
-        if (!HasValidEcsOwner())
+        if (!EnsureEcsReady())
             return;
 
         using NativeArray<Entity> entities = _releasedBlockQuery.ToEntityArray(Allocator.Temp);
-        using NativeArray<ReleasedBlockData> blocks =
-            _releasedBlockQuery.ToComponentDataArray<ReleasedBlockData>(Allocator.Temp);
-        for (int i = 0; i < blocks.Length; i++)
-            if (blocks[i].Owner == _ecsOwner && bounds.Contains(ToVector3(blocks[i].Position)))
-                DespawnReleasedBlock(entities[i]);
+        using NativeArray<LocalTransform> transforms =
+            _releasedBlockQuery.ToComponentDataArray<LocalTransform>(Allocator.Temp);
+        using NativeArray<ReleasedBlockComponent> blocks =
+            _releasedBlockQuery.ToComponentDataArray<ReleasedBlockComponent>(Allocator.Temp);
+
+        for (int i = 0; i < entities.Length; i++)
+        {
+            if (blocks[i].OwnerId != _ownerId)
+                continue;
+
+            float3 position = transforms[i].Position;
+            if (bounds.Contains(new Vector3(position.x, position.y, position.z)) && _entityManager.Exists(entities[i]))
+                _entityManager.DestroyEntity(entities[i]);
+        }
     }
 
     private void ApplyConveyor(Bounds bounds, Vector3 direction, float speed, float acceleration, float deltaTime)
     {
-        if (!HasValidEcsOwner())
+        if (!EnsureEcsReady())
             return;
 
         using NativeArray<Entity> entities = _releasedBlockQuery.ToEntityArray(Allocator.Temp);
-        using NativeArray<ReleasedBlockData> blocks =
-            _releasedBlockQuery.ToComponentDataArray<ReleasedBlockData>(Allocator.Temp);
-        for (int i = 0; i < blocks.Length; i++)
+        using NativeArray<LocalTransform> transforms =
+            _releasedBlockQuery.ToComponentDataArray<LocalTransform>(Allocator.Temp);
+        using NativeArray<ReleasedBlockComponent> blocks =
+            _releasedBlockQuery.ToComponentDataArray<ReleasedBlockComponent>(Allocator.Temp);
+
+        float3 conveyorDirection = new float3(direction.x, direction.y, direction.z);
+        for (int i = 0; i < entities.Length; i++)
         {
-            ReleasedBlockData block = blocks[i];
-            if (block.Owner != _ecsOwner || !bounds.Contains(ToVector3(block.Position)))
+            if (blocks[i].OwnerId != _ownerId)
                 continue;
 
-            Vector3 velocity = ToVector3(block.Velocity);
-            float currentSpeed = Vector3.Dot(velocity, direction);
-            Vector3 newVelocity = velocity + direction *
-                (Mathf.MoveTowards(currentSpeed, speed, acceleration * deltaTime) - currentSpeed);
-            block.Velocity = new float3(newVelocity.x, newVelocity.y, newVelocity.z);
-            _entityManager.SetComponentData(entities[i], block);
+            float3 position = transforms[i].Position;
+            if (!bounds.Contains(new Vector3(position.x, position.y, position.z)))
+                continue;
+
+            PhysicsVelocity velocity = _entityManager.GetComponentData<PhysicsVelocity>(entities[i]);
+            float currentSpeed = math.dot(velocity.Linear, conveyorDirection);
+            velocity.Linear += conveyorDirection *
+                               (Mathf.MoveTowards(currentSpeed, speed, acceleration * deltaTime) - currentSpeed);
+            _entityManager.SetComponentData(entities[i], velocity);
         }
     }
 
     private void ApplySuction(Vector3 origin, Quaternion rotation, Vector3 boxSize, float force, float acceleration,
         float maxVelocity, float arrivalDamping, float destroyRadius, float deltaTime)
     {
-        if (!HasValidEcsOwner())
+        if (!EnsureEcsReady())
             return;
 
         Quaternion inverseRotation = Quaternion.Inverse(rotation);
         Vector3 halfSize = boxSize * 0.5f;
+        Vector3 boxOffset = rotation * new Vector3(boxSize.x * 0.5f, 0f, 0f);
+
         using NativeArray<Entity> entities = _releasedBlockQuery.ToEntityArray(Allocator.Temp);
-        using NativeArray<ReleasedBlockData> blocks =
-            _releasedBlockQuery.ToComponentDataArray<ReleasedBlockData>(Allocator.Temp);
-        for (int i = 0; i < blocks.Length; i++)
+        using NativeArray<LocalTransform> transforms =
+            _releasedBlockQuery.ToComponentDataArray<LocalTransform>(Allocator.Temp);
+        using NativeArray<ReleasedBlockComponent> blocks =
+            _releasedBlockQuery.ToComponentDataArray<ReleasedBlockComponent>(Allocator.Temp);
+
+        for (int i = 0; i < entities.Length; i++)
         {
-            ReleasedBlockData block = blocks[i];
-            if (block.Owner != _ecsOwner)
+            if (blocks[i].OwnerId != _ownerId)
                 continue;
 
-            Vector3 position = ToVector3(block.Position);
-            Vector3 local = inverseRotation * (position - origin - rotation * new Vector3(boxSize.x * 0.5f, 0f, 0f));
+            float3 transformPosition = transforms[i].Position;
+            Vector3 position = new Vector3(transformPosition.x, transformPosition.y, transformPosition.z);
+            Vector3 local = inverseRotation * (position - origin - boxOffset);
             if (Mathf.Abs(local.x) > halfSize.x || Mathf.Abs(local.y) > halfSize.y || Mathf.Abs(local.z) > halfSize.z)
                 continue;
 
@@ -941,50 +979,80 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             float distance = direction.magnitude;
             if (distance < destroyRadius)
             {
-                DespawnReleasedBlock(entities[i]);
+                if (_entityManager.Exists(entities[i]))
+                    _entityManager.DestroyEntity(entities[i]);
                 continue;
             }
+
             direction /= distance;
+            PhysicsVelocity velocity = _entityManager.GetComponentData<PhysicsVelocity>(entities[i]);
+            Vector3 currentVelocity = new Vector3(velocity.Linear.x, velocity.Linear.y, velocity.Linear.z);
             Vector3 targetVelocity = direction * Mathf.Min(force * distance, maxVelocity);
-            Vector3 velocity = Vector3.MoveTowards(ToVector3(block.Velocity), targetVelocity, acceleration * deltaTime);
+            Vector3 movedVelocity = Vector3.MoveTowards(currentVelocity, targetVelocity, acceleration * deltaTime);
             if (distance <= destroyRadius * 2.5f)
-                velocity = Vector3.Lerp(velocity, targetVelocity, arrivalDamping * deltaTime);
-            Vector3 clampedVelocity = Vector3.ClampMagnitude(velocity, maxVelocity);
-            block.Velocity = new float3(clampedVelocity.x, clampedVelocity.y, clampedVelocity.z);
-            _entityManager.SetComponentData(entities[i], block);
+                movedVelocity = Vector3.Lerp(movedVelocity, targetVelocity, arrivalDamping * deltaTime);
+            movedVelocity = Vector3.ClampMagnitude(movedVelocity, maxVelocity);
+            velocity.Linear = new float3(movedVelocity.x, movedVelocity.y, movedVelocity.z);
+            _entityManager.SetComponentData(entities[i], velocity);
         }
+    }
+
+    private void DestroyReleasedBlockEntityAt(int index)
+    {
+        if (!EnsureEcsReady())
+            return;
+
+        Entity entity = _releasedBlockEntities[index];
+        _releasedBlockEntities.RemoveAt(index);
+        if (_entityManager.Exists(entity))
+            _entityManager.DestroyEntity(entity);
     }
 
     private void DisposeReleasedBlocks()
     {
         ClearReleasedBlockEntities();
-        if (_releasedBlockMesh != null) DestroyUnityObject(_releasedBlockMesh);
+        _releasedBlockEntities.Clear();
+    }
+
+    private void DisposeReleasedBlockResources()
+    {
+        if (_releasedBlockCollider.IsCreated)
+        {
+            _releasedBlockCollider.Dispose();
+            _releasedBlockCollider = default;
+        }
+
+        if (_releasedBlockMaterial != null)
+            DestroyUnityObject(_releasedBlockMaterial);
+        _releasedBlockMaterial = null;
         _releasedBlockMesh = null;
+    }
+
+    private void DisposeEcsQuery()
+    {
+        if (_hasReleasedBlockQuery)
+        {
+            _releasedBlockQuery.Dispose();
+            _hasReleasedBlockQuery = false;
+        }
+    }
+
+    private PhysicsMaterial CreatePhysicsMaterial()
+    {
+        PhysicsMaterial material = PhysicsMaterial.Default;
+        material.Friction = _physicsFriction;
+        material.Restitution = _physicsRestitution;
+        return material;
+    }
+
+    private static Vector4 ToFloat4(Color32 color)
+    {
+        return new Vector4(color.r / 255f, color.g / 255f, color.b / 255f, color.a / 255f);
     }
 
     private static void DestroyUnityObject(Object target)
     {
         if (Application.isPlaying) Destroy(target); else DestroyImmediate(target);
-    }
-
-    private static void FillFace(Vector3[] vertices, int startIndex, float rotationY, Vector3 a, Vector3 b, Vector3 c,
-        Vector3 d)
-    {
-        vertices[startIndex] = RotateY(a, rotationY);
-        vertices[startIndex + 1] = RotateY(b, rotationY);
-        vertices[startIndex + 2] = RotateY(c, rotationY);
-        vertices[startIndex + 3] = RotateY(d, rotationY);
-    }
-
-    private static Vector3 RotateY(Vector3 point, float degrees)
-    {
-        if (degrees == 0f)
-            return point;
-
-        float radians = degrees * Mathf.Deg2Rad;
-        float sin = Mathf.Sin(radians);
-        float cos = Mathf.Cos(radians);
-        return new Vector3(point.x * cos + point.z * sin, point.y, -point.x * sin + point.z * cos);
     }
 
     private static float GetVoxelRotationY(int x, int y, float maxAngle)
@@ -1010,11 +1078,18 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     {
         public Mesh Mesh;
         public MeshRenderer Renderer;
+        public Entity PhysicsEntity;
+        public BlobAssetReference<Collider> PhysicsCollider;
         public NativeArray<byte> Visited;
         public NativeList<Vector3> Vertices;
         public NativeList<Color32> Colors;
         public NativeList<Vector2> Uvs;
         public NativeList<int> Indices;
+        public NativeArray<byte> ColliderVisited;
+        public NativeList<Vector3> ColliderVertices;
+        public NativeList<Color32> ColliderColors;
+        public NativeList<Vector2> ColliderUvs;
+        public NativeList<int> ColliderIndices;
         public int StartX;
         public int StartY;
         public int Width;
@@ -1073,6 +1148,8 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         public float CellSize;
         public Vector3 Offset;
         public byte UseVoxelDetail;
+        public byte ExtrudeMergedQuads;
+        public byte MergeAnySolid;
         public float DetailVoxelScale;
         public float RandomYRotation;
         public float DetailDepth;
@@ -1129,7 +1206,10 @@ public sealed class TextureBlockSpawner : MonoBehaviour
                             Visited[(y + fillY) * ChunkWidth + x + fillX] = 1;
                     }
 
-                    AddQuad(x, y, rectWidth, rectHeight, color);
+                    if (ExtrudeMergedQuads != 0)
+                        AddMergedBox(x, y, rectWidth, rectHeight, color);
+                    else
+                        AddQuad(x, y, rectWidth, rectHeight, color);
                 }
             }
         }
@@ -1142,6 +1222,9 @@ public sealed class TextureBlockSpawner : MonoBehaviour
                 return false;
 
             Color32 other = CellColors[cellIndex];
+            if (MergeAnySolid != 0)
+                return true;
+
             return other.r == color.r && other.g == color.g && other.b == color.b && other.a == color.a;
         }
 
@@ -1158,22 +1241,8 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             Vertices.Add(new Vector3(maxX, maxY, 0f));
             Vertices.Add(new Vector3(maxX, minY, 0f));
 
-            Colors.Add(color);
-            Colors.Add(color);
-            Colors.Add(color);
-            Colors.Add(color);
-
-            Uvs.Add(new Vector2(0f, 0f));
-            Uvs.Add(new Vector2(0f, 1f));
-            Uvs.Add(new Vector2(1f, 1f));
-            Uvs.Add(new Vector2(1f, 0f));
-
-            Indices.Add(vertexIndex);
-            Indices.Add(vertexIndex + 1);
-            Indices.Add(vertexIndex + 2);
-            Indices.Add(vertexIndex);
-            Indices.Add(vertexIndex + 2);
-            Indices.Add(vertexIndex + 3);
+            AddVertexData(color);
+            AddQuadIndices(vertexIndex);
         }
 
         private void AddVoxelBox(int x, int y, Color32 color)
@@ -1226,6 +1295,36 @@ public sealed class TextureBlockSpawner : MonoBehaviour
                 color);
         }
 
+        private void AddMergedBox(int x, int y, int width, int height, Color32 color)
+        {
+            float minX = Offset.x + (StartX + x) * CellSize - CellSize * 0.5f;
+            float minY = Offset.y + (StartY + y) * CellSize - CellSize * 0.5f;
+            float maxX = minX + width * CellSize;
+            float maxY = minY + height * CellSize;
+            float halfDepth = DetailDepth * 0.5f;
+
+            Vector3 frontMin = new Vector3(minX, minY, -halfDepth);
+            Vector3 frontMax = new Vector3(maxX, maxY, -halfDepth);
+            Vector3 backMin = new Vector3(minX, minY, halfDepth);
+            Vector3 backMax = new Vector3(maxX, maxY, halfDepth);
+
+            AddFace(new Vector3(frontMin.x, frontMin.y, frontMin.z), new Vector3(frontMin.x, frontMax.y, frontMin.z),
+                new Vector3(frontMax.x, frontMax.y, frontMin.z), new Vector3(frontMax.x, frontMin.y, frontMin.z),
+                color);
+            AddFace(new Vector3(backMax.x, backMin.y, backMax.z), new Vector3(backMax.x, backMax.y, backMax.z),
+                new Vector3(backMin.x, backMax.y, backMax.z), new Vector3(backMin.x, backMin.y, backMax.z), color);
+            AddFace(new Vector3(frontMin.x, frontMin.y, frontMin.z), new Vector3(backMin.x, backMin.y, backMin.z),
+                new Vector3(backMin.x, backMax.y, backMax.z), new Vector3(frontMin.x, frontMax.y, frontMin.z),
+                color);
+            AddFace(new Vector3(frontMax.x, frontMin.y, frontMin.z), new Vector3(frontMax.x, frontMax.y, frontMin.z),
+                new Vector3(backMax.x, backMax.y, backMax.z), new Vector3(backMax.x, backMin.y, backMax.z), color);
+            AddFace(new Vector3(frontMin.x, frontMax.y, frontMin.z), new Vector3(backMin.x, backMax.y, backMax.z),
+                new Vector3(backMax.x, backMax.y, backMax.z), new Vector3(frontMax.x, frontMax.y, frontMin.z),
+                color);
+            AddFace(new Vector3(frontMin.x, frontMin.y, frontMin.z), new Vector3(frontMax.x, frontMin.y, frontMin.z),
+                new Vector3(backMax.x, backMin.y, backMax.z), new Vector3(backMin.x, backMin.y, backMin.z), color);
+        }
+
         private float GetRotationY(int x, int y)
         {
             if (RandomYRotation <= 0f)
@@ -1259,6 +1358,12 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             Vertices.Add(c);
             Vertices.Add(d);
 
+            AddVertexData(color);
+            AddQuadIndices(vertexIndex);
+        }
+
+        private void AddVertexData(Color32 color)
+        {
             Colors.Add(color);
             Colors.Add(color);
             Colors.Add(color);
@@ -1268,7 +1373,10 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             Uvs.Add(new Vector2(0f, 1f));
             Uvs.Add(new Vector2(1f, 1f));
             Uvs.Add(new Vector2(1f, 0f));
+        }
 
+        private void AddQuadIndices(int vertexIndex)
+        {
             Indices.Add(vertexIndex);
             Indices.Add(vertexIndex + 1);
             Indices.Add(vertexIndex + 2);
