@@ -33,11 +33,13 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     [SerializeField, Range(1, 8)] private int _maxChunkRebuildsPerFrame = 2;
     [SerializeField, Range(0f, 20f)] private float _releasedBlockDamping = 2.5f;
     [SerializeField, Range(0f, 20f)] private float _releasedBlockAngularDamping = 4f;
-    [SerializeField, Range(0.01f, 10f)] private float _releasedBlockMass = 0.4f;
+    [SerializeField, Range(0.01f, 10f)] private float _releasedBlockMass = 0.1f;
     [SerializeField, Range(128, 10000)] private int _maxReleasedPhysicsBlocks = 5000;
+    [SerializeField, Range(1, 4)] private int _releasedBlockRenderInterval = 2;
     [SerializeField, Range(0f, 1f)] private float _physicsFriction = 0.12f;
     [SerializeField, Range(0f, 1f)] private float _physicsRestitution;
     [SerializeField] private ReleasedBlockAuthoring _releasedBlockAuthoring;
+    [SerializeField] private Transform[] _releasedBlockWalls;
     [SerializeField] private bool _centerTexture = true;
     [SerializeField] private bool _spawnOnAwake = true;
 
@@ -46,13 +48,19 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     private readonly List<int> _scheduledChunkRebuilds = new(8);
     private readonly List<JobHandle> _scheduledChunkHandles = new(8);
     private readonly List<Entity> _releasedBlockEntities = new(1024);
-    private readonly Matrix4x4[] _renderMatrices = new Matrix4x4[1023];
-    private readonly Vector4[] _renderColors = new Vector4[1023];
+    private readonly List<Entity> _releasedBlockWallEntities = new(4);
+    private readonly List<BlobAssetReference<Collider>> _releasedBlockWallColliders = new(4);
+    private readonly RenderFrameData[] _renderFrames = new RenderFrameData[2];
+    private Matrix4x4[][] _renderBatchMatrices;
+    private Vector4[][] _renderBatchColors;
+    private int[] _renderBatchCounts;
+    private int _renderBatchCount;
     private NativeArray<Color32> _cellColors;
     private NativeArray<byte> _cellSolid;
     private World _ecsWorld;
     private EntityManager _entityManager;
     private EntityQuery _releasedBlockQuery;
+    private EntityArchetype _releasedBlockArchetype;
     private BlobAssetReference<Collider> _releasedBlockCollider;
     private Mesh _releasedBlockMesh;
     private RenderMaterial _releasedBlockMaterial;
@@ -79,8 +87,8 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     private float _pendingSawSpinDirection;
     private float _pendingSawRadius;
     private float _pendingSawMaxVelocity;
+    private int _displayRenderFrame = -1;
     private static readonly int ColorId = Shader.PropertyToID("_Color");
-    private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
 
     public static bool ReleaseAtWorldForActiveSpawners(Vector3 worldPoint, Vector3 pressDirection, float pressSpeed,
         float outwardForce, float tangentialForce, float spinDirection, float bladeRadius, float sideDamping,
@@ -167,6 +175,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     {
         DisposeChunks();
         DisposeReleasedBlocks();
+        DisposeReleasedBlockWalls();
         DisposeReleasedBlockResources();
         DisposeCells();
         DisposeEcsQuery();
@@ -724,26 +733,24 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         Vector3 clampedVelocity = Vector3.ClampMagnitude(velocity, safeMaxVelocity);
         clampedVelocity = RedirectVelocityFromSolid(position, clampedVelocity);
 
-        TrimReleasedBlockEntityList();
+        if (_releasedBlockEntities.Count >= _maxReleasedPhysicsBlocks)
+            TrimReleasedBlockEntityList();
         while (_releasedBlockEntities.Count >= _maxReleasedPhysicsBlocks && _releasedBlockEntities.Count > 0)
             DestroyReleasedBlockEntityAt(0);
 
-        Entity entity = _entityManager.CreateEntity(typeof(LocalTransform), typeof(PhysicsCollider),
-            typeof(PhysicsMass), typeof(PhysicsVelocity), typeof(PhysicsDamping), typeof(PhysicsGravityFactor),
-            typeof(Simulate), typeof(ReleasedBlockComponent));
+        Entity entity = _entityManager.CreateEntity(_releasedBlockArchetype);
 
         _entityManager.SetComponentData(entity, LocalTransform.FromPositionRotationScale(
             new float3(position.x, position.y, position.z), quaternion.identity, _releasedBlockScale));
         _entityManager.SetComponentData(entity, new PhysicsCollider { Value = _releasedBlockCollider });
         PhysicsMass physicsMass = PhysicsMass.CreateDynamic(
             _releasedBlockCollider.Value.MassProperties, _releasedBlockMass);
-        physicsMass.InverseInertia.x = 0f;
-        physicsMass.InverseInertia.y = 0f;
+        physicsMass.InverseInertia = float3.zero;
         _entityManager.SetComponentData(entity, physicsMass);
         _entityManager.SetComponentData(entity, new PhysicsVelocity
         {
             Linear = new float3(clampedVelocity.x, clampedVelocity.y, clampedVelocity.z),
-            Angular = new float3(0f, 0f, spinDirection * tangentialForce * 0.35f)
+            Angular = float3.zero
         });
         _entityManager.SetComponentData(entity, new PhysicsDamping
         {
@@ -751,7 +758,6 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             Angular = _releasedBlockAngularDamping
         });
         _entityManager.SetComponentData(entity, new PhysicsGravityFactor { Value = 1f });
-        _entityManager.AddSharedComponent(entity, new PhysicsWorldIndex(0));
         _entityManager.SetComponentData(entity, new ReleasedBlockComponent
         {
             OwnerId = _ownerId,
@@ -765,7 +771,10 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     private bool EnsureReleasedBlockResources()
     {
         if (_releasedBlockCollider.IsCreated && _releasedBlockMesh != null && _releasedBlockMaterial != null)
+        {
+            EnsureRenderFrameResources();
             return true;
+        }
 
         ReleasedBlockAuthoring authoring = ResolveReleasedBlockAuthoring();
         GameObject prefab = authoring != null ? authoring.ReleasedBlockPrefab : null;
@@ -810,6 +819,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             Radius = radius
         }, CollisionFilter.Default, physicsMaterial);
 
+        EnsureRenderFrameResources();
         return _releasedBlockCollider.IsCreated;
     }
 
@@ -829,15 +839,21 @@ public sealed class TextureBlockSpawner : MonoBehaviour
 
         if (_ecsWorld != world || !_hasReleasedBlockQuery)
         {
+            DisposeReleasedBlockWalls();
             DisposeEcsQuery();
             _ecsWorld = world;
             _entityManager = world.EntityManager;
+            _releasedBlockArchetype = _entityManager.CreateArchetype(
+                typeof(LocalTransform), typeof(PhysicsCollider), typeof(PhysicsMass), typeof(PhysicsVelocity),
+                typeof(PhysicsDamping), typeof(PhysicsGravityFactor), typeof(Simulate),
+                typeof(ReleasedBlockComponent), typeof(PhysicsWorldIndex));
             _releasedBlockQuery = _entityManager.CreateEntityQuery(
                 ComponentType.ReadOnly<ReleasedBlockComponent>(),
                 ComponentType.ReadOnly<LocalTransform>(),
                 ComponentType.ReadWrite<PhysicsVelocity>());
             _hasReleasedBlockQuery = true;
             EnsurePhysicsStep();
+            EnsureReleasedBlockWalls();
         }
 
         return true;
@@ -856,6 +872,42 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         }
 
         query.Dispose();
+    }
+
+    private void EnsureReleasedBlockWalls()
+    {
+        if (_releasedBlockWallEntities.Count > 0 || _releasedBlockWalls == null)
+            return;
+
+        PhysicsMaterial material = CreatePhysicsMaterial();
+        for (int i = 0; i < _releasedBlockWalls.Length; i++)
+        {
+            Transform wall = _releasedBlockWalls[i];
+            if (wall == null || !wall.gameObject.activeInHierarchy)
+                continue;
+
+            Vector3 scale = wall.lossyScale;
+            Vector3 size = new Vector3(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z));
+            BlobAssetReference<Collider> collider = Unity.Physics.BoxCollider.Create(new BoxGeometry
+            {
+                Center = float3.zero,
+                Size = new float3(size.x, size.y, size.z),
+                Orientation = quaternion.identity,
+                BevelRadius = 0f
+            }, CollisionFilter.Default, material);
+
+            Vector3 center = wall.position;
+            Quaternion rotation = wall.rotation;
+            Entity entity = _entityManager.CreateEntity(typeof(LocalTransform), typeof(PhysicsCollider));
+            _entityManager.SetComponentData(entity, LocalTransform.FromPositionRotationScale(
+                new float3(center.x, center.y, center.z),
+                new quaternion(rotation.x, rotation.y, rotation.z, rotation.w), 1f));
+            _entityManager.SetComponentData(entity, new PhysicsCollider { Value = collider });
+            _entityManager.AddSharedComponent(entity, new PhysicsWorldIndex(0));
+
+            _releasedBlockWallColliders.Add(collider);
+            _releasedBlockWallEntities.Add(entity);
+        }
     }
 
     private void PushReleasedBlocks(Vector3 sawCenter, Vector3 pressDirection, float pressSpeed, float outwardForce,
@@ -899,7 +951,6 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             linear = RedirectVelocityFromSolid(
                 new Vector3(entityPosition.x, entityPosition.y, entityPosition.z), linear);
             velocity.Linear = new float3(linear.x, linear.y, 0f);
-            velocity.Angular.z += spinDirection * tangentialForce * radiusPush * 0.15f;
             _entityManager.SetComponentData(entities[i], velocity);
         }
     }
@@ -1009,45 +1060,92 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         if (!EnsureEcsReady() || !EnsureReleasedBlockResources())
             return;
 
-        using NativeArray<LocalTransform> transforms =
-            _releasedBlockQuery.ToComponentDataArray<LocalTransform>(Allocator.Temp);
-        using NativeArray<ReleasedBlockComponent> blocks =
-            _releasedBlockQuery.ToComponentDataArray<ReleasedBlockComponent>(Allocator.Temp);
+        ConsumePreparedRenderFrame();
+        DrawCachedRenderFrame();
 
-        int batchCount = 0;
-        for (int i = 0; i < blocks.Length; i++)
-        {
-            if (blocks[i].OwnerId != _ownerId)
-                continue;
-
-            LocalTransform transformData = transforms[i];
-            float3 position = transformData.Position;
-            quaternion rotation = transformData.Rotation;
-            _renderMatrices[batchCount] = Matrix4x4.TRS(
-                new Vector3(position.x, position.y, position.z),
-                new Quaternion(rotation.value.x, rotation.value.y, rotation.value.z, rotation.value.w),
-                Vector3.one * transformData.Scale);
-            _renderColors[batchCount] = blocks[i].Color;
-            batchCount++;
-
-            if (batchCount == _renderMatrices.Length)
-            {
-                DrawReleasedBlockBatch(batchCount);
-                batchCount = 0;
-            }
-        }
-
-        if (batchCount > 0)
-            DrawReleasedBlockBatch(batchCount);
+        if (_displayRenderFrame < 0 || Time.frameCount % _releasedBlockRenderInterval == 0)
+            ScheduleRenderPreparation();
     }
 
-    private void DrawReleasedBlockBatch(int batchCount)
+    private void ConsumePreparedRenderFrame()
     {
-        _releasedBlockPropertyBlock.Clear();
-        _releasedBlockPropertyBlock.SetVectorArray(ColorId, _renderColors);
-        _releasedBlockPropertyBlock.SetVectorArray(BaseColorId, _renderColors);
-        Graphics.DrawMeshInstanced(_releasedBlockMesh, 0, _releasedBlockMaterial, _renderMatrices, batchCount,
-            _releasedBlockPropertyBlock, ShadowCastingMode.Off, false, gameObject.layer);
+        for (int i = 0; i < _renderFrames.Length; i++)
+        {
+            RenderFrameData frame = _renderFrames[i];
+            if (frame == null || !frame.Pending || !frame.Handle.IsCompleted)
+                continue;
+
+            frame.Handle.Complete();
+            frame.Pending = false;
+            _displayRenderFrame = i;
+            CachePreparedRenderFrame(frame);
+        }
+    }
+
+    private void ScheduleRenderPreparation()
+    {
+        int writeIndex = _displayRenderFrame == 0 ? 1 : 0;
+        RenderFrameData frame = _renderFrames[writeIndex];
+        if (frame == null || frame.Pending)
+            return;
+
+        NativeArray<LocalTransform> transforms =
+            _releasedBlockQuery.ToComponentDataArray<LocalTransform>(Allocator.TempJob);
+        NativeArray<ReleasedBlockComponent> blocks =
+            _releasedBlockQuery.ToComponentDataArray<ReleasedBlockComponent>(Allocator.TempJob);
+
+        frame.Count.Value = 0;
+        JobHandle prepareHandle = new PrepareRenderFrameJob
+        {
+            Transforms = transforms,
+            Blocks = blocks,
+            Matrices = frame.Matrices,
+            Colors = frame.Colors,
+            Count = frame.Count,
+            OwnerId = _ownerId
+        }.Schedule();
+
+        JobHandle disposeTransforms = transforms.Dispose(prepareHandle);
+        JobHandle disposeBlocks = blocks.Dispose(prepareHandle);
+        frame.Handle = JobHandle.CombineDependencies(disposeTransforms, disposeBlocks);
+        frame.Pending = true;
+    }
+
+    private void CachePreparedRenderFrame(RenderFrameData frame)
+    {
+        int count = frame.Count.Value;
+        int sourceIndex = 0;
+        int batchIndex = 0;
+        while (sourceIndex < count)
+        {
+            Matrix4x4[] matrices = _renderBatchMatrices[batchIndex];
+            Vector4[] colors = _renderBatchColors[batchIndex];
+            int batchCount = Mathf.Min(matrices.Length, count - sourceIndex);
+            for (int i = 0; i < batchCount; i++)
+            {
+                float4x4 matrix = frame.Matrices[sourceIndex + i];
+                matrices[i] = new Matrix4x4(matrix.c0, matrix.c1, matrix.c2, matrix.c3);
+                colors[i] = frame.Colors[sourceIndex + i];
+            }
+
+            _renderBatchCounts[batchIndex] = batchCount;
+            sourceIndex += batchCount;
+            batchIndex++;
+        }
+
+        _renderBatchCount = batchIndex;
+    }
+
+    private void DrawCachedRenderFrame()
+    {
+        for (int i = 0; i < _renderBatchCount; i++)
+        {
+            Vector4[] colors = _renderBatchColors[i];
+            _releasedBlockPropertyBlock.Clear();
+            _releasedBlockPropertyBlock.SetVectorArray(ColorId, colors);
+            Graphics.DrawMeshInstanced(_releasedBlockMesh, 0, _releasedBlockMaterial, _renderBatchMatrices[i],
+                _renderBatchCounts[i], _releasedBlockPropertyBlock, ShadowCastingMode.Off, false, gameObject.layer);
+        }
     }
 
     private void TrimReleasedBlockEntityList()
@@ -1199,6 +1297,8 @@ public sealed class TextureBlockSpawner : MonoBehaviour
 
     private void DisposeReleasedBlockResources()
     {
+        DisposeRenderFrameResources();
+
         if (_releasedBlockCollider.IsCreated)
         {
             _releasedBlockCollider.Dispose();
@@ -1211,13 +1311,138 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         _releasedBlockMesh = null;
     }
 
+    private void EnsureRenderFrameResources()
+    {
+        if (_renderBatchMatrices == null)
+        {
+            int batchCapacity = Mathf.CeilToInt(_maxReleasedPhysicsBlocks / 1023f);
+            _renderBatchMatrices = new Matrix4x4[batchCapacity][];
+            _renderBatchColors = new Vector4[batchCapacity][];
+            _renderBatchCounts = new int[batchCapacity];
+            for (int i = 0; i < batchCapacity; i++)
+            {
+                _renderBatchMatrices[i] = new Matrix4x4[1023];
+                _renderBatchColors[i] = new Vector4[1023];
+            }
+        }
+
+        for (int i = 0; i < _renderFrames.Length; i++)
+        {
+            if (_renderFrames[i] != null)
+                continue;
+
+            _renderFrames[i] = new RenderFrameData(_maxReleasedPhysicsBlocks);
+        }
+    }
+
+    private void DisposeRenderFrameResources()
+    {
+        for (int i = 0; i < _renderFrames.Length; i++)
+        {
+            RenderFrameData frame = _renderFrames[i];
+            if (frame == null)
+                continue;
+
+            if (frame.Pending)
+                frame.Handle.Complete();
+            frame.Dispose();
+            _renderFrames[i] = null;
+        }
+
+        _displayRenderFrame = -1;
+        _renderBatchCount = 0;
+        _renderBatchMatrices = null;
+        _renderBatchColors = null;
+        _renderBatchCounts = null;
+    }
+
+    private sealed class RenderFrameData
+    {
+        public NativeArray<float4x4> Matrices;
+        public NativeArray<float4> Colors;
+        public NativeReference<int> Count;
+        public JobHandle Handle;
+        public bool Pending;
+
+        public RenderFrameData(int capacity)
+        {
+            Matrices = new NativeArray<float4x4>(capacity, Allocator.Persistent,
+                NativeArrayOptions.UninitializedMemory);
+            Colors = new NativeArray<float4>(capacity, Allocator.Persistent,
+                NativeArrayOptions.UninitializedMemory);
+            Count = new NativeReference<int>(Allocator.Persistent);
+        }
+
+        public void Dispose()
+        {
+            if (Matrices.IsCreated) Matrices.Dispose();
+            if (Colors.IsCreated) Colors.Dispose();
+            if (Count.IsCreated) Count.Dispose();
+        }
+    }
+
+    [BurstCompile(FloatMode = FloatMode.Fast, FloatPrecision = FloatPrecision.Low)]
+    private struct PrepareRenderFrameJob : IJob
+    {
+        [ReadOnly] public NativeArray<LocalTransform> Transforms;
+        [ReadOnly] public NativeArray<ReleasedBlockComponent> Blocks;
+        [WriteOnly] public NativeArray<float4x4> Matrices;
+        [WriteOnly] public NativeArray<float4> Colors;
+        public NativeReference<int> Count;
+        public int OwnerId;
+
+        public void Execute()
+        {
+            int count = 0;
+            int length = math.min(Transforms.Length, Blocks.Length);
+            for (int i = 0; i < length && count < Matrices.Length; i++)
+            {
+                ReleasedBlockComponent block = Blocks[i];
+                if (block.OwnerId != OwnerId)
+                    continue;
+
+                LocalTransform transformData = Transforms[i];
+                Matrices[count] = float4x4.TRS(transformData.Position, transformData.Rotation,
+                    new float3(transformData.Scale));
+                Colors[count] = block.Color;
+                count++;
+            }
+
+            Count.Value = count;
+        }
+    }
+
+    private void DisposeReleasedBlockWalls()
+    {
+        if (_ecsWorld != null && _ecsWorld.IsCreated)
+        {
+            for (int i = 0; i < _releasedBlockWallEntities.Count; i++)
+            {
+                Entity entity = _releasedBlockWallEntities[i];
+                if (_entityManager.Exists(entity))
+                    _entityManager.DestroyEntity(entity);
+            }
+        }
+
+        _releasedBlockWallEntities.Clear();
+        for (int i = 0; i < _releasedBlockWallColliders.Count; i++)
+        {
+            if (_releasedBlockWallColliders[i].IsCreated)
+                _releasedBlockWallColliders[i].Dispose();
+        }
+
+        _releasedBlockWallColliders.Clear();
+    }
+
     private void DisposeEcsQuery()
     {
-        if (_hasReleasedBlockQuery)
+        if (_hasReleasedBlockQuery && _ecsWorld != null && _ecsWorld.IsCreated)
         {
             _releasedBlockQuery.Dispose();
-            _hasReleasedBlockQuery = false;
         }
+
+        _releasedBlockQuery = default;
+        _hasReleasedBlockQuery = false;
     }
 
     private PhysicsMaterial CreatePhysicsMaterial()
