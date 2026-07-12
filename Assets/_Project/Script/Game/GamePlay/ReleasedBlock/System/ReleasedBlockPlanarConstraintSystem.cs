@@ -1,21 +1,9 @@
+using Unity.Burst;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics;
 using Unity.Physics.Systems;
 using Unity.Transforms;
-using Unity.Burst;
-
-public struct ReleasedBlockComponent : IComponentData
-{
-    public const float SettleSpeed = 0.05f;
-    public const byte SettleFrames = 6;
-
-    public int OwnerId;
-    public float4 Color;
-    public float LockedZ;
-    public float MaxPlanarSpeed;
-    public byte StableFrames;
-}
 
 [BurstCompile]
 [UpdateInGroup(typeof(AfterPhysicsSystemGroup))]
