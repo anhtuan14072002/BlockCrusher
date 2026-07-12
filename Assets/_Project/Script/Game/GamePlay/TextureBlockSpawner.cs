@@ -14,33 +14,59 @@ using RenderMaterial = UnityEngine.Material;
 
 public sealed class TextureBlockSpawner : MonoBehaviour
 {
+    // Danh sách tất cả spawner đang bật để tool gameplay có thể tác động theo world-space.
     private static readonly List<TextureBlockSpawner> ActiveSpawners = new();
+    // ID duy nhất dùng để gắn debris ECS về đúng spawner sở hữu nó.
     private static int _nextOwnerId = 1;
 
+    // Texture nguồn được chuyển thành lưới cell/voxel.
     [SerializeField] private Texture2D _texture;
+    // Parent chứa các GameObject chunk được tạo ở runtime.
     [SerializeField] private Transform _container;
+    // Material dùng để render mesh chunk còn nguyên.
     [SerializeField] private RenderMaterial _chunkMaterial;
+    // Kích thước world-space của một pixel/cell.
     [SerializeField] private float _pixelSize = 0.12f;
+    // Bước lấy mẫu texture; tăng giá trị sẽ giảm mật độ lưới.
     [SerializeField, Range(1, 16)] private int _sampleStep = 1;
+    // Alpha tối thiểu để một pixel được coi là block đặc.
     [SerializeField, Range(0f, 1f)] private float _alphaThreshold = 0.1f;
+    // Độ dày collider của chunk trong trục Z.
     [SerializeField] private float _chunkColliderDepth = 0.25f;
+    // Bán kính giải phóng cell tại vị trí tiếp xúc của lưỡi cưa.
     [SerializeField] private float _sawReleaseRadius = 0.18f;
+    // Bật mesh voxel 3D ngay từ lúc chunk được sinh ra.
     [SerializeField] private bool _renderVoxelDetailFromStart = true;
+    // Tỉ lệ voxel chi tiết so với kích thước cell, giúp chừa khe nhìn thấy được.
     [SerializeField, Range(0.75f, 1f)] private float _detailVoxelScale = 0.94f;
+    // Góc xoay Y ngẫu nhiên tối đa cho từng voxel chi tiết.
     [SerializeField, Range(0f, 30f)] private float _voxelRandomYRotation = 20f;
+    // Giới hạn debris ECS được spawn trong một frame; 0 nghĩa là không giới hạn.
     [SerializeField, Min(0)] private int _maxPhysicsDebrisPerFrame;
+    // Số cell mỗi cạnh của một chunk mesh.
     [SerializeField, Range(8, 64)] private int _chunkSize = 24;
+    // Số chunk tối đa được rebuild mesh/collider trong một frame.
     [SerializeField, Range(1, 8)] private int _maxChunkRebuildsPerFrame = 2;
+    // Damping tuyến tính của block đã tách ra.
     [SerializeField, Range(0f, 20f)] private float _releasedBlockDamping = 2.5f;
+    // Damping góc của block đã tách ra.
     [SerializeField, Range(0f, 20f)] private float _releasedBlockAngularDamping = 4f;
+    // Khối lượng áp dụng cho debris ECS.
     [SerializeField, Range(0.01f, 10f)] private float _releasedBlockMass = 0.1f;
+    // Dung lượng tối đa của debris đang tồn tại và buffer render.
     [SerializeField, Range(128, 10000)] private int _maxReleasedPhysicsBlocks = 5000;
+    // Khoảng frame giữa các lần chuẩn bị dữ liệu render debris.
     [SerializeField, Range(1, 4)] private int _releasedBlockRenderInterval = 2;
+    // Ma sát và độ nảy của collider debris/wall ECS.
     [SerializeField, Range(0f, 1f)] private float _physicsFriction = 0.12f;
     [SerializeField, Range(0f, 1f)] private float _physicsRestitution;
+    // Authoring mô tả mesh/material/collider cho block ECS được giải phóng.
     [SerializeField] private ReleasedBlockAuthoring _releasedBlockAuthoring;
+    // Các Transform tường giới hạn vùng debris ECS có thể di chuyển.
     [SerializeField] private Transform[] _releasedBlockWalls;
+    // Đặt tâm texture vào gốc local thay vì bắt đầu tại (0, 0).
     [SerializeField] private bool _centerTexture = true;
+    // Tự tạo lưới khi component khởi tạo.
     [SerializeField] private bool _spawnOnAwake = true;
 
     private readonly List<ChunkRuntime> _chunks = new();
@@ -90,6 +116,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     private int _displayRenderFrame = -1;
     private static readonly int ColorId = Shader.PropertyToID("_Color");
 
+    /// <summary>Yêu cầu mọi spawner đang hoạt động giải phóng cell tại điểm world-space của cưa.</summary>
     public static bool ReleaseAtWorldForActiveSpawners(Vector3 worldPoint, Vector3 pressDirection, float pressSpeed,
         float outwardForce, float tangentialForce, float spinDirection, float bladeRadius, float sideDamping,
         float maxVelocity)
@@ -112,6 +139,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         return releasedAny;
     }
 
+    /// <summary>Kiểm tra có cell đặc nào trong bán kính world-space trên bất kỳ spawner nào không.</summary>
     public static bool HasSolidAtWorldForActiveSpawners(Vector3 worldPoint, float radius)
     {
         for (int i = ActiveSpawners.Count - 1; i >= 0; i--)
@@ -130,6 +158,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         return false;
     }
 
+    /// <summary>Đẩy debris nằm trong vùng conveyor theo hướng và vận tốc đã cho.</summary>
     public static void ApplyConveyorForActiveSpawners(Bounds bounds, Vector3 direction, float speed, float acceleration,
         float deltaTime)
     {
@@ -137,12 +166,14 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             ActiveSpawners[i].ApplyConveyor(bounds, direction, speed, acceleration, deltaTime);
     }
 
+    /// <summary>Xóa debris thuộc phạm vi world-space, thường được gọi bởi vùng đích/thu gom.</summary>
     public static void ClearReleasedBlocksForActiveSpawners(Bounds bounds)
     {
         for (int i = 0; i < ActiveSpawners.Count; i++)
             ActiveSpawners[i].DespawnInBounds(bounds);
     }
 
+    /// <summary>Hút debris trong vùng hộp về đầu hút và xóa block khi tới gần tâm hút.</summary>
     public static void ApplySuctionForActiveSpawners(Vector3 origin, Quaternion rotation, Vector3 boxSize,
         float force, float acceleration, float maxVelocity, float arrivalDamping, float destroyRadius, float deltaTime)
     {
@@ -151,6 +182,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
                 destroyRadius, deltaTime);
     }
 
+    /// <summary>Đăng ký instance vào danh sách spawner global và cấp owner ID nếu cần.</summary>
     private void OnEnable()
     {
         if (_ownerId == 0)
@@ -160,17 +192,20 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             ActiveSpawners.Add(this);
     }
 
+    /// <summary>Ngừng nhận lệnh gameplay global khi component bị tắt.</summary>
     private void OnDisable()
     {
         ActiveSpawners.Remove(this);
     }
 
+    /// <summary>Tạo lưới/chunk ngay khi scene load nếu cấu hình cho phép.</summary>
     private void Awake()
     {
         if (_spawnOnAwake)
             Spawn();
     }
 
+    /// <summary>Hoàn trả native collection, mesh, collider và entity ECS đã sở hữu.</summary>
     private void OnDestroy()
     {
         DisposeChunks();
@@ -181,6 +216,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         DisposeEcsQuery();
     }
 
+    /// <summary>Áp dụng saw force và đồng bộ render debris sau khi gameplay đã cập nhật frame.</summary>
     private void LateUpdate()
     {
         ApplyPendingSawPush();
@@ -207,6 +243,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     }
 
     [ContextMenu("Spawn")]
+    /// <summary>Đọc texture, tạo cell grid, ECS owner và toàn bộ chunk render/collider ban đầu.</summary>
     public void Spawn()
     {
         if (_texture == null)
@@ -260,6 +297,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     }
 
     [ContextMenu("Clear")]
+    /// <summary>Xóa trạng thái spawn hiện có để có thể tạo lại texture grid sạch.</summary>
     public void Clear()
     {
         DisposeCells();
@@ -282,6 +320,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         }
     }
 
+    /// <summary>Giải phóng các cell quanh lưỡi cưa, queue debris ECS và đánh dấu chunk liên quan cần rebuild.</summary>
     public bool ReleaseAtWorld(Vector3 worldPoint, Vector3 pressDirection, float pressSpeed, float outwardForce,
         float tangentialForce, float spinDirection, float bladeRadius, float sideDamping, float maxVelocity)
     {
@@ -332,6 +371,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         return releasedAny;
     }
 
+    /// <summary>Chuyển điểm world-space sang cell grid rồi tìm cell đặc trong bán kính cho trước.</summary>
     public bool HasSolidAtWorld(Vector3 worldPoint, float radius)
     {
         if (!_cellSolid.IsCreated || _runtimeParent == null)
@@ -365,6 +405,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         return false;
     }
 
+    /// <summary>Đánh dấu chunk chứa cell vừa thay đổi để rebuild dần ở các frame sau.</summary>
     private void MarkCellChunkDirty(int cellX, int cellY)
     {
         if (_chunks.Count == 0 || _chunkDirty == null || _chunkColumns <= 0)
@@ -380,6 +421,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         _dirtyChunks.Add(chunkIndex);
     }
 
+    /// <summary>Kiểm tra và trừ quota spawn debris trong frame hiện tại.</summary>
     private bool TryConsumePhysicsDebrisBudget()
     {
         if (_maxPhysicsDebrisPerFrame == 0)
@@ -399,6 +441,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         return true;
     }
 
+    /// <summary>Chia cell grid thành các GameObject chunk và tạo runtime data tương ứng.</summary>
     private void CreateChunks()
     {
         RenderMaterial material = _runtimeChunkMaterial;
@@ -441,6 +484,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         ScheduleAndApplyChunkRebuilds();
     }
 
+    /// <summary>Khởi tạo native buffer, mesh và metadata cho một chunk grid.</summary>
     private ChunkRuntime CreateChunkRuntime(Mesh mesh, MeshRenderer renderer, int startX, int startY, int width,
         int height, bool isDetailed)
     {
@@ -470,6 +514,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         };
     }
 
+    /// <summary>Schedule job rebuild cho chunk bẩn và áp dụng kết quả đã hoàn thành theo frame budget.</summary>
     private void ScheduleAndApplyChunkRebuilds()
     {
         if (_scheduledChunkRebuilds.Count == 0)
@@ -564,6 +609,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         }
     }
 
+    /// <summary>Đổ vertex/color/UV/index từ native buffer vào Unity Mesh của chunk.</summary>
     private void ApplyChunkMesh(ref ChunkRuntime chunk)
     {
         Mesh mesh = chunk.Mesh;
@@ -589,6 +635,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         }
     }
 
+    /// <summary>Tạo hoặc thay collider Unity Physics cho vùng cell đặc trong chunk.</summary>
     private void ApplyChunkPhysicsCollider(ref ChunkRuntime chunk)
     {
         if (!EnsureEcsReady())
@@ -638,6 +685,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         _entityManager.SetComponentData(chunk.PhysicsEntity, new PhysicsCollider { Value = chunk.PhysicsCollider });
     }
 
+    /// <summary>Hủy entity/collider physics cũ trước khi rebuild chunk hoặc dispose.</summary>
     private void DestroyChunkPhysicsCollider(ref ChunkRuntime chunk)
     {
         if (EnsureEcsReady() && chunk.PhysicsEntity != Entity.Null && _entityManager.Exists(chunk.PhysicsEntity))
@@ -651,6 +699,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         }
     }
 
+    /// <summary>Complete job còn treo rồi dispose toàn bộ native buffer, mesh và chunk object.</summary>
     private void DisposeChunks()
     {
         for (int i = 0; i < _chunks.Count; i++)
@@ -684,6 +733,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         _chunks.Clear();
     }
 
+    /// <summary>Trả về material runtime dùng cho chunk, tạo bản copy khi cần tránh sửa asset gốc.</summary>
     private RenderMaterial ResolveChunkMaterial()
     {
         if (_chunkMaterial != null)
@@ -700,11 +750,13 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         return null;
     }
 
+    /// <summary>Đổi chỉ số cell sang vị trí local tại tâm cell.</summary>
     private Vector3 GetCellLocalPosition(int x, int y)
     {
         return _offset + new Vector3(x * _cellSize, y * _cellSize, 0f);
     }
 
+    /// <summary>Tạo entity debris ECS cho cell vừa tách và gán vận tốc ban đầu từ chuyển động cưa.</summary>
     private void QueueReleasedBlockSpawn(Vector3 localPosition, Color32 color, Vector3 sawCenter, Vector3 pressDirection,
         float pressSpeed, float outwardForce, float tangentialForce, float spinDirection, float bladeRadius,
         float sideDamping, float maxVelocity)
@@ -768,6 +820,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         _releasedBlockEntities.Add(entity);
     }
 
+    /// <summary>Đảm bảo mesh, material, archetype và collider template của debris ECS đã sẵn sàng.</summary>
     private bool EnsureReleasedBlockResources()
     {
         if (_releasedBlockCollider.IsCreated && _releasedBlockMesh != null && _releasedBlockMaterial != null)
@@ -823,6 +876,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         return _releasedBlockCollider.IsCreated;
     }
 
+    /// <summary>Lấy authoring debris được gán sẵn hoặc tìm fallback trong scene.</summary>
     private ReleasedBlockAuthoring ResolveReleasedBlockAuthoring()
     {
         if (_releasedBlockAuthoring == null)
@@ -831,6 +885,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         return _releasedBlockAuthoring;
     }
 
+    /// <summary>Lấy EntityManager và tạo query/archetype cần để quản lý debris của spawner này.</summary>
     private bool EnsureEcsReady()
     {
         World world = World.DefaultGameObjectInjectionWorld;
@@ -859,6 +914,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         return true;
     }
 
+    /// <summary>Đảm bảo world ECS có physics simulation system trước khi spawn collider/debris.</summary>
     private void EnsurePhysicsStep()
     {
         EntityQuery query = _entityManager.CreateEntityQuery(ComponentType.ReadWrite<PhysicsStep>());
@@ -874,6 +930,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         query.Dispose();
     }
 
+    /// <summary>Tạo collider tường ECS từ các Transform giới hạn để debris không rơi ra ngoài.</summary>
     private void EnsureReleasedBlockWalls()
     {
         if (_releasedBlockWallEntities.Count > 0 || _releasedBlockWalls == null)
@@ -910,6 +967,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         }
     }
 
+    /// <summary>Áp lực cưa lên debris cùng owner, giới hạn vận tốc và giữ chuyển động trong mặt phẳng gameplay.</summary>
     private void PushReleasedBlocks(Vector3 sawCenter, Vector3 pressDirection, float pressSpeed, float outwardForce,
         float tangentialForce, float spinDirection, float bladeRadius, float maxVelocity)
     {
@@ -955,6 +1013,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         }
     }
 
+    /// <summary>Chuẩn hóa vận tốc tối đa hợp lệ trước khi ghi vào dữ liệu ECS.</summary>
     private float GetSafePhysicsVelocity(float requestedMaxVelocity)
     {
         float fixedDeltaTime = Mathf.Max(Time.fixedDeltaTime, 0.001f);
@@ -962,6 +1021,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         return Mathf.Min(requestedMaxVelocity, maxCellTravelVelocity);
     }
 
+    /// <summary>Đổi hướng vận tốc khi debris sắp bị đẩy vào cell grid vẫn còn đặc.</summary>
     private Vector3 RedirectVelocityFromSolid(Vector3 worldPosition, Vector3 velocity)
     {
         velocity.z = 0f;
@@ -994,6 +1054,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         return bestDirection.sqrMagnitude > 0f ? bestDirection * speed : Vector3.zero;
     }
 
+    /// <summary>Đánh giá một hướng thay thế và giữ hướng thoát tốt nhất cho debris.</summary>
     private void EvaluateFreeDirection(Vector3 worldPosition, Vector3 candidate, Vector3 desired,
         float nearProbeDistance, float farProbeDistance, ref Vector3 bestDirection, ref float bestAlignment)
     {
@@ -1010,6 +1071,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         bestDirection = candidate;
     }
 
+    /// <summary>Kiểm tra đường ngắn phía trước có va vào cell đặc hay không.</summary>
     private bool IsSolidAlongDirection(Vector3 worldPosition, Vector3 direction,
         float nearProbeDistance, float farProbeDistance)
     {
@@ -1017,6 +1079,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
                IsSolidAtWorldCell(worldPosition + direction * farProbeDistance);
     }
 
+    /// <summary>Kiểm tra đúng cell grid chứa vị trí world-space có còn đặc.</summary>
     private bool IsSolidAtWorldCell(Vector3 worldPosition)
     {
         if (!_cellSolid.IsCreated || _runtimeParent == null)
@@ -1031,6 +1094,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         return _cellSolid[y * _gridWidth + x] != 0;
     }
 
+    /// <summary>Lưu lực cưa để áp dụng một lần trong LateUpdate, tránh update ECS nhiều lần mỗi frame.</summary>
     private void QueueSawPush(Vector3 sawCenter, Vector3 pressDirection, float pressSpeed, float outwardForce,
         float tangentialForce, float spinDirection, float bladeRadius, float maxVelocity)
     {
@@ -1045,6 +1109,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         _pendingSawMaxVelocity = maxVelocity;
     }
 
+    /// <summary>Áp dụng lệnh lực cưa đã queue rồi xóa trạng thái pending.</summary>
     private void ApplyPendingSawPush()
     {
         if (!_hasPendingSawPush)
@@ -1055,6 +1120,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             _pendingSawTangentialForce, _pendingSawSpinDirection, _pendingSawRadius, _pendingSawMaxVelocity);
     }
 
+    /// <summary>Chuẩn bị và vẽ debris ECS bằng Graphics.DrawMeshInstanced.</summary>
     private void DrawReleasedBlocks()
     {
         if (!EnsureEcsReady() || !EnsureReleasedBlockResources())
@@ -1067,6 +1133,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             ScheduleRenderPreparation();
     }
 
+    /// <summary>Đọc kết quả job render đã xong và đổi frame hiển thị.</summary>
     private void ConsumePreparedRenderFrame()
     {
         for (int i = 0; i < _renderFrames.Length; i++)
@@ -1082,6 +1149,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         }
     }
 
+    /// <summary>Schedule job copy transform/màu debris ra buffer render không cấp phát GC.</summary>
     private void ScheduleRenderPreparation()
     {
         int writeIndex = _displayRenderFrame == 0 ? 1 : 0;
@@ -1111,6 +1179,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         frame.Pending = true;
     }
 
+    /// <summary>Chuyển matrix/màu native sang batch managed tối đa 1023 instance để vẽ Unity.</summary>
     private void CachePreparedRenderFrame(RenderFrameData frame)
     {
         int count = frame.Count.Value;
@@ -1136,6 +1205,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         _renderBatchCount = batchIndex;
     }
 
+    /// <summary>Gửi các batch matrix/màu đã cache tới GPU.</summary>
     private void DrawCachedRenderFrame()
     {
         for (int i = 0; i < _renderBatchCount; i++)
@@ -1148,6 +1218,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         }
     }
 
+    /// <summary>Loại entity debris đã bị destroy khỏi danh sách tracking local.</summary>
     private void TrimReleasedBlockEntityList()
     {
         if (!EnsureEcsReady())
@@ -1158,6 +1229,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
                 _releasedBlockEntities.RemoveAt(i);
     }
 
+    /// <summary>Destroy toàn bộ debris entity thuộc spawner hiện tại.</summary>
     private void ClearReleasedBlockEntities()
     {
         if (!EnsureEcsReady())
@@ -1356,62 +1428,6 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         _renderBatchCounts = null;
     }
 
-    private sealed class RenderFrameData
-    {
-        public NativeArray<float4x4> Matrices;
-        public NativeArray<float4> Colors;
-        public NativeReference<int> Count;
-        public JobHandle Handle;
-        public bool Pending;
-
-        public RenderFrameData(int capacity)
-        {
-            Matrices = new NativeArray<float4x4>(capacity, Allocator.Persistent,
-                NativeArrayOptions.UninitializedMemory);
-            Colors = new NativeArray<float4>(capacity, Allocator.Persistent,
-                NativeArrayOptions.UninitializedMemory);
-            Count = new NativeReference<int>(Allocator.Persistent);
-        }
-
-        public void Dispose()
-        {
-            if (Matrices.IsCreated) Matrices.Dispose();
-            if (Colors.IsCreated) Colors.Dispose();
-            if (Count.IsCreated) Count.Dispose();
-        }
-    }
-
-    [BurstCompile(FloatMode = FloatMode.Fast, FloatPrecision = FloatPrecision.Low)]
-    private struct PrepareRenderFrameJob : IJob
-    {
-        [ReadOnly] public NativeArray<LocalTransform> Transforms;
-        [ReadOnly] public NativeArray<ReleasedBlockComponent> Blocks;
-        [WriteOnly] public NativeArray<float4x4> Matrices;
-        [WriteOnly] public NativeArray<float4> Colors;
-        public NativeReference<int> Count;
-        public int OwnerId;
-
-        public void Execute()
-        {
-            int count = 0;
-            int length = math.min(Transforms.Length, Blocks.Length);
-            for (int i = 0; i < length && count < Matrices.Length; i++)
-            {
-                ReleasedBlockComponent block = Blocks[i];
-                if (block.OwnerId != OwnerId)
-                    continue;
-
-                LocalTransform transformData = Transforms[i];
-                Matrices[count] = float4x4.TRS(transformData.Position, transformData.Rotation,
-                    new float3(transformData.Scale));
-                Colors[count] = block.Color;
-                count++;
-            }
-
-            Count.Value = count;
-        }
-    }
-
     private void DisposeReleasedBlockWalls()
     {
         if (_ecsWorld != null && _ecsWorld.IsCreated)
@@ -1482,64 +1498,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             _cellSolid.Dispose();
     }
 
-    private struct ChunkRuntime
-    {
-        public Mesh Mesh;
-        public MeshRenderer Renderer;
-        public Entity PhysicsEntity;
-        public BlobAssetReference<Collider> PhysicsCollider;
-        public NativeArray<byte> Visited;
-        public NativeList<Vector3> Vertices;
-        public NativeList<Color32> Colors;
-        public NativeList<Vector2> Uvs;
-        public NativeList<int> Indices;
-        public NativeArray<byte> ColliderVisited;
-        public NativeList<Vector3> ColliderVertices;
-        public NativeList<Color32> ColliderColors;
-        public NativeList<Vector2> ColliderUvs;
-        public NativeList<int> ColliderIndices;
-        public int StartX;
-        public int StartY;
-        public int Width;
-        public int Height;
-        public bool IsDetailed;
-    }
-
-    [BurstCompile]
-    private struct TextureToCellsJob : IJobParallelFor
-    {
-        [ReadOnly] public NativeArray<Color32> TexturePixels;
-        [WriteOnly] public NativeArray<Color32> CellColors;
-        [WriteOnly] public NativeArray<byte> CellSolid;
-        public int TextureWidth;
-        public int TextureHeight;
-        public int GridWidth;
-        public int SampleStep;
-        public byte AlphaLimit;
-
-        public void Execute(int index)
-        {
-            int cellX = index % GridWidth;
-            int cellY = index / GridWidth;
-            int sourceX = cellX * SampleStep;
-            int sourceY = cellY * SampleStep;
-            if (sourceX >= TextureWidth)
-                sourceX = TextureWidth - 1;
-            if (sourceY >= TextureHeight)
-                sourceY = TextureHeight - 1;
-
-            Color32 color = TexturePixels[sourceY * TextureWidth + sourceX];
-            bool solid = color.a > AlphaLimit;
-            if (solid)
-                color.a = 255;
-
-            CellColors[index] = color;
-            CellSolid[index] = solid ? (byte)1 : (byte)0;
-        }
-    }
-
-    [BurstCompile]
-    private struct BuildChunkMeshJob : IJob
+    internal struct TextureBlockMeshBuilder
     {
         [ReadOnly] public NativeArray<Color32> CellColors;
         [ReadOnly] public NativeArray<byte> CellSolid;
@@ -1792,22 +1751,5 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             Indices.Add(vertexIndex + 2);
             Indices.Add(vertexIndex + 3);
         }
-    }
-}
-
-public sealed class TextureBlockChunk : MonoBehaviour
-{
-    private TextureBlockSpawner _spawner;
-
-    public void Initialize(TextureBlockSpawner spawner)
-    {
-        _spawner = spawner;
-    }
-
-    public bool ReleaseAtWorld(Vector3 worldPoint, Vector3 pressDirection, float pressSpeed, float outwardForce,
-        float tangentialForce, float spinDirection, float bladeRadius, float sideDamping, float maxVelocity)
-    {
-        return _spawner != null && _spawner.ReleaseAtWorld(worldPoint, pressDirection, pressSpeed, outwardForce,
-            tangentialForce, spinDirection, bladeRadius, sideDamping, maxVelocity);
     }
 }
