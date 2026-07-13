@@ -642,7 +642,8 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         _entityManager.SetComponentData(entity, new PhysicsCollider { Value = _releasedBlockCollider });
         PhysicsMass physicsMass = PhysicsMass.CreateDynamic(
             _releasedBlockCollider.Value.MassProperties, _releasedBlockMass);
-        physicsMass.InverseInertia = float3.zero;
+        physicsMass.InverseInertia.x = 0f;
+        physicsMass.InverseInertia.y = 0f;
         _entityManager.SetComponentData(entity, physicsMass);
         _entityManager.SetComponentData(entity, new PhysicsVelocity
         {

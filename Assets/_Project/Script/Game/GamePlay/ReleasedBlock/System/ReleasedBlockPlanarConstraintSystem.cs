@@ -37,7 +37,8 @@ public partial struct ReleasedBlockPlanarConstraintSystem : ISystem
         {
             transform.Position.z = block.LockedZ;
             velocity.Linear.z = 0f;
-            velocity.Angular = float3.zero;
+            velocity.Angular.x = 0f;
+            velocity.Angular.y = 0f;
             block.StableFrames = 0;
             gravity.Value = 1f;
             simulate.ValueRW = true;
