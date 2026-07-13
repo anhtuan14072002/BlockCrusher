@@ -36,6 +36,8 @@ namespace Crusher
                 RefreshSuckedBlockCount();
         }
 
+        
+        
         private void IncreaseSawContactSpeed()
         {
             _craneController.IncreaseSawContactMoveMultiplier();
