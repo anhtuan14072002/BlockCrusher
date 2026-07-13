@@ -412,6 +412,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Advanced FPS Counter
       objectReference: {fileID: 0}
+    - target: {fileID: 100000, guid: e84b65f6b68cbca4a9a9c63e390ea836, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 400000, guid: e84b65f6b68cbca4a9a9c63e390ea836, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -1086,7 +1090,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 683ab7f92264fc944b6f60e580b98dc8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _texture: {fileID: 2800000, guid: 30c9c71b0b9728a44a5840cc8fa7666e, type: 3}
+  _texture: {fileID: 2800000, guid: 30bdbcc2c36ec3649ae74df6d6e86e46, type: 3}
   _container: {fileID: 925441448}
   _chunkMaterial: {fileID: 2100000, guid: 27e4bb3294908924e9d6a58207d8f342, type: 2}
   _pixelSize: 0.12
