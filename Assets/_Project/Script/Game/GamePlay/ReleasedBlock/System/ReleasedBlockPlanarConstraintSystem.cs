@@ -15,7 +15,10 @@ public partial struct ReleasedBlockPlanarConstraintSystem : ISystem
     {
         _query = SystemAPI.QueryBuilder()
             .WithAllRW<LocalTransform, PhysicsVelocity>()
-            .WithAllRW<PhysicsGravityFactor, ReleasedBlockComponent>()
+            .WithAllRW<PhysicsGravityFactor>()
+            .WithAllRW<ReleasedBlockComponent>()
+            .WithAllRW<Simulate>()
+            .WithOptions(EntityQueryOptions.IgnoreComponentEnabledState)
             .Build();
         state.RequireForUpdate(_query);
     }
@@ -30,28 +33,16 @@ public partial struct ReleasedBlockPlanarConstraintSystem : ISystem
     private partial struct PlanarConstraintJob : IJobEntity
     {
         private void Execute(ref LocalTransform transform, ref PhysicsVelocity velocity,
-            ref PhysicsGravityFactor gravity, ref ReleasedBlockComponent block)
+            ref PhysicsGravityFactor gravity, ref ReleasedBlockComponent block, EnabledRefRW<Simulate> simulate)
         {
             transform.Position.z = block.LockedZ;
             velocity.Linear.z = 0f;
             velocity.Angular = float3.zero;
-
-            float speedSq = math.lengthsq(velocity.Linear.xy);
-            if (speedSq < ReleasedBlockComponent.SettleSpeed * ReleasedBlockComponent.SettleSpeed)
-            {
-                velocity.Linear.xy = float2.zero;
-                if (block.StableFrames < ReleasedBlockComponent.SettleFrames)
-                    block.StableFrames++;
-
-                if (block.StableFrames >= ReleasedBlockComponent.SettleFrames)
-                    gravity.Value = 0f;
-
-                return;
-            }
-
             block.StableFrames = 0;
             gravity.Value = 1f;
+            simulate.ValueRW = true;
 
+            float speedSq = math.lengthsq(velocity.Linear.xy);
             float maxSpeedSq = block.MaxPlanarSpeed * block.MaxPlanarSpeed;
             if (speedSq > maxSpeedSq)
             {

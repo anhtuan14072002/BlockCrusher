@@ -749,10 +749,26 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         if (query.IsEmptyIgnoreFilter)
         {
             PhysicsStep step = PhysicsStep.Default;
-            step.SubstepCount = 1;
-            step.SolverIterationCount = 4;
+            step.SubstepCount = 2;
+            step.SolverIterationCount = 8;
             step.CollisionTolerance = Mathf.Max(step.CollisionTolerance, _cellSize * 0.1f);
             _entityManager.CreateSingleton(step, "Gameplay Physics Step");
+        }
+        else
+        {
+            Entity stepEntity = query.GetSingletonEntity();
+            PhysicsStep step = _entityManager.GetComponentData<PhysicsStep>(stepEntity);
+            int substepCount = Mathf.Max(step.SubstepCount, 2);
+            int solverIterationCount = Mathf.Max(step.SolverIterationCount, 8);
+            float collisionTolerance = Mathf.Max(step.CollisionTolerance, _cellSize * 0.1f);
+            if (step.SubstepCount != substepCount || step.SolverIterationCount != solverIterationCount ||
+                !Mathf.Approximately(step.CollisionTolerance, collisionTolerance))
+            {
+                step.SubstepCount = substepCount;
+                step.SolverIterationCount = solverIterationCount;
+                step.CollisionTolerance = collisionTolerance;
+                _entityManager.SetComponentData(stepEntity, step);
+            }
         }
         query.Dispose();
     }
@@ -1091,6 +1107,13 @@ public sealed class TextureBlockSpawner : MonoBehaviour
                 continue;
             }
             direction /= distance;
+            ReleasedBlockComponent block = blocks[i];
+            block.StableFrames = 0;
+            _entityManager.SetComponentData(entities[i], block);
+            _entityManager.SetComponentEnabled<Simulate>(entities[i], true);
+            PhysicsGravityFactor gravity = _entityManager.GetComponentData<PhysicsGravityFactor>(entities[i]);
+            gravity.Value = 1f;
+            _entityManager.SetComponentData(entities[i], gravity);
             PhysicsVelocity velocity = _entityManager.GetComponentData<PhysicsVelocity>(entities[i]);
             Vector3 currentVelocity = new Vector3(velocity.Linear.x, velocity.Linear.y, velocity.Linear.z);
             Vector3 targetVelocity = direction * Mathf.Min(force * distance, maxVelocity);

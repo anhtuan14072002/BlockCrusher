@@ -49,11 +49,12 @@ namespace Crusher
 
         private void Awake()
         {
-#if UNITY_EDITOR
+/*#if UNITY_EDITOR
             Application.targetFrameRate = 120;
 #else
             Application.targetFrameRate = 60;
-#endif
+#endif*/
+            Application.targetFrameRate = 60;
             SetUpCraneController();
         }
 
