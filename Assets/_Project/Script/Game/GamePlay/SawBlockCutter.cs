@@ -12,7 +12,10 @@ public sealed class SawBlockCutter : MonoBehaviour
     [SerializeField] private float _cutSweepStep = 0.08f;
     [SerializeField, Range(0f, 1f)] private float _sideDampingOnContact = 0.35f;
     [SerializeField] private float _maxBlockVelocity = 11f;
-    [SerializeField] private float _resistanceDuration = 0.08f;
+    [SerializeField] private float _resistanceDuration = 0.18f;
+    [SerializeField] private float _resistanceRecoveryDuration = 0.3f;
+    [SerializeField] private float _sawHeadScaleStep = 0.2f;
+    [SerializeField] private float _maxSawHeadScale = 2f;
     [SerializeField] private Transform _bladeVisual;
 
     private Vector3 _previousPosition;
@@ -22,7 +25,28 @@ public sealed class SawBlockCutter : MonoBehaviour
     private float _resistanceUntil;
     private readonly Dictionary<Collider, TextureBlockChunk> _chunkCache = new Dictionary<Collider, TextureBlockChunk>(16);
 
-    public bool IsResisting => Time.time < _resistanceUntil;
+    public float ResistanceRecovery
+    {
+        get
+        {
+            if (Time.time <= _resistanceUntil)
+                return 0f;
+
+            return Mathf.Clamp01((Time.time - _resistanceUntil) / _resistanceRecoveryDuration);
+        }
+    }
+
+    public void IncreaseSawHeadScale()
+    {
+        float currentScale = transform.localScale.x;
+        float nextScale = Mathf.Min(currentScale + _sawHeadScaleStep, _maxSawHeadScale);
+        if (nextScale <= currentScale)
+            return;
+
+        float scaleMultiplier = nextScale / currentScale;
+        transform.localScale *= scaleMultiplier;
+        TextureBlockSpawner.ScaleSawReleaseRadiusForActiveSpawners(scaleMultiplier);
+    }
 
     private void Awake()
     {

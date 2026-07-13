@@ -798,7 +798,8 @@ MonoBehaviour:
   _cutSweepStep: 0.08
   _sideDampingOnContact: 0.35
   _maxBlockVelocity: 11
-  _resistanceDuration: 0.08
+  _resistanceDuration: 0.18
+  _resistanceRecoveryDuration: 0.3
   _bladeVisual: {fileID: 0}
 --- !u!1 &5336779717085325733
 GameObject:

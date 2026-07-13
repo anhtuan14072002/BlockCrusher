@@ -6,7 +6,8 @@ namespace Crusher
     {
         private void MoveSawTarget(Vector2 input)
         {
-            float moveMultiplier = _sawCutter != null && _sawCutter.IsResisting ? _sawContactMoveMultiplier : 1f;
+            float resistanceRecovery = _sawCutter != null ? _sawCutter.ResistanceRecovery : 1f;
+            float moveMultiplier = Mathf.Lerp(_sawContactMoveMultiplier, 1f, resistanceRecovery);
             Vector3 moveDirection = GetSawMoveDirection(input);
             _lastSawMoveDirection = moveDirection;
             _sawTarget += moveDirection * (_sawMoveSpeed * moveMultiplier * Time.deltaTime);

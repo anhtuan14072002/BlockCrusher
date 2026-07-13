@@ -85,6 +85,8 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     private float _pendingSawMaxVelocity;
     private int _displayRenderFrame = -1;
     private static readonly int ColorId = Shader.PropertyToID("_Color");
+    public static int SuckedBlockCount { get; private set; }
+    public static event System.Action<int> BlocksSucked;
     public static bool ReleaseAtWorldForActiveSpawners(Vector3 worldPoint, Vector3 pressDirection, float pressSpeed,
         float outwardForce, float tangentialForce, float spinDirection, float bladeRadius, float sideDamping,
         float maxVelocity)
@@ -136,6 +138,11 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             ActiveSpawners[i].ApplySuction(origin, rotation, boxSize, force, acceleration, maxVelocity, arrivalDamping,
                 destroyRadius, deltaTime);
     }
+    public static void ScaleSawReleaseRadiusForActiveSpawners(float multiplier)
+    {
+        for (int i = 0; i < ActiveSpawners.Count; i++)
+            ActiveSpawners[i]._sawReleaseRadius *= multiplier;
+    }
     private void OnEnable()
     {
         if (_ownerId == 0)
@@ -149,6 +156,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     }
     private void Awake()
     {
+        SuckedBlockCount = 0;
         if (_spawnOnAwake)
             Spawn();
     }
@@ -1089,6 +1097,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             _releasedBlockQuery.ToComponentDataArray<LocalTransform>(Allocator.Temp);
         using NativeArray<ReleasedBlockComponent> blocks =
             _releasedBlockQuery.ToComponentDataArray<ReleasedBlockComponent>(Allocator.Temp);
+        int suckedBlockCount = 0;
         for (int i = 0; i < entities.Length; i++)
         {
             if (blocks[i].OwnerId != _ownerId)
@@ -1104,7 +1113,11 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             if (distance < destroyRadius)
             {
                 if (_entityManager.Exists(entities[i]))
+                {
                     _entityManager.DestroyEntity(entities[i]);
+                    suckedBlockCount++;
+                    SuckedBlockCount++;
+                }
                 continue;
             }
             direction /= distance;
@@ -1125,6 +1138,9 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             velocity.Linear = new float3(movedVelocity.x, movedVelocity.y, movedVelocity.z);
             _entityManager.SetComponentData(entities[i], velocity);
         }
+
+        if (suckedBlockCount > 0)
+            BlocksSucked?.Invoke(suckedBlockCount);
     }
     private void DestroyReleasedBlockEntityAt(int index)
     {

@@ -12,6 +12,7 @@ namespace Crusher
         [Space] 
         [SerializeField] private float _sawMoveSpeed = 3.5f;
         [SerializeField, Range(0.05f, 1f)] private float _sawContactMoveMultiplier = 0.35f;
+        [SerializeField, Range(0.01f, 0.5f)] private float _sawContactMoveMultiplierStep = 0.1f;
 
         [SerializeField] private Vector2 _targetXBounds;
         [SerializeField] private Vector2 _targetYBounds;
@@ -96,6 +97,11 @@ namespace Crusher
             CacheSawRotationOffset();
             ApplySawAtPosition(lockedSawPosition);
             _useSawInputRotation = true;
+        }
+
+        public void IncreaseSawContactMoveMultiplier()
+        {
+            _sawContactMoveMultiplier = Mathf.Min(1f, _sawContactMoveMultiplier + _sawContactMoveMultiplierStep);
         }
 
         private void SetUpCraneController()
