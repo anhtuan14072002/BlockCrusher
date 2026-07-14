@@ -1841,7 +1841,7 @@ MonoBehaviour:
   _detailVoxelScale: 0.94
   _voxelRandomYRotation: 20
   _maxPhysicsDebrisPerFrame: 0
-  _chunkSize: 56
+  _chunkSize: 16
   _maxChunkRebuildsPerFrame: 2
   _releasedBlockDamping: 2.5
   _releasedBlockAngularDamping: 4
@@ -3797,8 +3797,8 @@ Camera:
   m_TargetTexture: {fileID: 0}
   m_TargetDisplay: 0
   m_TargetEye: 3
-  m_HDR: 1
-  m_AllowMSAA: 1
+  m_HDR: 0
+  m_AllowMSAA: 0
   m_AllowDynamicResolution: 0
   m_ForceIntoRT: 0
   m_OcclusionCulling: 1

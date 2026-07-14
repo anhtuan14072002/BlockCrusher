@@ -1,34 +1,65 @@
 using Unity.Burst;
 using Unity.Collections;
+using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
+using Unity.Physics.Systems;
 using Unity.Transforms;
 
 [BurstCompile(FloatMode = FloatMode.Fast, FloatPrecision = FloatPrecision.Low)]
-internal struct PrepareRenderFrameJob : IJob
+internal partial struct PrepareRenderFrameJob : IJobEntity
 {
-    [ReadOnly] public NativeArray<LocalTransform> Transforms;
-    [ReadOnly] public NativeArray<ReleasedBlockComponent> Blocks;
     [WriteOnly] public NativeArray<float4x4> Matrices;
     [WriteOnly] public NativeArray<float4> Colors;
     public NativeReference<int> Count;
     public int OwnerId;
 
-    public void Execute()
+    private void Execute(in LocalTransform transformData, in ReleasedBlockComponent block)
     {
-        int count = 0;
-        int length = math.min(Transforms.Length, Blocks.Length);
-        for (int i = 0; i < length && count < Matrices.Length; i++)
+        if (block.OwnerId != OwnerId)
+            return;
+
+        int index = Count.Value;
+        if (index >= Matrices.Length)
+            return;
+
+        Matrices[index] = float4x4.TRS(transformData.Position, transformData.Rotation,
+            new float3(transformData.Scale));
+        Colors[index] = block.Color;
+        Count.Value = index + 1;
+    }
+}
+
+[UpdateInGroup(typeof(AfterPhysicsSystemGroup))]
+[UpdateAfter(typeof(ReleasedBlockPlanarConstraintSystem))]
+public partial struct ReleasedBlockRenderPreparationSystem : ISystem
+{
+    private EntityQuery _query;
+
+    public void OnCreate(ref SystemState state)
+    {
+        _query = SystemAPI.QueryBuilder()
+            .WithAll<LocalTransform, ReleasedBlockComponent>()
+            .Build();
+    }
+
+    public void OnUpdate(ref SystemState state)
+    {
+        JobHandle dependency = state.Dependency;
+        for (int i = TextureBlockSpawner.ActiveSpawnerCount - 1; i >= 0; i--)
         {
-            ReleasedBlockComponent block = Blocks[i];
-            if (block.OwnerId != OwnerId) continue;
-
-            LocalTransform transformData = Transforms[i];
-            Matrices[count] = float4x4.TRS(transformData.Position, transformData.Rotation, new float3(transformData.Scale));
-            Colors[count] = block.Color;
-            count++;
+            TextureBlockSpawner spawner = TextureBlockSpawner.GetActiveSpawner(i);
+            if (spawner == null)
+            {
+                TextureBlockSpawner.RemoveActiveSpawnerAt(i);
+                continue;
+            }
+            if (!spawner.TryCreateRenderPreparationJob(out PrepareRenderFrameJob job))
+                continue;
+            JobHandle handle = job.Schedule(_query, dependency);
+            spawner.SetRenderPreparationHandle(handle);
+            dependency = handle;
         }
-
-        Count.Value = count;
+        state.Dependency = dependency;
     }
 }

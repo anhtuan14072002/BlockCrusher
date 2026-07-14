@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -10,7 +11,7 @@ using UnityEngine.Rendering;
 using Collider = Unity.Physics.Collider;
 using PhysicsMaterial = Unity.Physics.Material;
 using RenderMaterial = UnityEngine.Material;
-public sealed class TextureBlockSpawner : MonoBehaviour
+public sealed partial class TextureBlockSpawner : MonoBehaviour
 {
     [SerializeField] private Texture2D _texture;
     [SerializeField] private Transform _container;
@@ -84,9 +85,18 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     private float _pendingSawRadius;
     private float _pendingSawMaxVelocity;
     private int _displayRenderFrame = -1;
+    private int _scheduledRenderFrame = -1;
     private static readonly int ColorId = Shader.PropertyToID("_Color");
     public static int SuckedBlockCount { get; private set; }
     public static event System.Action<int> BlocksSucked;
+    internal static void NotifyBlocksSucked(int count)
+    {
+        SuckedBlockCount += count;
+        BlocksSucked?.Invoke(count);
+    }
+    internal static int ActiveSpawnerCount => ActiveSpawners.Count;
+    internal static TextureBlockSpawner GetActiveSpawner(int index) => ActiveSpawners[index];
+    internal static void RemoveActiveSpawnerAt(int index) => ActiveSpawners.RemoveAt(index);
     public static bool ReleaseAtWorldForActiveSpawners(Vector3 worldPoint, Vector3 pressDirection, float pressSpeed,
         float outwardForce, float tangentialForce, float spinDirection, float bladeRadius, float sideDamping,
         float maxVelocity)
@@ -123,20 +133,45 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     public static void ApplyConveyorForActiveSpawners(Bounds bounds, Vector3 direction, float speed, float acceleration,
         float deltaTime)
     {
-        for (int i = 0; i < ActiveSpawners.Count; i++)
-            ActiveSpawners[i].ApplyConveyor(bounds, direction, speed, acceleration, deltaTime);
+        ReleasedBlockInteractionQueue.Enqueue(new ReleasedBlockInteractionRequest
+        {
+            Type = ReleasedBlockInteractionType.Conveyor,
+            BoundsMin = ToFloat3(bounds.min),
+            BoundsMax = ToFloat3(bounds.max),
+            Direction = ToFloat3(direction),
+            Speed = speed,
+            Acceleration = acceleration,
+            DeltaTime = deltaTime
+        });
     }
     public static void ClearReleasedBlocksForActiveSpawners(Bounds bounds)
     {
-        for (int i = 0; i < ActiveSpawners.Count; i++)
-            ActiveSpawners[i].DespawnInBounds(bounds);
+        ReleasedBlockInteractionQueue.Enqueue(new ReleasedBlockInteractionRequest
+        {
+            Type = ReleasedBlockInteractionType.Clear,
+            BoundsMin = ToFloat3(bounds.min),
+            BoundsMax = ToFloat3(bounds.max)
+        });
     }
     public static void ApplySuctionForActiveSpawners(Vector3 origin, Quaternion rotation, Vector3 boxSize,
         float force, float acceleration, float maxVelocity, float arrivalDamping, float destroyRadius, float deltaTime)
     {
-        for (int i = 0; i < ActiveSpawners.Count; i++)
-            ActiveSpawners[i].ApplySuction(origin, rotation, boxSize, force, acceleration, maxVelocity, arrivalDamping,
-                destroyRadius, deltaTime);
+        Quaternion inverseRotation = Quaternion.Inverse(rotation);
+        ReleasedBlockInteractionQueue.Enqueue(new ReleasedBlockInteractionRequest
+        {
+            Type = ReleasedBlockInteractionType.Suction,
+            Origin = ToFloat3(origin),
+            InverseRotation = new quaternion(inverseRotation.x, inverseRotation.y, inverseRotation.z,
+                inverseRotation.w),
+            HalfSize = ToFloat3(boxSize * 0.5f),
+            BoxOffset = ToFloat3(rotation * new Vector3(boxSize.x * 0.5f, 0f, 0f)),
+            Force = force,
+            Acceleration = acceleration,
+            MaxVelocity = maxVelocity,
+            ArrivalDamping = arrivalDamping,
+            DestroyRadius = destroyRadius,
+            DeltaTime = deltaTime
+        });
     }
     public static void ScaleSawReleaseRadiusForActiveSpawners(float multiplier)
     {
@@ -171,7 +206,6 @@ public sealed class TextureBlockSpawner : MonoBehaviour
     }
     private void LateUpdate()
     {
-        ApplyPendingSawPush();
         DrawReleasedBlocks();
         if (_dirtyChunks.Count == 0)
             return;
@@ -544,8 +578,7 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             CollisionFilter.Default, physicsMaterial);
         vertices.Dispose();
         triangles.Dispose();
-        if (chunk.PhysicsCollider.IsCreated)
-            chunk.PhysicsCollider.Dispose();
+        BlobAssetReference<Collider> previousCollider = chunk.PhysicsCollider;
         chunk.PhysicsCollider = collider;
         if (chunk.PhysicsEntity == Entity.Null || !_entityManager.Exists(chunk.PhysicsEntity))
         {
@@ -555,6 +588,8 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             _entityManager.AddSharedComponent(chunk.PhysicsEntity, new PhysicsWorldIndex(0));
         }
         _entityManager.SetComponentData(chunk.PhysicsEntity, new PhysicsCollider { Value = chunk.PhysicsCollider });
+        if (previousCollider.IsCreated)
+            previousCollider.Dispose();
     }
     private void DestroyChunkPhysicsCollider(ref ChunkRuntime chunk)
     {
@@ -672,6 +707,70 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             MaxPlanarSpeed = safeMaxVelocity
         });
         _releasedBlockEntities.Add(entity);
+    }
+    private float GetSafePhysicsVelocity(float requestedMaxVelocity)
+    {
+        float fixedDeltaTime = Mathf.Max(Time.fixedDeltaTime, 0.001f);
+        float maxCellTravelVelocity = _cellSize * 0.75f / fixedDeltaTime;
+        return Mathf.Min(requestedMaxVelocity, maxCellTravelVelocity);
+    }
+    private Vector3 RedirectVelocityFromSolid(Vector3 worldPosition, Vector3 velocity)
+    {
+        velocity.z = 0f;
+        float speed = velocity.magnitude;
+        if (speed <= 0.0001f)
+            return velocity;
+        Vector3 direction = velocity / speed;
+        float nearProbeDistance = _cellSize * 0.9f;
+        float farProbeDistance = _cellSize * 1.6f;
+        if (!IsSolidAlongDirection(worldPosition, direction, nearProbeDistance, farProbeDistance))
+            return velocity;
+        Vector3 tangent = new Vector3(-direction.y, direction.x, 0f);
+        Vector3 bestDirection = Vector3.zero;
+        float bestAlignment = float.MinValue;
+        EvaluateFreeDirection(worldPosition, tangent, direction, nearProbeDistance, farProbeDistance,
+            ref bestDirection, ref bestAlignment);
+        EvaluateFreeDirection(worldPosition, -tangent, direction, nearProbeDistance, farProbeDistance,
+            ref bestDirection, ref bestAlignment);
+        EvaluateFreeDirection(worldPosition, Vector3.up, direction, nearProbeDistance, farProbeDistance,
+            ref bestDirection, ref bestAlignment);
+        EvaluateFreeDirection(worldPosition, Vector3.down, direction, nearProbeDistance, farProbeDistance,
+            ref bestDirection, ref bestAlignment);
+        EvaluateFreeDirection(worldPosition, Vector3.left, direction, nearProbeDistance, farProbeDistance,
+            ref bestDirection, ref bestAlignment);
+        EvaluateFreeDirection(worldPosition, Vector3.right, direction, nearProbeDistance, farProbeDistance,
+            ref bestDirection, ref bestAlignment);
+        return bestDirection.sqrMagnitude > 0f ? bestDirection * speed : Vector3.zero;
+    }
+    private void EvaluateFreeDirection(Vector3 worldPosition, Vector3 candidate, Vector3 desired,
+        float nearProbeDistance, float farProbeDistance, ref Vector3 bestDirection, ref float bestAlignment)
+    {
+        candidate.z = 0f;
+        candidate.Normalize();
+        if (IsSolidAlongDirection(worldPosition, candidate, nearProbeDistance, farProbeDistance))
+            return;
+        float alignment = Vector3.Dot(candidate, desired);
+        if (alignment <= bestAlignment)
+            return;
+        bestAlignment = alignment;
+        bestDirection = candidate;
+    }
+    private bool IsSolidAlongDirection(Vector3 worldPosition, Vector3 direction,
+        float nearProbeDistance, float farProbeDistance)
+    {
+        return IsSolidAtWorldCell(worldPosition + direction * nearProbeDistance) ||
+               IsSolidAtWorldCell(worldPosition + direction * farProbeDistance);
+    }
+    private bool IsSolidAtWorldCell(Vector3 worldPosition)
+    {
+        if (!_cellSolid.IsCreated || _runtimeParent == null)
+            return false;
+        Vector3 local = _runtimeParent.InverseTransformPoint(worldPosition);
+        int x = Mathf.RoundToInt((local.x - _offset.x) / _cellSize);
+        int y = Mathf.RoundToInt((local.y - _offset.y) / _cellSize);
+        if ((uint)x >= (uint)_gridWidth || (uint)y >= (uint)_gridHeight)
+            return false;
+        return _cellSolid[y * _gridWidth + x] != 0;
     }
     private bool EnsureReleasedBlockResources()
     {
@@ -812,110 +911,40 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             _releasedBlockWallEntities.Add(entity);
         }
     }
-    private void PushReleasedBlocks(Vector3 sawCenter, Vector3 pressDirection, float pressSpeed, float outwardForce,
-        float tangentialForce, float spinDirection, float bladeRadius, float maxVelocity)
+    internal bool TryCreatePendingSawPushJob(out SawPushJob job)
     {
-        if (bladeRadius <= 0f || !EnsureEcsReady())
-            return;
-        using NativeArray<Entity> entities = _releasedBlockQuery.ToEntityArray(Allocator.Temp);
-        using NativeArray<LocalTransform> transforms =
-            _releasedBlockQuery.ToComponentDataArray<LocalTransform>(Allocator.Temp);
-        using NativeArray<ReleasedBlockComponent> blocks =
-            _releasedBlockQuery.ToComponentDataArray<ReleasedBlockComponent>(Allocator.Temp);
-        float radiusSqr = bladeRadius * bladeRadius;
-        for (int i = 0; i < entities.Length; i++)
+        job = default;
+        if (!_hasPendingSawPush)
+            return false;
+        _hasPendingSawPush = false;
+        if (_pendingSawRadius <= 0f || !_cellSolid.IsCreated || _runtimeParent == null)
+            return false;
+
+        Matrix4x4 matrix = _runtimeParent.worldToLocalMatrix;
+        float4x4 worldToLocal = new float4x4(ToFloat4(matrix.GetColumn(0)), ToFloat4(matrix.GetColumn(1)),
+            ToFloat4(matrix.GetColumn(2)), ToFloat4(matrix.GetColumn(3)));
+        float safeMaxVelocity = math.min(_pendingSawMaxVelocity,
+            _cellSize * 0.75f / math.max(Time.fixedDeltaTime, 0.001f));
+
+        job = new SawPushJob
         {
-            if (blocks[i].OwnerId != _ownerId)
-                continue;
-            float3 entityPosition = transforms[i].Position;
-            Vector3 delta = new Vector3(entityPosition.x - sawCenter.x, entityPosition.y - sawCenter.y, 0f);
-            float distanceSqr = delta.sqrMagnitude;
-            if (distanceSqr > radiusSqr)
-                continue;
-            float distance = Mathf.Sqrt(distanceSqr);
-            Vector3 outward = distance > 0.0001f
-                ? delta / distance
-                : pressDirection.sqrMagnitude > 0.0001f
-                    ? pressDirection
-                    : Vector3.up;
-            float radiusPush = 1f - Mathf.Clamp01(distance / bladeRadius);
-            Vector3 tangent = new Vector3(-outward.y, outward.x, 0f) * Mathf.Sign(spinDirection);
-            float speedScale = 1f + Mathf.Min(pressSpeed, 4f) * 0.1f;
-            Vector3 impulseVelocity =
-                outward * (outwardForce * 0.08f * speedScale * radiusPush) +
-                tangent * (tangentialForce * 0.22f * speedScale * radiusPush);
-            PhysicsVelocity velocity = _entityManager.GetComponentData<PhysicsVelocity>(entities[i]);
-            Vector3 linear = new Vector3(velocity.Linear.x, velocity.Linear.y, 0f) + impulseVelocity;
-            linear = Vector3.ClampMagnitude(linear, GetSafePhysicsVelocity(maxVelocity));
-            linear = RedirectVelocityFromSolid(
-                new Vector3(entityPosition.x, entityPosition.y, entityPosition.z), linear);
-            velocity.Linear = new float3(linear.x, linear.y, 0f);
-            _entityManager.SetComponentData(entities[i], velocity);
-        }
-    }
-    private float GetSafePhysicsVelocity(float requestedMaxVelocity)
-    {
-        float fixedDeltaTime = Mathf.Max(Time.fixedDeltaTime, 0.001f);
-        float maxCellTravelVelocity = _cellSize * 0.75f / fixedDeltaTime;
-        return Mathf.Min(requestedMaxVelocity, maxCellTravelVelocity);
-    }
-    private Vector3 RedirectVelocityFromSolid(Vector3 worldPosition, Vector3 velocity)
-    {
-        velocity.z = 0f;
-        float speed = velocity.magnitude;
-        if (speed <= 0.0001f)
-            return velocity;
-        Vector3 direction = velocity / speed;
-        float nearProbeDistance = _cellSize * 0.9f;
-        float farProbeDistance = _cellSize * 1.6f;
-        if (!IsSolidAlongDirection(worldPosition, direction, nearProbeDistance, farProbeDistance))
-            return velocity;
-        Vector3 tangent = new Vector3(-direction.y, direction.x, 0f);
-        Vector3 bestDirection = Vector3.zero;
-        float bestAlignment = float.MinValue;
-        EvaluateFreeDirection(worldPosition, tangent, direction, nearProbeDistance, farProbeDistance,
-            ref bestDirection, ref bestAlignment);
-        EvaluateFreeDirection(worldPosition, -tangent, direction, nearProbeDistance, farProbeDistance,
-            ref bestDirection, ref bestAlignment);
-        EvaluateFreeDirection(worldPosition, Vector3.up, direction, nearProbeDistance, farProbeDistance,
-            ref bestDirection, ref bestAlignment);
-        EvaluateFreeDirection(worldPosition, Vector3.down, direction, nearProbeDistance, farProbeDistance,
-            ref bestDirection, ref bestAlignment);
-        EvaluateFreeDirection(worldPosition, Vector3.left, direction, nearProbeDistance, farProbeDistance,
-            ref bestDirection, ref bestAlignment);
-        EvaluateFreeDirection(worldPosition, Vector3.right, direction, nearProbeDistance, farProbeDistance,
-            ref bestDirection, ref bestAlignment);
-        return bestDirection.sqrMagnitude > 0f ? bestDirection * speed : Vector3.zero;
-    }
-    private void EvaluateFreeDirection(Vector3 worldPosition, Vector3 candidate, Vector3 desired,
-        float nearProbeDistance, float farProbeDistance, ref Vector3 bestDirection, ref float bestAlignment)
-    {
-        candidate.z = 0f;
-        candidate.Normalize();
-        if (IsSolidAlongDirection(worldPosition, candidate, nearProbeDistance, farProbeDistance))
-            return;
-        float alignment = Vector3.Dot(candidate, desired);
-        if (alignment <= bestAlignment)
-            return;
-        bestAlignment = alignment;
-        bestDirection = candidate;
-    }
-    private bool IsSolidAlongDirection(Vector3 worldPosition, Vector3 direction,
-        float nearProbeDistance, float farProbeDistance)
-    {
-        return IsSolidAtWorldCell(worldPosition + direction * nearProbeDistance) ||
-               IsSolidAtWorldCell(worldPosition + direction * farProbeDistance);
-    }
-    private bool IsSolidAtWorldCell(Vector3 worldPosition)
-    {
-        if (!_cellSolid.IsCreated || _runtimeParent == null)
-            return false;
-        Vector3 local = _runtimeParent.InverseTransformPoint(worldPosition);
-        int x = Mathf.RoundToInt((local.x - _offset.x) / _cellSize);
-        int y = Mathf.RoundToInt((local.y - _offset.y) / _cellSize);
-        if ((uint)x >= (uint)_gridWidth || (uint)y >= (uint)_gridHeight)
-            return false;
-        return _cellSolid[y * _gridWidth + x] != 0;
+            CellSolid = _cellSolid,
+            WorldToLocal = worldToLocal,
+            Offset = ToFloat3(_offset),
+            SawCenter = ToFloat3(_pendingSawCenter),
+            PressDirection = ToFloat3(_pendingSawDirection),
+            PressSpeed = _pendingSawSpeed,
+            OutwardForce = _pendingSawOutwardForce,
+            TangentialForce = _pendingSawTangentialForce,
+            SpinDirection = _pendingSawSpinDirection,
+            BladeRadius = _pendingSawRadius,
+            MaxVelocity = safeMaxVelocity,
+            CellSize = _cellSize,
+            GridWidth = _gridWidth,
+            GridHeight = _gridHeight,
+            OwnerId = _ownerId
+        };
+        return true;
     }
     private void QueueSawPush(Vector3 sawCenter, Vector3 pressDirection, float pressSpeed, float outwardForce,
         float tangentialForce, float spinDirection, float bladeRadius, float maxVelocity)
@@ -930,22 +959,12 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         _pendingSawRadius = bladeRadius;
         _pendingSawMaxVelocity = maxVelocity;
     }
-    private void ApplyPendingSawPush()
-    {
-        if (!_hasPendingSawPush)
-            return;
-        _hasPendingSawPush = false;
-        PushReleasedBlocks(_pendingSawCenter, _pendingSawDirection, _pendingSawSpeed, _pendingSawOutwardForce,
-            _pendingSawTangentialForce, _pendingSawSpinDirection, _pendingSawRadius, _pendingSawMaxVelocity);
-    }
     private void DrawReleasedBlocks()
     {
         if (!EnsureEcsReady() || !EnsureReleasedBlockResources())
             return;
         ConsumePreparedRenderFrame();
         DrawCachedRenderFrame();
-        if (_displayRenderFrame < 0 || Time.frameCount % _releasedBlockRenderInterval == 0)
-            ScheduleRenderPreparation();
     }
     private void ConsumePreparedRenderFrame()
     {
@@ -960,30 +979,32 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             CachePreparedRenderFrame(frame);
         }
     }
-    private void ScheduleRenderPreparation()
+    internal bool TryCreateRenderPreparationJob(out PrepareRenderFrameJob job)
     {
+        job = default;
+        if (!_hasReleasedBlockQuery || _renderFrames[0] == null ||
+            (_displayRenderFrame >= 0 && Time.frameCount % _releasedBlockRenderInterval != 0))
+            return false;
         int writeIndex = _displayRenderFrame == 0 ? 1 : 0;
         RenderFrameData frame = _renderFrames[writeIndex];
         if (frame == null || frame.Pending)
-            return;
-        NativeArray<LocalTransform> transforms =
-            _releasedBlockQuery.ToComponentDataArray<LocalTransform>(Allocator.TempJob);
-        NativeArray<ReleasedBlockComponent> blocks =
-            _releasedBlockQuery.ToComponentDataArray<ReleasedBlockComponent>(Allocator.TempJob);
+            return false;
         frame.Count.Value = 0;
-        JobHandle prepareHandle = new PrepareRenderFrameJob
+        job = new PrepareRenderFrameJob
         {
-            Transforms = transforms,
-            Blocks = blocks,
             Matrices = frame.Matrices,
             Colors = frame.Colors,
             Count = frame.Count,
             OwnerId = _ownerId
-        }.Schedule();
-        JobHandle disposeTransforms = transforms.Dispose(prepareHandle);
-        JobHandle disposeBlocks = blocks.Dispose(prepareHandle);
-        frame.Handle = JobHandle.CombineDependencies(disposeTransforms, disposeBlocks);
+        };
         frame.Pending = true;
+        _scheduledRenderFrame = writeIndex;
+        return true;
+    }
+    internal void SetRenderPreparationHandle(JobHandle handle)
+    {
+        _renderFrames[_scheduledRenderFrame].Handle = handle;
+        _scheduledRenderFrame = -1;
     }
     private void CachePreparedRenderFrame(RenderFrameData frame)
     {
@@ -1041,106 +1062,6 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         for (int i = 0; i < entities.Length; i++)
             if (blocks[i].OwnerId == _ownerId && _entityManager.Exists(entities[i]))
                 _entityManager.DestroyEntity(entities[i]);
-    }
-    private void DespawnInBounds(Bounds bounds)
-    {
-        if (!EnsureEcsReady())
-            return;
-        using NativeArray<Entity> entities = _releasedBlockQuery.ToEntityArray(Allocator.Temp);
-        using NativeArray<LocalTransform> transforms =
-            _releasedBlockQuery.ToComponentDataArray<LocalTransform>(Allocator.Temp);
-        using NativeArray<ReleasedBlockComponent> blocks =
-            _releasedBlockQuery.ToComponentDataArray<ReleasedBlockComponent>(Allocator.Temp);
-        for (int i = 0; i < entities.Length; i++)
-        {
-            if (blocks[i].OwnerId != _ownerId)
-                continue;
-            float3 position = transforms[i].Position;
-            if (bounds.Contains(new Vector3(position.x, position.y, position.z)) && _entityManager.Exists(entities[i]))
-                _entityManager.DestroyEntity(entities[i]);
-        }
-    }
-    private void ApplyConveyor(Bounds bounds, Vector3 direction, float speed, float acceleration, float deltaTime)
-    {
-        if (!EnsureEcsReady())
-            return;
-        using NativeArray<Entity> entities = _releasedBlockQuery.ToEntityArray(Allocator.Temp);
-        using NativeArray<LocalTransform> transforms =
-            _releasedBlockQuery.ToComponentDataArray<LocalTransform>(Allocator.Temp);
-        using NativeArray<ReleasedBlockComponent> blocks =
-            _releasedBlockQuery.ToComponentDataArray<ReleasedBlockComponent>(Allocator.Temp);
-        float3 conveyorDirection = new float3(direction.x, direction.y, direction.z);
-        for (int i = 0; i < entities.Length; i++)
-        {
-            if (blocks[i].OwnerId != _ownerId)
-                continue;
-            float3 position = transforms[i].Position;
-            if (!bounds.Contains(new Vector3(position.x, position.y, position.z)))
-                continue;
-            PhysicsVelocity velocity = _entityManager.GetComponentData<PhysicsVelocity>(entities[i]);
-            float currentSpeed = math.dot(velocity.Linear, conveyorDirection);
-            velocity.Linear += conveyorDirection *
-                               (Mathf.MoveTowards(currentSpeed, speed, acceleration * deltaTime) - currentSpeed);
-            _entityManager.SetComponentData(entities[i], velocity);
-        }
-    }
-    private void ApplySuction(Vector3 origin, Quaternion rotation, Vector3 boxSize, float force, float acceleration,
-        float maxVelocity, float arrivalDamping, float destroyRadius, float deltaTime)
-    {
-        if (!EnsureEcsReady())
-            return;
-        Quaternion inverseRotation = Quaternion.Inverse(rotation);
-        Vector3 halfSize = boxSize * 0.5f;
-        Vector3 boxOffset = rotation * new Vector3(boxSize.x * 0.5f, 0f, 0f);
-        using NativeArray<Entity> entities = _releasedBlockQuery.ToEntityArray(Allocator.Temp);
-        using NativeArray<LocalTransform> transforms =
-            _releasedBlockQuery.ToComponentDataArray<LocalTransform>(Allocator.Temp);
-        using NativeArray<ReleasedBlockComponent> blocks =
-            _releasedBlockQuery.ToComponentDataArray<ReleasedBlockComponent>(Allocator.Temp);
-        int suckedBlockCount = 0;
-        for (int i = 0; i < entities.Length; i++)
-        {
-            if (blocks[i].OwnerId != _ownerId)
-                continue;
-            float3 transformPosition = transforms[i].Position;
-            Vector3 position = new Vector3(transformPosition.x, transformPosition.y, transformPosition.z);
-            Vector3 local = inverseRotation * (position - origin - boxOffset);
-            if (Mathf.Abs(local.x) > halfSize.x || Mathf.Abs(local.y) > halfSize.y || Mathf.Abs(local.z) > halfSize.z)
-                continue;
-            Vector3 direction = origin - position;
-            direction.z = 0f;
-            float distance = direction.magnitude;
-            if (distance < destroyRadius)
-            {
-                if (_entityManager.Exists(entities[i]))
-                {
-                    _entityManager.DestroyEntity(entities[i]);
-                    suckedBlockCount++;
-                    SuckedBlockCount++;
-                }
-                continue;
-            }
-            direction /= distance;
-            ReleasedBlockComponent block = blocks[i];
-            block.StableFrames = 0;
-            _entityManager.SetComponentData(entities[i], block);
-            _entityManager.SetComponentEnabled<Simulate>(entities[i], true);
-            PhysicsGravityFactor gravity = _entityManager.GetComponentData<PhysicsGravityFactor>(entities[i]);
-            gravity.Value = 1f;
-            _entityManager.SetComponentData(entities[i], gravity);
-            PhysicsVelocity velocity = _entityManager.GetComponentData<PhysicsVelocity>(entities[i]);
-            Vector3 currentVelocity = new Vector3(velocity.Linear.x, velocity.Linear.y, velocity.Linear.z);
-            Vector3 targetVelocity = direction * Mathf.Min(force * distance, maxVelocity);
-            Vector3 movedVelocity = Vector3.MoveTowards(currentVelocity, targetVelocity, acceleration * deltaTime);
-            if (distance <= destroyRadius * 2.5f)
-                movedVelocity = Vector3.Lerp(movedVelocity, targetVelocity, arrivalDamping * deltaTime);
-            movedVelocity = Vector3.ClampMagnitude(movedVelocity, maxVelocity);
-            velocity.Linear = new float3(movedVelocity.x, movedVelocity.y, movedVelocity.z);
-            _entityManager.SetComponentData(entities[i], velocity);
-        }
-
-        if (suckedBlockCount > 0)
-            BlocksSucked?.Invoke(suckedBlockCount);
     }
     private void DestroyReleasedBlockEntityAt(int index)
     {
@@ -1243,9 +1164,17 @@ public sealed class TextureBlockSpawner : MonoBehaviour
         material.Restitution = _physicsRestitution;
         return material;
     }
-    private static Vector4 ToFloat4(Color32 color)
+    private static float3 ToFloat3(Vector3 value)
     {
-        return new Vector4(color.r / 255f, color.g / 255f, color.b / 255f, color.a / 255f);
+        return new float3(value.x, value.y, value.z);
+    }
+    private static float4 ToFloat4(Vector4 value)
+    {
+        return new float4(value.x, value.y, value.z, value.w);
+    }
+    private static float4 ToFloat4(Color32 color)
+    {
+        return new float4(color.r / 255f, color.g / 255f, color.b / 255f, color.a / 255f);
     }
     private static void DestroyUnityObject(Object target)
     {
@@ -1266,6 +1195,120 @@ public sealed class TextureBlockSpawner : MonoBehaviour
             _cellColors.Dispose();
         if (_cellSolid.IsCreated)
             _cellSolid.Dispose();
+    }
+    [BurstCompile(FloatMode = FloatMode.Fast, FloatPrecision = FloatPrecision.Low)]
+    internal partial struct SawPushJob : IJobEntity
+    {
+        [ReadOnly] public NativeArray<byte> CellSolid;
+        public float4x4 WorldToLocal;
+        public float3 Offset;
+        public float3 SawCenter;
+        public float3 PressDirection;
+        public float PressSpeed;
+        public float OutwardForce;
+        public float TangentialForce;
+        public float SpinDirection;
+        public float BladeRadius;
+        public float MaxVelocity;
+        public float CellSize;
+        public int GridWidth;
+        public int GridHeight;
+        public int OwnerId;
+
+        private void Execute(in LocalTransform transform, in ReleasedBlockComponent block,
+            ref PhysicsVelocity velocity)
+        {
+            if (block.OwnerId != OwnerId)
+                return;
+
+            float3 position = transform.Position;
+            float2 delta = position.xy - SawCenter.xy;
+            float distanceSq = math.lengthsq(delta);
+            float radiusSq = BladeRadius * BladeRadius;
+            if (distanceSq > radiusSq)
+                return;
+
+            float distance = math.sqrt(distanceSq);
+            float2 outward = distance > 0.0001f
+                ? delta / distance
+                : math.normalizesafe(PressDirection.xy, new float2(0f, 1f));
+            float radiusPush = 1f - math.saturate(distance / BladeRadius);
+            float spinSign = SpinDirection >= 0f ? 1f : -1f;
+            float2 tangent = new float2(-outward.y, outward.x) * spinSign;
+            float speedScale = 1f + math.min(PressSpeed, 4f) * 0.1f;
+            float2 impulse = outward * (OutwardForce * 0.08f * speedScale * radiusPush) +
+                             tangent * (TangentialForce * 0.22f * speedScale * radiusPush);
+            float3 linear = new float3(velocity.Linear.xy + impulse, 0f);
+            linear = ClampMagnitude(linear, MaxVelocity);
+            velocity.Linear = RedirectVelocityFromSolid(position, linear);
+        }
+
+        private float3 RedirectVelocityFromSolid(float3 worldPosition, float3 velocity)
+        {
+            velocity.z = 0f;
+            float speed = math.length(velocity);
+            if (speed <= 0.0001f)
+                return velocity;
+            float3 direction = velocity / speed;
+            float nearProbeDistance = CellSize * 0.9f;
+            float farProbeDistance = CellSize * 1.6f;
+            if (!IsSolidAlongDirection(worldPosition, direction, nearProbeDistance, farProbeDistance))
+                return velocity;
+
+            float3 tangent = new float3(-direction.y, direction.x, 0f);
+            float3 bestDirection = float3.zero;
+            float bestAlignment = float.MinValue;
+            EvaluateFreeDirection(worldPosition, tangent, direction, nearProbeDistance, farProbeDistance,
+                ref bestDirection, ref bestAlignment);
+            EvaluateFreeDirection(worldPosition, -tangent, direction, nearProbeDistance, farProbeDistance,
+                ref bestDirection, ref bestAlignment);
+            EvaluateFreeDirection(worldPosition, new float3(0f, 1f, 0f), direction, nearProbeDistance,
+                farProbeDistance, ref bestDirection, ref bestAlignment);
+            EvaluateFreeDirection(worldPosition, new float3(0f, -1f, 0f), direction, nearProbeDistance,
+                farProbeDistance, ref bestDirection, ref bestAlignment);
+            EvaluateFreeDirection(worldPosition, new float3(-1f, 0f, 0f), direction, nearProbeDistance,
+                farProbeDistance, ref bestDirection, ref bestAlignment);
+            EvaluateFreeDirection(worldPosition, new float3(1f, 0f, 0f), direction, nearProbeDistance,
+                farProbeDistance, ref bestDirection, ref bestAlignment);
+            return math.lengthsq(bestDirection) > 0f ? bestDirection * speed : float3.zero;
+        }
+
+        private void EvaluateFreeDirection(float3 worldPosition, float3 candidate, float3 desired,
+            float nearProbeDistance, float farProbeDistance, ref float3 bestDirection, ref float bestAlignment)
+        {
+            candidate = math.normalizesafe(new float3(candidate.xy, 0f));
+            if (IsSolidAlongDirection(worldPosition, candidate, nearProbeDistance, farProbeDistance))
+                return;
+            float alignment = math.dot(candidate, desired);
+            if (alignment <= bestAlignment)
+                return;
+            bestAlignment = alignment;
+            bestDirection = candidate;
+        }
+
+        private bool IsSolidAlongDirection(float3 worldPosition, float3 direction,
+            float nearProbeDistance, float farProbeDistance)
+        {
+            return IsSolidAtWorldCell(worldPosition + direction * nearProbeDistance) ||
+                   IsSolidAtWorldCell(worldPosition + direction * farProbeDistance);
+        }
+
+        private bool IsSolidAtWorldCell(float3 worldPosition)
+        {
+            float3 local = math.transform(WorldToLocal, worldPosition);
+            int x = (int)math.round((local.x - Offset.x) / CellSize);
+            int y = (int)math.round((local.y - Offset.y) / CellSize);
+            if ((uint)x >= (uint)GridWidth || (uint)y >= (uint)GridHeight)
+                return false;
+            return CellSolid[y * GridWidth + x] != 0;
+        }
+
+        private static float3 ClampMagnitude(float3 value, float maxLength)
+        {
+            float lengthSq = math.lengthsq(value);
+            float maxLengthSq = maxLength * maxLength;
+            return lengthSq > maxLengthSq ? value * (maxLength * math.rsqrt(lengthSq)) : value;
+        }
     }
     internal struct TextureBlockMeshBuilder
     {
