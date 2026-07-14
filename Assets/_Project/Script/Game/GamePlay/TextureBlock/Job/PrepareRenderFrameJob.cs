@@ -3,7 +3,6 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
-using Unity.Physics.Systems;
 using Unity.Transforms;
 
 [BurstCompile(FloatMode = FloatMode.Fast, FloatPrecision = FloatPrecision.Low)]
@@ -30,8 +29,7 @@ internal partial struct PrepareRenderFrameJob : IJobEntity
     }
 }
 
-[UpdateInGroup(typeof(AfterPhysicsSystemGroup))]
-[UpdateAfter(typeof(ReleasedBlockPlanarConstraintSystem))]
+[UpdateInGroup(typeof(PresentationSystemGroup), OrderFirst = true)]
 public partial struct ReleasedBlockRenderPreparationSystem : ISystem
 {
     private EntityQuery _query;

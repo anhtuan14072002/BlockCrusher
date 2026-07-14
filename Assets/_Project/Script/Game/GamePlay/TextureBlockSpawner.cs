@@ -857,8 +857,6 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         if (query.IsEmptyIgnoreFilter)
         {
             PhysicsStep step = PhysicsStep.Default;
-            step.SubstepCount = 2;
-            step.SolverIterationCount = 8;
             step.CollisionTolerance = Mathf.Max(step.CollisionTolerance, _cellSize * 0.1f);
             _entityManager.CreateSingleton(step, "Gameplay Physics Step");
         }
@@ -866,14 +864,9 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         {
             Entity stepEntity = query.GetSingletonEntity();
             PhysicsStep step = _entityManager.GetComponentData<PhysicsStep>(stepEntity);
-            int substepCount = Mathf.Max(step.SubstepCount, 2);
-            int solverIterationCount = Mathf.Max(step.SolverIterationCount, 8);
             float collisionTolerance = Mathf.Max(step.CollisionTolerance, _cellSize * 0.1f);
-            if (step.SubstepCount != substepCount || step.SolverIterationCount != solverIterationCount ||
-                !Mathf.Approximately(step.CollisionTolerance, collisionTolerance))
+            if (!Mathf.Approximately(step.CollisionTolerance, collisionTolerance))
             {
-                step.SubstepCount = substepCount;
-                step.SolverIterationCount = solverIterationCount;
                 step.CollisionTolerance = collisionTolerance;
                 _entityManager.SetComponentData(stepEntity, step);
             }

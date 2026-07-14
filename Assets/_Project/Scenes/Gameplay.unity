@@ -3797,7 +3797,7 @@ Camera:
   m_TargetTexture: {fileID: 0}
   m_TargetDisplay: 0
   m_TargetEye: 3
-  m_HDR: 0
+  m_HDR: 1
   m_AllowMSAA: 0
   m_AllowDynamicResolution: 0
   m_ForceIntoRT: 0
@@ -4656,7 +4656,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8972793132794875421, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: _maxJointCount
-      value: 19
+      value: 15
       objectReference: {fileID: 0}
     - target: {fileID: 8972793132794875421, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: _suctionDevice
