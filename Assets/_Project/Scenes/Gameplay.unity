@@ -612,7 +612,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!4 &304549018
 Transform:
   m_ObjectHideFlags: 0
@@ -1838,7 +1838,7 @@ MonoBehaviour:
   _chunkColliderDepth: 0.12
   _sawReleaseRadius: 0.5
   _renderVoxelDetailFromStart: 1
-  _detailVoxelScale: 0.94
+  _detailVoxelScale: 0.8
   _voxelRandomYRotation: 20
   _maxPhysicsDebrisPerFrame: 0
   _chunkSize: 16
@@ -4640,7 +4640,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5680492632304396460, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: m_IsActive
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8972793132794875421, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: _joystick

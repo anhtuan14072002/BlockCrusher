@@ -21,11 +21,23 @@ namespace Crusher
                 if (joint == null) continue;
                 Vector3 direction = GetSegmentEndPosition(i) - joint.position;
                 if (direction.sqrMagnitude <= 0.0001f) continue;
-                _segmentLengths[i] = direction.magnitude;
+                _segmentLengths[i] = GetSegmentLength(i, direction.magnitude);
                 _jointRotationOffsets[i] = Quaternion.Inverse(GetSegmentRotation(direction)) * joint.rotation;
             }
             CacheSawRotationOffset();
             RefreshActiveReach();
+        }
+
+        private float GetSegmentLength(int segmentIndex, float measuredLength)
+        {
+            if (segmentIndex < _activeJointCount - 1)
+                return measuredLength;
+
+            int previousSegmentIndex = segmentIndex - 1;
+            if (previousSegmentIndex >= 0 && _segmentLengths[previousSegmentIndex] > 0.0001f)
+                return _segmentLengths[previousSegmentIndex];
+
+            return _segmentLength;
         }
 
         private void RefreshActiveReach()
@@ -102,10 +114,9 @@ namespace Crusher
             Vector3 pushedPosition = pushedJoint.position;
             Vector3 sawPosition = _saw.position;
             Vector3 direction = sawPosition - pushedPosition;
-            float segmentLength = direction.magnitude;
-            
-            if (segmentLength <= 0.0001f)
-                segmentLength = _segmentLengths[insertIndex] > 0.0001f ? _segmentLengths[insertIndex] : _segmentLength;
+            float segmentLength = _segmentLengths[insertIndex] > 0.0001f
+                ? _segmentLengths[insertIndex]
+                : _segmentLength;
 
             insertedJoint.gameObject.SetActive(true);
             insertedJoint.position = pushedPosition;
