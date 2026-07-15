@@ -3,7 +3,7 @@ using UnityEngine;
 
 public sealed class SawBlockCutter : MonoBehaviour
 {
-    [SerializeField] private float _compressionForce = 9f;
+    [SerializeField] private float _compressionForce = 2.5f;
     [SerializeField] private float _bladeTangentialForce = 32f;
     [SerializeField] private float _bladeSpinDirection = 1f;
     [SerializeField] private float _bladeSpinSpeed = 900f;
@@ -11,7 +11,7 @@ public sealed class SawBlockCutter : MonoBehaviour
     [SerializeField] private float _maxSawVelocity = 8f;
     [SerializeField] private float _cutSweepStep = 0.08f;
     [SerializeField, Range(0f, 1f)] private float _sideDampingOnContact = 0.35f;
-    [SerializeField] private float _maxBlockVelocity = 11f;
+    [SerializeField] private float _maxBlockVelocity = 6f;
     [SerializeField] private float _resistanceDuration = 0.18f;
     [SerializeField] private float _resistanceRecoveryDuration = 0.3f;
     [SerializeField] private float _sawHeadScaleStep = 0.2f;

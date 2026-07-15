@@ -789,7 +789,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1cb725ad65d125c4ca1aa24486561696, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _compressionForce: 6
+  _compressionForce: 2.5
   _bladeTangentialForce: 32
   _bladeSpinDirection: 1
   _bladeSpinSpeed: 900
@@ -797,7 +797,7 @@ MonoBehaviour:
   _maxSawVelocity: 4
   _cutSweepStep: 0.08
   _sideDampingOnContact: 0.35
-  _maxBlockVelocity: 11
+  _maxBlockVelocity: 6
   _resistanceDuration: 0.18
   _resistanceRecoveryDuration: 0.3
   _bladeVisual: {fileID: 0}

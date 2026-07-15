@@ -13,7 +13,7 @@ internal partial struct PrepareRenderFrameJob : IJobEntity
     public NativeReference<int> Count;
     public int OwnerId;
 
-    private void Execute(in LocalTransform transformData, in ReleasedBlockComponent block)
+    private void Execute(Entity entity, in LocalTransform transformData, in ReleasedBlockComponent block)
     {
         if (block.OwnerId != OwnerId)
             return;
@@ -22,7 +22,9 @@ internal partial struct PrepareRenderFrameJob : IJobEntity
         if (index >= Matrices.Length)
             return;
 
-        Matrices[index] = float4x4.TRS(transformData.Position, transformData.Rotation,
+        float3 renderPosition = transformData.Position;
+        renderPosition.z += (entity.Index & 255) * 0.0001f;
+        Matrices[index] = float4x4.TRS(renderPosition, transformData.Rotation,
             new float3(transformData.Scale));
         Colors[index] = block.Color;
         Count.Value = index + 1;
