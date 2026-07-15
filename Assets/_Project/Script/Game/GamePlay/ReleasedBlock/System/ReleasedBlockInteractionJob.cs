@@ -13,8 +13,8 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
     public NativeReference<int> SuckedCount;
 
     private void Execute([EntityIndexInQuery] int sortKey, Entity entity, in LocalTransform transform,
-        ref PhysicsVelocity velocity, ref PhysicsGravityFactor gravity, ref ReleasedBlockComponent block,
-        EnabledRefRW<Simulate> simulate)
+        ref PhysicsCollider collider, ref PhysicsVelocity velocity, ref PhysicsGravityFactor gravity,
+        ref ReleasedBlockComponent block, EnabledRefRW<Simulate> simulate)
     {
         float3 position = transform.Position;
         for (int i = 0; i < Requests.Length; i++)
@@ -44,21 +44,62 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
                 case ReleasedBlockInteractionType.Suction:
                     float3 local = math.rotate(request.InverseRotation,
                         position - request.Origin - request.BoxOffset);
-                    if (math.any(math.abs(local) > request.HalfSize))
+                    bool isFollowingPath = block.SuctionPathIndex != byte.MaxValue;
+                    if (!isFollowingPath && math.any(math.abs(local) > request.HalfSize))
                         break;
 
-                    float3 direction = request.Origin - position;
+                    if (request.SuctionPath.Length == 0)
+                        break;
+
+                    int lastPathIndex = request.SuctionPath.Length - 1;
+                    int pathIndex = isFollowingPath && block.SuctionPathIndex < request.SuctionPath.Length
+                        ? block.SuctionPathIndex
+                        : 0;
+
+                    if (!isFollowingPath)
+                    {
+                        collider.Value = default;
+                        block.LockedZ -= request.RenderDepth;
+                    }
+
+                    float3 target = pathIndex == 0
+                        ? request.SuctionPath[0]
+                        : GetSegmentFollowTarget(position, request.SuctionPath[pathIndex - 1],
+                            request.SuctionPath[pathIndex], request.PathLookAhead);
+                    float3 direction = target - position;
                     direction.z = 0f;
                     float distance = math.length(direction);
-                    if (distance < request.DestroyRadius)
+                    float3 waypointDelta = request.SuctionPath[pathIndex] - position;
+                    waypointDelta.z = 0f;
+                    if (pathIndex < lastPathIndex && math.lengthsq(waypointDelta) <=
+                        request.WaypointRadius * request.WaypointRadius)
+                    {
+                        if (pathIndex == 0)
+                            SuckedCount.Value++;
+                        pathIndex++;
+                        block.SuctionPathIndex = (byte)pathIndex;
+                        target = GetSegmentFollowTarget(position, request.SuctionPath[pathIndex - 1],
+                            request.SuctionPath[pathIndex], request.PathLookAhead);
+                        direction = target - position;
+                        direction.z = 0f;
+                        distance = math.length(direction);
+                    }
+
+                    float3 suctionDelta = request.SuctionPath[lastPathIndex] - position;
+                    suctionDelta.z = 0f;
+                    if (pathIndex == lastPathIndex &&
+                        math.lengthsq(suctionDelta) < request.DestroyRadius * request.DestroyRadius)
                     {
                         simulate.ValueRW = false;
                         CommandBuffer.DestroyEntity(sortKey, entity);
-                        SuckedCount.Value++;
                         return;
                     }
 
+                    if (distance <= 0.0001f)
+                        break;
+
                     direction /= distance;
+                    block.SuctionPathIndex = (byte)pathIndex;
                     block.StableFrames = 0;
                     simulate.ValueRW = true;
                     gravity.Value = 1f;
@@ -72,6 +113,23 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
                     break;
             }
         }
+    }
+
+    private static float3 GetSegmentFollowTarget(float3 position, float3 segmentStart, float3 segmentEnd,
+        float lookAhead)
+    {
+        position.z = 0f;
+        segmentStart.z = 0f;
+        segmentEnd.z = 0f;
+        float3 segment = segmentEnd - segmentStart;
+        float segmentLengthSq = math.lengthsq(segment);
+        if (segmentLengthSq <= 0.000001f)
+            return segmentEnd;
+
+        float progress = math.saturate(math.dot(position - segmentStart, segment) / segmentLengthSq);
+        float segmentLength = math.sqrt(segmentLengthSq);
+        float targetProgress = math.min(1f, progress + lookAhead / segmentLength);
+        return math.lerp(segmentStart, segmentEnd, targetProgress);
     }
 
     private static bool IsInsideBounds(float3 position, float3 min, float3 max)

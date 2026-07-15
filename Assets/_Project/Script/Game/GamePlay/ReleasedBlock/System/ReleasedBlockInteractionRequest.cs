@@ -1,4 +1,5 @@
 using Unity.Mathematics;
+using Unity.Collections;
 
 internal enum ReleasedBlockInteractionType : byte
 {
@@ -23,5 +24,9 @@ internal struct ReleasedBlockInteractionRequest
     public float MaxVelocity;
     public float ArrivalDamping;
     public float DestroyRadius;
+    public float WaypointRadius;
+    public float PathLookAhead;
+    public float RenderDepth;
     public float DeltaTime;
+    public FixedList512Bytes<float3> SuctionPath;
 }

@@ -17,6 +17,7 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
     {
         _query = SystemAPI.QueryBuilder()
             .WithAllRW<PhysicsVelocity>()
+            .WithAllRW<PhysicsCollider>()
             .WithAllRW<PhysicsGravityFactor>()
             .WithAllRW<ReleasedBlockComponent>()
             .WithAllRW<Simulate>()

@@ -154,7 +154,9 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         });
     }
     public static void ApplySuctionForActiveSpawners(Vector3 origin, Quaternion rotation, Vector3 boxSize,
-        float force, float acceleration, float maxVelocity, float arrivalDamping, float destroyRadius, float deltaTime)
+        float force, float acceleration, float maxVelocity, float arrivalDamping, float destroyRadius,
+        float waypointRadius, float pathLookAhead, float renderDepth, FixedList512Bytes<float3> suctionPath,
+        float deltaTime)
     {
         Quaternion inverseRotation = Quaternion.Inverse(rotation);
         ReleasedBlockInteractionQueue.Enqueue(new ReleasedBlockInteractionRequest
@@ -170,6 +172,10 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
             MaxVelocity = maxVelocity,
             ArrivalDamping = arrivalDamping,
             DestroyRadius = destroyRadius,
+            WaypointRadius = waypointRadius,
+            PathLookAhead = pathLookAhead,
+            RenderDepth = renderDepth,
+            SuctionPath = suctionPath,
             DeltaTime = deltaTime
         });
     }
@@ -704,7 +710,8 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
             OwnerId = _ownerId,
             Color = ToFloat4(color),
             LockedZ = position.z,
-            MaxPlanarSpeed = safeMaxVelocity
+            MaxPlanarSpeed = safeMaxVelocity,
+            SuctionPathIndex = byte.MaxValue
         });
         _releasedBlockEntities.Add(entity);
     }

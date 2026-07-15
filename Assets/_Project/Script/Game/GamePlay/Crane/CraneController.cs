@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using Unity.Collections;
+using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -136,6 +138,17 @@ namespace Crusher
         {
             if (_sawCutter != null) _sawCutter.gameObject.SetActive(!isSuction);
             if (_suctionDevice != null) _suctionDevice.gameObject.SetActive(isSuction);
+        }
+
+        internal void AppendSuctionTubePath(ref FixedList512Bytes<float3> path)
+        {
+            int lastJointIndex = Mathf.Min(_activeJointCount, _joints.Count) - 1;
+            for (int i = lastJointIndex; i >= 0; i--)
+            {
+                Transform joint = _joints[i];
+                if (joint != null)
+                    path.Add(new float3(joint.position.x, joint.position.y, joint.position.z));
+            }
         }
     }
 }

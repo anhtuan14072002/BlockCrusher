@@ -1,4 +1,6 @@
 using UnityEngine;
+using Unity.Collections;
+using Unity.Mathematics;
 
 namespace Crusher
 {
@@ -11,21 +13,35 @@ namespace Crusher
         [SerializeField] private float _maxBlockVelocity = 8f;
 
         [SerializeField] private float _arrivalDamping = 8f;
-        [SerializeField] private float _destroyRadius = 0.5f;
+        [SerializeField] private float _tubeExitRadius = 0.08f;
+        [SerializeField] private float _pathWaypointRadius = 0.08f;
+        [SerializeField] private float _pathLookAhead = 0.25f;
+        [SerializeField] private float _tubeRenderDepth = 0.35f;
         [SerializeField] private float _movementBlockRadius = 0.25f;
 
         [SerializeField, Range(0.25f, 1f)] private float _slideProbeRadiusMultiplier = 0.55f;
 
         private const float MovementSkin = 0.01f;
         private const int SweepIterations = 6;
+        private CraneController _craneController;
+
+        private void Awake()
+        {
+            _craneController = GetComponentInParent<CraneController>();
+        }
 
         private void FixedUpdate()
         {
             if (!gameObject.activeInHierarchy) return;
 
             Transform refTransform = _suctionPoint != null ? _suctionPoint : transform;
+            FixedList512Bytes<float3> suctionPath = default;
+            suctionPath.Add(new float3(refTransform.position.x, refTransform.position.y, refTransform.position.z));
+            if (_craneController != null)
+                _craneController.AppendSuctionTubePath(ref suctionPath);
             TextureBlockSpawner.ApplySuctionForActiveSpawners(refTransform.position, refTransform.rotation, _suctionBoxSize, 
-                _suctionForce, _suctionAcceleration, _maxBlockVelocity, _arrivalDamping, _destroyRadius, Time.fixedDeltaTime);
+                _suctionForce, _suctionAcceleration, _maxBlockVelocity, _arrivalDamping, _tubeExitRadius,
+                _pathWaypointRadius, _pathLookAhead, _tubeRenderDepth, suctionPath, Time.fixedDeltaTime);
         }
 
         public Vector3 ClampSawTarget(Vector3 sawPosition, Vector3 targetSawPosition)

@@ -10,4 +10,5 @@ public struct ReleasedBlockComponent : IComponentData
     public float LockedZ;
     public float MaxPlanarSpeed;
     public byte StableFrames;
+    public byte SuctionPathIndex;
 }

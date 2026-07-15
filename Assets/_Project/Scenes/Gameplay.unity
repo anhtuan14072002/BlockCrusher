@@ -607,7 +607,7 @@ GameObject:
   - component: {fileID: 304549021}
   - component: {fileID: 304549023}
   m_Layer: 0
-  m_Name: Wall (1)
+  m_Name: BGRWALL
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -622,8 +622,8 @@ Transform:
   m_GameObject: {fileID: 304549017}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 1.2653, y: -10.0398, z: 0.98}
-  m_LocalScale: {x: 20.93849, y: 16.978668, z: 1}
+  m_LocalPosition: {x: 1.2653, y: -10.1386, z: 0.98}
+  m_LocalScale: {x: 20.93849, y: 16.781715, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1680214657}
@@ -651,7 +651,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10303, guid: 0000000000000000f000000000000000, type: 0}
+  - {fileID: 2100000, guid: f60ea1c3e6d55854295be6019d0d0784, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -1586,7 +1586,10 @@ MonoBehaviour:
   _suctionAcceleration: 32
   _maxBlockVelocity: 8
   _arrivalDamping: 8
-  _destroyRadius: 0.36
+  _tubeExitRadius: 0.08
+  _pathWaypointRadius: 0.35
+  _pathLookAhead: 0.25
+  _tubeRenderDepth: 0.35
   _movementBlockRadius: 0.25
   _slideProbeRadiusMultiplier: 0.55
 --- !u!65 &742058397
@@ -1980,7 +1983,7 @@ BoxCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 1
   m_ProvidesContacts: 0
-  m_Enabled: 0
+  m_Enabled: 1
   serializedVersion: 3
   m_Size: {x: 0.30753192, y: 0.24428058, z: 0.24428046}
   m_Center: {x: 0.09212619, y: -0.000000014901163, z: 0}
@@ -2002,7 +2005,10 @@ MonoBehaviour:
   _suctionAcceleration: 32
   _maxBlockVelocity: 8
   _arrivalDamping: 8
-  _destroyRadius: 0.36
+  _tubeExitRadius: 0.08
+  _pathWaypointRadius: 0.35
+  _pathLookAhead: 0.25
+  _tubeRenderDepth: 0.35
   _movementBlockRadius: 0.25
   _slideProbeRadiusMultiplier: 0.55
 --- !u!1 &988305463
@@ -4641,6 +4647,10 @@ PrefabInstance:
     - target: {fileID: 5680492632304396460, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: m_IsActive
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6906274327444719757, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
+      propertyPath: m_Materials.Array.size
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 8972793132794875421, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: _joystick
