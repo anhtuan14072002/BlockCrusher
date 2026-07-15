@@ -23,6 +23,7 @@ public sealed class SawBlockCutter : MonoBehaviour
     private Vector3 _pressDirection;
     private float _pressSpeed;
     private float _resistanceUntil;
+    private bool _hasMovedSinceEnable;
     private readonly Dictionary<Collider, TextureBlockChunk> _chunkCache = new Dictionary<Collider, TextureBlockChunk>(16);
 
     public float ResistanceRecovery
@@ -54,6 +55,15 @@ public sealed class SawBlockCutter : MonoBehaviour
         _previousPosition = transform.position;
     }
 
+    private void OnEnable()
+    {
+        _previousPosition = transform.position;
+        _sawVelocity = Vector3.zero;
+        _pressDirection = Vector3.zero;
+        _pressSpeed = 0f;
+        _hasMovedSinceEnable = false;
+    }
+
     private void Update()
     {
         if (_bladeVisual == null || _bladeSpinSpeed == 0f) return;
@@ -64,6 +74,8 @@ public sealed class SawBlockCutter : MonoBehaviour
     {
         Vector3 previousPosition = _previousPosition;
         Vector3 currentPosition = transform.position;
+        if ((currentPosition - previousPosition).sqrMagnitude > 0.000001f)
+            _hasMovedSinceEnable = true;
         float inverseDeltaTime = Time.fixedDeltaTime > 0f ? 1f / Time.fixedDeltaTime : 0f;
         _sawVelocity = (currentPosition - previousPosition) * inverseDeltaTime;
 
@@ -76,27 +88,31 @@ public sealed class SawBlockCutter : MonoBehaviour
 
         _previousPosition = currentPosition;
 
-        if (ReleaseAlongMovement(previousPosition, currentPosition))
+        if (_hasMovedSinceEnable && ReleaseAlongMovement(previousPosition, currentPosition))
             RegisterResistance();
     }
 
     private void OnTriggerEnter(Collider other)
     {
+        if (!_hasMovedSinceEnable) return;
         ReleaseAndPush(other);
     }
 
     private void OnTriggerStay(Collider other)
     {
+        if (!_hasMovedSinceEnable) return;
         ReleaseAndPush(other);
     }
 
     private void OnCollisionEnter(Collision collision)
     {
+        if (!_hasMovedSinceEnable) return;
         ReleaseAndPush(collision.collider, collision.GetContact(0).point);
     }
 
     private void OnCollisionStay(Collision collision)
     {
+        if (!_hasMovedSinceEnable) return;
         ReleaseAndPush(collision.collider, collision.GetContact(0).point);
     }
 

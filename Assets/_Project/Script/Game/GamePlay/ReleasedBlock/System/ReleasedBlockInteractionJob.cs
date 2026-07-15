@@ -12,9 +12,10 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
     public EntityCommandBuffer.ParallelWriter CommandBuffer;
     public NativeReference<int> SuckedCount;
 
-    private void Execute([EntityIndexInQuery] int sortKey, Entity entity, in LocalTransform transform,
+    private void Execute([EntityIndexInQuery] int sortKey, Entity entity, ref LocalTransform transform,
         ref PhysicsCollider collider, ref PhysicsVelocity velocity, ref PhysicsGravityFactor gravity,
-        ref ReleasedBlockComponent block, EnabledRefRW<Simulate> simulate)
+        ref ReleasedBlockComponent block, EnabledRefRW<Simulate> simulate,
+        EnabledRefRW<SuctionTransit> suctionTransit)
     {
         float3 position = transform.Position;
         for (int i = 0; i < Requests.Length; i++)
@@ -42,11 +43,17 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
                     break;
 
                 case ReleasedBlockInteractionType.Suction:
-                    float3 local = math.rotate(request.InverseRotation,
-                        position - request.Origin - request.BoxOffset);
                     bool isFollowingPath = block.SuctionPathIndex != byte.MaxValue;
-                    if (!isFollowingPath && math.any(math.abs(local) > request.HalfSize))
-                        break;
+                    if (!isFollowingPath)
+                    {
+                        if (request.AllowSuctionCapture == 0)
+                            break;
+
+                        float3 local = math.rotate(request.InverseRotation,
+                            position - request.Origin - request.BoxOffset);
+                        if (math.any(math.abs(local) > request.HalfSize))
+                            break;
+                    }
 
                     if (request.SuctionPath.Length == 0)
                         break;
@@ -60,6 +67,15 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
                     {
                         collider.Value = default;
                         block.LockedZ -= request.RenderDepth;
+                        suctionTransit.ValueRW = true;
+                    }
+
+                    if (pathIndex > 0)
+                    {
+                        position = GetClosestPointOnSegment(position, request.SuctionPath[pathIndex - 1],
+                            request.SuctionPath[pathIndex]);
+                        position.z = block.LockedZ;
+                        transform.Position = position;
                     }
 
                     float3 target = pathIndex == 0
@@ -102,7 +118,7 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
                     block.SuctionPathIndex = (byte)pathIndex;
                     block.StableFrames = 0;
                     simulate.ValueRW = true;
-                    gravity.Value = 1f;
+                    gravity.Value = 0f;
                     float3 targetVelocity = direction * math.min(request.Force * distance, request.MaxVelocity);
                     float3 movedVelocity = MoveTowards(velocity.Linear, targetVelocity,
                         request.Acceleration * request.DeltaTime);
@@ -130,6 +146,20 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
         float segmentLength = math.sqrt(segmentLengthSq);
         float targetProgress = math.min(1f, progress + lookAhead / segmentLength);
         return math.lerp(segmentStart, segmentEnd, targetProgress);
+    }
+
+    private static float3 GetClosestPointOnSegment(float3 position, float3 segmentStart, float3 segmentEnd)
+    {
+        float3 segment = segmentEnd - segmentStart;
+        segment.z = 0f;
+        float segmentLengthSq = math.lengthsq(segment);
+        if (segmentLengthSq <= 0.000001f)
+            return segmentEnd;
+
+        float3 fromStart = position - segmentStart;
+        fromStart.z = 0f;
+        float progress = math.saturate(math.dot(fromStart, segment) / segmentLengthSq);
+        return math.lerp(segmentStart, segmentEnd, progress);
     }
 
     private static bool IsInsideBounds(float3 position, float3 min, float3 max)

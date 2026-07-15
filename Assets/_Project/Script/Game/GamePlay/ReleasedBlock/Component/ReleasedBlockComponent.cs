@@ -12,3 +12,7 @@ public struct ReleasedBlockComponent : IComponentData
     public byte StableFrames;
     public byte SuctionPathIndex;
 }
+
+public struct SuctionTransit : IComponentData, IEnableableComponent
+{
+}

@@ -156,7 +156,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     public static void ApplySuctionForActiveSpawners(Vector3 origin, Quaternion rotation, Vector3 boxSize,
         float force, float acceleration, float maxVelocity, float arrivalDamping, float destroyRadius,
         float waypointRadius, float pathLookAhead, float renderDepth, FixedList512Bytes<float3> suctionPath,
-        float deltaTime)
+        float deltaTime, bool allowCapture)
     {
         Quaternion inverseRotation = Quaternion.Inverse(rotation);
         ReleasedBlockInteractionQueue.Enqueue(new ReleasedBlockInteractionRequest
@@ -176,7 +176,8 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
             PathLookAhead = pathLookAhead,
             RenderDepth = renderDepth,
             SuctionPath = suctionPath,
-            DeltaTime = deltaTime
+            DeltaTime = deltaTime,
+            AllowSuctionCapture = allowCapture ? (byte)1 : (byte)0
         });
     }
     public static void ScaleSawReleaseRadiusForActiveSpawners(float multiplier)
@@ -713,6 +714,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
             MaxPlanarSpeed = safeMaxVelocity,
             SuctionPathIndex = byte.MaxValue
         });
+        _entityManager.SetComponentEnabled<SuctionTransit>(entity, false);
         _releasedBlockEntities.Add(entity);
     }
     private float GetSafePhysicsVelocity(float requestedMaxVelocity)
@@ -847,7 +849,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
             _releasedBlockArchetype = _entityManager.CreateArchetype(
                 typeof(LocalTransform), typeof(PhysicsCollider), typeof(PhysicsMass), typeof(PhysicsVelocity),
                 typeof(PhysicsDamping), typeof(PhysicsGravityFactor), typeof(Simulate),
-                typeof(ReleasedBlockComponent), typeof(PhysicsWorldIndex));
+                typeof(ReleasedBlockComponent), typeof(SuctionTransit), typeof(PhysicsWorldIndex));
             _releasedBlockQuery = _entityManager.CreateEntityQuery(
                 ComponentType.ReadOnly<ReleasedBlockComponent>(),
                 ComponentType.ReadOnly<LocalTransform>(),

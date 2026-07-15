@@ -9,6 +9,7 @@ using Unity.Transforms;
 public partial struct ReleasedBlockInteractionSystem : ISystem
 {
     private EntityQuery _query;
+    private EntityQuery _suctionTransitQuery;
     private NativeReference<int> _suckedCount;
     private JobHandle _lastInteractionHandle;
     private bool _hasPendingSuckedCount;
@@ -20,9 +21,19 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
             .WithAllRW<PhysicsCollider>()
             .WithAllRW<PhysicsGravityFactor>()
             .WithAllRW<ReleasedBlockComponent>()
+            .WithAllRW<SuctionTransit>()
             .WithAllRW<Simulate>()
-            .WithAll<LocalTransform>()
+            .WithAllRW<LocalTransform>()
             .WithOptions(EntityQueryOptions.IgnoreComponentEnabledState)
+            .Build();
+        _suctionTransitQuery = SystemAPI.QueryBuilder()
+            .WithAllRW<PhysicsVelocity>()
+            .WithAllRW<PhysicsCollider>()
+            .WithAllRW<PhysicsGravityFactor>()
+            .WithAllRW<ReleasedBlockComponent>()
+            .WithAllRW<SuctionTransit>()
+            .WithAllRW<Simulate>()
+            .WithAllRW<LocalTransform>()
             .Build();
         _suckedCount = new NativeReference<int>(Allocator.Persistent);
     }
@@ -47,6 +58,16 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
                     NativeArrayOptions.UninitializedMemory);
             ReleasedBlockInteractionQueue.CopyToAndClear(requests);
             _suckedCount.Value = 0;
+            bool requiresAllBlocks = false;
+            for (int i = 0; i < requests.Length; i++)
+            {
+                ReleasedBlockInteractionRequest request = requests[i];
+                if (request.Type != ReleasedBlockInteractionType.Suction || request.AllowSuctionCapture != 0)
+                {
+                    requiresAllBlocks = true;
+                    break;
+                }
+            }
 
             EntityCommandBuffer.ParallelWriter commandBuffer = SystemAPI
                 .GetSingleton<EndFixedStepSimulationEntityCommandBufferSystem.Singleton>()
@@ -58,7 +79,7 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
                 Requests = requests,
                 CommandBuffer = commandBuffer,
                 SuckedCount = _suckedCount
-            }.Schedule(_query, dependency);
+            }.Schedule(requiresAllBlocks ? _query : _suctionTransitQuery, dependency);
 
             dependency = JobHandle.CombineDependencies(interactionHandle, requests.Dispose(interactionHandle));
             _lastInteractionHandle = interactionHandle;

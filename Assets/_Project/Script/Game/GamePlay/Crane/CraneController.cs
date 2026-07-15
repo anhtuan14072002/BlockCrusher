@@ -78,6 +78,12 @@ namespace Crusher
             SolveJointsToSaw();
         }
 
+        private void FixedUpdate()
+        {
+            if (_suctionDevice != null)
+                _suctionDevice.ProcessSuction(_isSuctionMode);
+        }
+
         public void AddJoint()
         {
             if (_activeJointCount >= _maxJointCount) return;

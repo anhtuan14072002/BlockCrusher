@@ -28,5 +28,6 @@ internal struct ReleasedBlockInteractionRequest
     public float PathLookAhead;
     public float RenderDepth;
     public float DeltaTime;
+    public byte AllowSuctionCapture;
     public FixedList512Bytes<float3> SuctionPath;
 }

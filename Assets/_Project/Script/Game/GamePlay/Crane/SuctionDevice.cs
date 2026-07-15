@@ -30,10 +30,8 @@ namespace Crusher
             _craneController = GetComponentInParent<CraneController>();
         }
 
-        private void FixedUpdate()
+        internal void ProcessSuction(bool allowCapture)
         {
-            if (!gameObject.activeInHierarchy) return;
-
             Transform refTransform = _suctionPoint != null ? _suctionPoint : transform;
             FixedList512Bytes<float3> suctionPath = default;
             suctionPath.Add(new float3(refTransform.position.x, refTransform.position.y, refTransform.position.z));
@@ -41,7 +39,8 @@ namespace Crusher
                 _craneController.AppendSuctionTubePath(ref suctionPath);
             TextureBlockSpawner.ApplySuctionForActiveSpawners(refTransform.position, refTransform.rotation, _suctionBoxSize, 
                 _suctionForce, _suctionAcceleration, _maxBlockVelocity, _arrivalDamping, _tubeExitRadius,
-                _pathWaypointRadius, _pathLookAhead, _tubeRenderDepth, suctionPath, Time.fixedDeltaTime);
+                _pathWaypointRadius, _pathLookAhead, _tubeRenderDepth, suctionPath, Time.fixedDeltaTime,
+                allowCapture);
         }
 
         public Vector3 ClampSawTarget(Vector3 sawPosition, Vector3 targetSawPosition)
