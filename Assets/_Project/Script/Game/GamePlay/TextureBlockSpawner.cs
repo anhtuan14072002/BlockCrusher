@@ -1253,9 +1253,9 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         public int OwnerId;
 
         private void Execute(in LocalTransform transform, in ReleasedBlockComponent block,
-            ref PhysicsVelocity velocity)
+            ref PhysicsVelocity velocity, EnabledRefRO<SuctionTransit> suctionTransit)
         {
-            if (block.OwnerId != OwnerId)
+            if (block.OwnerId != OwnerId || suctionTransit.ValueRO)
                 return;
 
             float3 position = transform.Position;
@@ -1369,9 +1369,9 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         public int OwnerId;
 
         private void Execute(ref LocalTransform transform, ref PhysicsVelocity velocity,
-            in ReleasedBlockComponent block)
+            in ReleasedBlockComponent block, EnabledRefRO<SuctionTransit> suctionTransit)
         {
-            if (block.OwnerId != OwnerId)
+            if (block.OwnerId != OwnerId || suctionTransit.ValueRO)
                 return;
 
             float3 position = transform.Position;

@@ -58,6 +58,13 @@ namespace Crusher
                 _sawCutter = _saw.GetComponent<SawBlockCutter>();
         }
 
+        private void CacheSawInputRotationOffset()
+        {
+            if (_saw == null) return;
+
+            _sawInputRotationOffset = Quaternion.Inverse(GetSegmentRotation(Vector3.up)) * _saw.rotation;
+        }
+
         private float GetActiveReach()
         {
             return _activeReach;

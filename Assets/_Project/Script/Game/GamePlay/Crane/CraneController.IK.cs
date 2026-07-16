@@ -60,7 +60,7 @@ namespace Crusher
             Vector3 sawDirection = _solvePositions[_activeJointCount] - _solvePositions[_activeJointCount - 1];
             _saw.position = _solvePositions[_activeJointCount];
             if (_useSawInputRotation && _lastSawMoveDirection.sqrMagnitude > 0.0001f)
-                _saw.rotation = GetSegmentRotation(-_lastSawMoveDirection) * _sawRotationOffset;
+                _saw.rotation = GetSegmentRotation(_lastSawMoveDirection) * _sawInputRotationOffset;
             else if (sawDirection.sqrMagnitude > 0.0001f)
                 _saw.rotation = GetSegmentRotation(sawDirection) * _sawRotationOffset;
         }

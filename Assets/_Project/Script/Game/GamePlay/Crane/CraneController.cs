@@ -47,6 +47,7 @@ namespace Crusher
         [SerializeField] private TMP_Text _fuelPercentText;
 
         private Quaternion _sawRotationOffset = Quaternion.identity;
+        private Quaternion _sawInputRotationOffset = Quaternion.identity;
         private Quaternion[] _jointRotationOffsets;
         private Transform _movementCameraTransform;
         private Transform _rootParent;
@@ -127,9 +128,9 @@ namespace Crusher
             _useSawInputRotation = false;
             SeedZigZagPoseToSaw();
             SolveJointsToSaw();
-            CacheSawRotationOffset();
             ApplySawAtPosition(lockedSawPosition);
             _saw.rotation = lockedSawRotation;
+            CacheSawRotationOffset();
             _useSawInputRotation = true;
         }
 
@@ -171,6 +172,7 @@ namespace Crusher
             CacheFixedRoot();
             CacheModelPoseOffsets();
             DetachSawFromJoints();
+            CacheSawInputRotationOffset();
             ApplyActiveJointCount();
             CacheSawCutter();
             _sawTarget = GetSawPosition();
