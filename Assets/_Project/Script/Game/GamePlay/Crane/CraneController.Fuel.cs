@@ -24,8 +24,15 @@ namespace Crusher
             if (!_fuelEnabled || _fuelUpgradeStep <= 0f) return;
 
             _maxFuel += _fuelUpgradeStep;
+            _initialFuel += _fuelUpgradeStep;
             _currentFuel += _fuelUpgradeStep;
-            SetFuelAvailable(true);
+            SetFuelAvailable(!_roundEnded);
+            RefreshFuelUI();
+        }
+
+        private void ResetFuelToInitial()
+        {
+            _currentFuel = Mathf.Clamp(_initialFuel, 0f, _maxFuel);
             RefreshFuelUI();
         }
 
@@ -48,7 +55,10 @@ namespace Crusher
             RefreshFuelUI();
 
             if (_currentFuel <= 0f)
+            {
                 SetFuelAvailable(false);
+                CraneRoundFlow.Instance.EndRound();
+            }
         }
 
         private void SetFuelAvailable(bool isAvailable)

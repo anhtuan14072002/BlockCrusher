@@ -9,6 +9,8 @@ namespace Crusher
 {
     public sealed partial class CraneController : MonoBehaviour
     {
+        public static CraneController Instance { get; private set; }
+
         [SerializeField] private Joystick _joystick;
         [SerializeField] private Camera _movementCamera;
         
@@ -61,6 +63,7 @@ namespace Crusher
 
         private void Awake()
         {
+            Instance = this;
 /*#if UNITY_EDITOR
             Application.targetFrameRate = 120;
 #else
@@ -69,10 +72,14 @@ namespace Crusher
             Application.targetFrameRate = 60;
             SetUpCraneController();
             InitializeFuel();
+            InitializeRoundState();
         }
 
         private void OnDestroy()
         {
+            if (Instance == this)
+                Instance = null;
+
             if (_switchToolButton != null)
             {
                 _switchToolButton.onClick.RemoveListener(ToggleTool);
@@ -81,8 +88,10 @@ namespace Crusher
 
         private void Update()
         {
+            if (_roundEnded) return;
+
             UpdateFuel();
-            if (!HasFuel) return;
+            if (_roundEnded || !HasFuel) return;
 
             Vector2 input = _joystick != null ? _joystick.Direction : Vector2.zero;
             if (input.sqrMagnitude <= 0.0001f) return;
@@ -93,6 +102,8 @@ namespace Crusher
 
         private void FixedUpdate()
         {
+            if (_roundEnded) return;
+
             if (_suctionDevice != null)
                 _suctionDevice.ProcessSuction(_isSuctionMode && HasFuel);
         }
@@ -125,11 +136,28 @@ namespace Crusher
             _sawContactMoveMultiplier = Mathf.Min(1f, _sawContactMoveMultiplier + _sawContactMoveMultiplierStep);
         }
 
+        public void StartRound()
+        {
+            _roundEnded = false;
+            SetFuelAvailable(true);
+            ResetJoystick();
+            _joystick.gameObject.SetActive(true);
+        }
+
+        public void StopRound()
+        {
+            if (_roundEnded) return;
+
+            _roundEnded = true;
+            ResetFuelToInitial();
+            SetFuelAvailable(false);
+            ResetCranePose();
+            ResetJoystick();
+            _joystick.gameObject.SetActive(false);
+        }
+
         private void SetUpCraneController()
         {
-            if (_joystick != null)
-                _joystick.gameObject.SetActive(true);
-            
             _switchToolButton.onClick.AddListener(ToggleTool);
             
             int existingJointCount = GetExistingJointCount();

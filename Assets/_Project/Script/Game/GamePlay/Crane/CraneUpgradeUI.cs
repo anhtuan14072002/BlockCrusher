@@ -1,3 +1,4 @@
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -7,7 +8,7 @@ namespace Crusher
     {
         [SerializeField] private CraneController _craneController;
         [SerializeField] private SawBlockCutter _sawCutter;
-        [SerializeField] private Text _suckedBlockCountText;
+        [SerializeField] private TextMeshProUGUI _suckedBlockCountText;
         [SerializeField] private Button _increaseSawContactSpeedButton;
         [SerializeField] private Button _increaseSawScaleButton;
         [SerializeField] private Button _increaseFuelButton;
