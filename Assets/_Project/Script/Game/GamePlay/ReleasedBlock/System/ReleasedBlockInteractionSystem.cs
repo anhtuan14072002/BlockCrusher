@@ -97,6 +97,17 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
             if (spawner.TryCreatePendingSawPushJob(out TextureBlockSpawner.SawPushJob sawPushJob))
                 dependency = sawPushJob.ScheduleParallel(_query, dependency);
         }
+
+        for (int i = TextureBlockSpawner.ActiveSpawnerCount - 1; i >= 0; i--)
+        {
+            TextureBlockSpawner spawner = TextureBlockSpawner.GetActiveSpawner(i);
+            if (spawner != null &&
+                spawner.TryCreateSolidConstraintJob(
+                    out TextureBlockSpawner.ReleasedBlockSolidConstraintJob solidConstraintJob))
+            {
+                dependency = solidConstraintJob.ScheduleParallel(_query, dependency);
+            }
+        }
         state.Dependency = dependency;
     }
 

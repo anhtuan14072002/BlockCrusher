@@ -767,8 +767,15 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     private bool IsSolidAlongDirection(Vector3 worldPosition, Vector3 direction,
         float nearProbeDistance, float farProbeDistance)
     {
-        return IsSolidAtWorldCell(worldPosition + direction * nearProbeDistance) ||
-               IsSolidAtWorldCell(worldPosition + direction * farProbeDistance);
+        Vector3 lateralOffset = new Vector3(-direction.y, direction.x, 0f) * (_cellSize * 0.45f);
+        Vector3 nearPoint = worldPosition + direction * nearProbeDistance;
+        Vector3 farPoint = worldPosition + direction * farProbeDistance;
+        return IsSolidAtWorldCell(nearPoint) ||
+               IsSolidAtWorldCell(farPoint) ||
+               IsSolidAtWorldCell(nearPoint + lateralOffset) ||
+               IsSolidAtWorldCell(nearPoint - lateralOffset) ||
+               IsSolidAtWorldCell(farPoint + lateralOffset) ||
+               IsSolidAtWorldCell(farPoint - lateralOffset);
     }
     private bool IsSolidAtWorldCell(Vector3 worldPosition)
     {
@@ -942,6 +949,34 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
             BladeRadius = _pendingSawRadius,
             MaxVelocity = safeMaxVelocity,
             CellSize = _cellSize,
+            GridWidth = _gridWidth,
+            GridHeight = _gridHeight,
+            OwnerId = _ownerId
+        };
+        
+        return true;
+    }
+    internal bool TryCreateSolidConstraintJob(out ReleasedBlockSolidConstraintJob job)
+    {
+        job = default;
+        if (!_cellSolid.IsCreated || _runtimeParent == null)
+            return false;
+
+        Matrix4x4 worldToLocalMatrix = _runtimeParent.worldToLocalMatrix;
+        Matrix4x4 localToWorldMatrix = _runtimeParent.localToWorldMatrix;
+        job = new ReleasedBlockSolidConstraintJob
+        {
+            CellSolid = _cellSolid,
+            WorldToLocal = new float4x4(ToFloat4(worldToLocalMatrix.GetColumn(0)),
+                ToFloat4(worldToLocalMatrix.GetColumn(1)), ToFloat4(worldToLocalMatrix.GetColumn(2)),
+                ToFloat4(worldToLocalMatrix.GetColumn(3))),
+            LocalToWorld = new float4x4(ToFloat4(localToWorldMatrix.GetColumn(0)),
+                ToFloat4(localToWorldMatrix.GetColumn(1)), ToFloat4(localToWorldMatrix.GetColumn(2)),
+                ToFloat4(localToWorldMatrix.GetColumn(3))),
+            Offset = ToFloat3(_offset),
+            CellSize = _cellSize,
+            BlockRadius = _cellSize * 0.48f,
+            DeltaTime = Mathf.Max(Time.fixedDeltaTime, 0.001f),
             GridWidth = _gridWidth,
             GridHeight = _gridHeight,
             OwnerId = _ownerId
@@ -1291,8 +1326,15 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         private bool IsSolidAlongDirection(float3 worldPosition, float3 direction,
             float nearProbeDistance, float farProbeDistance)
         {
-            return IsSolidAtWorldCell(worldPosition + direction * nearProbeDistance) ||
-                   IsSolidAtWorldCell(worldPosition + direction * farProbeDistance);
+            float3 lateralOffset = new float3(-direction.y, direction.x, 0f) * (CellSize * 0.45f);
+            float3 nearPoint = worldPosition + direction * nearProbeDistance;
+            float3 farPoint = worldPosition + direction * farProbeDistance;
+            return IsSolidAtWorldCell(nearPoint) ||
+                   IsSolidAtWorldCell(farPoint) ||
+                   IsSolidAtWorldCell(nearPoint + lateralOffset) ||
+                   IsSolidAtWorldCell(nearPoint - lateralOffset) ||
+                   IsSolidAtWorldCell(farPoint + lateralOffset) ||
+                   IsSolidAtWorldCell(farPoint - lateralOffset);
         }
 
         private bool IsSolidAtWorldCell(float3 worldPosition)
@@ -1310,6 +1352,117 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
             float lengthSq = math.lengthsq(value);
             float maxLengthSq = maxLength * maxLength;
             return lengthSq > maxLengthSq ? value * (maxLength * math.rsqrt(lengthSq)) : value;
+        }
+    }
+    [BurstCompile(FloatMode = FloatMode.Fast, FloatPrecision = FloatPrecision.Low)]
+    internal partial struct ReleasedBlockSolidConstraintJob : IJobEntity
+    {
+        [ReadOnly] public NativeArray<byte> CellSolid;
+        public float4x4 WorldToLocal;
+        public float4x4 LocalToWorld;
+        public float3 Offset;
+        public float CellSize;
+        public float BlockRadius;
+        public float DeltaTime;
+        public int GridWidth;
+        public int GridHeight;
+        public int OwnerId;
+
+        private void Execute(ref LocalTransform transform, ref PhysicsVelocity velocity,
+            in ReleasedBlockComponent block)
+        {
+            if (block.OwnerId != OwnerId)
+                return;
+
+            float3 position = transform.Position;
+            float3 resolvedPosition = ResolvePenetration(position);
+            ApplyCorrection(ref velocity, resolvedPosition - position);
+            transform.Position = resolvedPosition;
+
+            float3 predictedPosition = resolvedPosition + velocity.Linear * DeltaTime;
+            predictedPosition.z = resolvedPosition.z;
+            float3 resolvedPrediction = ResolvePenetration(predictedPosition);
+            ApplyCorrection(ref velocity, resolvedPrediction - predictedPosition);
+        }
+
+        private float3 ResolvePenetration(float3 worldPosition)
+        {
+            float3 localPosition = math.transform(WorldToLocal, worldPosition);
+            float2 position = localPosition.xy;
+
+            for (int iteration = 0; iteration < 4; iteration++)
+            {
+                float2 previousPosition = position;
+                int centerX = (int)math.round((position.x - Offset.x) / CellSize);
+                int centerY = (int)math.round((position.y - Offset.y) / CellSize);
+
+                for (int y = centerY - 1; y <= centerY + 1; y++)
+                {
+                    if ((uint)y >= (uint)GridHeight)
+                        continue;
+
+                    for (int x = centerX - 1; x <= centerX + 1; x++)
+                    {
+                        if ((uint)x >= (uint)GridWidth || CellSolid[y * GridWidth + x] == 0)
+                            continue;
+
+                        position = ResolveCellPenetration(position, x, y);
+                    }
+                }
+
+                if (math.lengthsq(position - previousPosition) <= 0.00000001f)
+                    break;
+            }
+
+            float3 resolvedWorldPosition = math.transform(LocalToWorld,
+                new float3(position.x, position.y, localPosition.z));
+            resolvedWorldPosition.z = worldPosition.z;
+            return resolvedWorldPosition;
+        }
+
+        private float2 ResolveCellPenetration(float2 position, int cellX, int cellY)
+        {
+            float2 cellCenter = Offset.xy + new float2(cellX, cellY) * CellSize;
+            float halfCell = CellSize * 0.5f;
+            float2 boundsMin = cellCenter - halfCell;
+            float2 boundsMax = cellCenter + halfCell;
+            float2 closest = math.clamp(position, boundsMin, boundsMax);
+            float2 delta = position - closest;
+            float distanceSq = math.lengthsq(delta);
+            float radiusSq = BlockRadius * BlockRadius;
+            if (distanceSq >= radiusSq)
+                return position;
+
+            if (distanceSq > 0.00000001f)
+                return position + delta * (BlockRadius * math.rsqrt(distanceSq) - 1f);
+
+            float left = position.x - boundsMin.x;
+            float right = boundsMax.x - position.x;
+            float down = position.y - boundsMin.y;
+            float up = boundsMax.y - position.y;
+            float nearest = math.min(math.min(left, right), math.min(down, up));
+            if (nearest == left)
+                position.x = boundsMin.x - BlockRadius;
+            else if (nearest == right)
+                position.x = boundsMax.x + BlockRadius;
+            else if (nearest == down)
+                position.y = boundsMin.y - BlockRadius;
+            else
+                position.y = boundsMax.y + BlockRadius;
+            return position;
+        }
+
+        private static void ApplyCorrection(ref PhysicsVelocity velocity, float3 correction)
+        {
+            correction.z = 0f;
+            float correctionLengthSq = math.lengthsq(correction);
+            if (correctionLengthSq <= 0.00000001f)
+                return;
+
+            float3 normal = correction * math.rsqrt(correctionLengthSq);
+            float inwardSpeed = math.dot(velocity.Linear, normal);
+            if (inwardSpeed < 0f)
+                velocity.Linear -= normal * inwardSpeed;
         }
     }
     internal struct TextureBlockMeshBuilder
