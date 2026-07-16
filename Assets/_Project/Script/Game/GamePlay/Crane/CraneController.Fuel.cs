@@ -23,9 +23,8 @@ namespace Crusher
         {
             if (!_fuelEnabled || _fuelUpgradeStep <= 0f) return;
 
-            _maxFuel += _fuelUpgradeStep;
-            _initialFuel += _fuelUpgradeStep;
-            _currentFuel += _fuelUpgradeStep;
+            _initialFuel = Mathf.Min(_maxFuel, _initialFuel + _fuelUpgradeStep);
+            _currentFuel = Mathf.Min(_maxFuel, _currentFuel + _fuelUpgradeStep);
             SetFuelAvailable(!_roundEnded);
             RefreshFuelUI();
         }

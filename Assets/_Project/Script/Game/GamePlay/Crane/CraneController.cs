@@ -113,6 +113,7 @@ namespace Crusher
             if (_activeJointCount >= _maxJointCount) return;
 
             Vector3 lockedSawPosition = GetSawPosition();
+            Quaternion lockedSawRotation = _saw.rotation;
             int insertIndex = _activeJointCount - 1;
             int storageIndex = _activeJointCount;
             Transform insertedJoint = GetOrCreateJoint(storageIndex);
@@ -128,6 +129,7 @@ namespace Crusher
             SolveJointsToSaw();
             CacheSawRotationOffset();
             ApplySawAtPosition(lockedSawPosition);
+            _saw.rotation = lockedSawRotation;
             _useSawInputRotation = true;
         }
 
