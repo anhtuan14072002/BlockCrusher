@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using TMPro;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
@@ -35,6 +36,14 @@ namespace Crusher
         [SerializeField] private Button _switchToolButton;
         [SerializeField] private Button _addJointButton;
 
+        [Header("Fuel Settings")]
+        [SerializeField, Min(1f)] private float _maxFuel = 30f;
+        [SerializeField, Min(0f)] private float _initialFuel = 30f;
+        [SerializeField, Min(0f)] private float _fuelBurnRate = 1f;
+        [SerializeField, Min(0f)] private float _fuelUpgradeStep = 10f;
+        [SerializeField] private Image _fuelFillMask;
+        [SerializeField] private TMP_Text _fuelPercentText;
+
         private Quaternion _sawRotationOffset = Quaternion.identity;
         private Quaternion[] _jointRotationOffsets;
         private Transform _movementCameraTransform;
@@ -59,6 +68,7 @@ namespace Crusher
 #endif*/
             Application.targetFrameRate = 60;
             SetUpCraneController();
+            InitializeFuel();
         }
 
         private void OnDestroy()
@@ -71,6 +81,9 @@ namespace Crusher
 
         private void Update()
         {
+            UpdateFuel();
+            if (!HasFuel) return;
+
             Vector2 input = _joystick != null ? _joystick.Direction : Vector2.zero;
             if (input.sqrMagnitude <= 0.0001f) return;
 
@@ -81,7 +94,7 @@ namespace Crusher
         private void FixedUpdate()
         {
             if (_suctionDevice != null)
-                _suctionDevice.ProcessSuction(_isSuctionMode);
+                _suctionDevice.ProcessSuction(_isSuctionMode && HasFuel);
         }
 
         public void AddJoint()

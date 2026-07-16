@@ -10,6 +10,7 @@ namespace Crusher
         [SerializeField] private Text _suckedBlockCountText;
         [SerializeField] private Button _increaseSawContactSpeedButton;
         [SerializeField] private Button _increaseSawScaleButton;
+        [SerializeField] private Button _increaseFuelButton;
 
         private int _displayedSuckedBlockCount = -1;
 
@@ -17,6 +18,7 @@ namespace Crusher
         {
             _increaseSawContactSpeedButton.onClick.AddListener(IncreaseSawContactSpeed);
             _increaseSawScaleButton.onClick.AddListener(IncreaseSawScale);
+            _increaseFuelButton.onClick.AddListener(IncreaseFuelCapacity);
             RefreshSuckedBlockCount();
         }
 
@@ -46,6 +48,11 @@ namespace Crusher
         private void IncreaseSawScale()
         {
             _sawCutter.IncreaseSawHeadScale();
+        }
+
+        private void IncreaseFuelCapacity()
+        {
+            _craneController.IncreaseFuelCapacity();
         }
 
         private void AddSuckedBlocks(int count)

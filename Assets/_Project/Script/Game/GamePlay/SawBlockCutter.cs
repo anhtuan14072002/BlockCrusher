@@ -23,6 +23,7 @@ public sealed class SawBlockCutter : MonoBehaviour
     private Vector3 _pressDirection;
     private float _pressSpeed;
     private float _resistanceUntil;
+    private float _lastBlockCutTime = float.NegativeInfinity;
     private bool _hasMovedSinceEnable;
     private readonly Dictionary<Collider, TextureBlockChunk> _chunkCache = new Dictionary<Collider, TextureBlockChunk>(16);
 
@@ -36,6 +37,8 @@ public sealed class SawBlockCutter : MonoBehaviour
             return Mathf.Clamp01((Time.time - _resistanceUntil) / _resistanceRecoveryDuration);
         }
     }
+
+    internal bool IsCuttingBlock => Time.time <= _lastBlockCutTime + Time.fixedDeltaTime * 2f;
 
     public void IncreaseSawHeadScale()
     {
@@ -61,6 +64,7 @@ public sealed class SawBlockCutter : MonoBehaviour
         _sawVelocity = Vector3.zero;
         _pressDirection = Vector3.zero;
         _pressSpeed = 0f;
+        _lastBlockCutTime = float.NegativeInfinity;
         _hasMovedSinceEnable = false;
     }
 
@@ -89,7 +93,10 @@ public sealed class SawBlockCutter : MonoBehaviour
         _previousPosition = currentPosition;
 
         if (_hasMovedSinceEnable && ReleaseAlongMovement(previousPosition, currentPosition))
+        {
+            RegisterBlockCut();
             RegisterResistance();
+        }
     }
 
     private void OnTriggerEnter(Collider other)
@@ -142,7 +149,15 @@ public sealed class SawBlockCutter : MonoBehaviour
         TextureBlockChunk chunk = GetChunk(other);
         if (chunk != null && chunk.ReleaseAtWorld(contactPoint, _pressDirection, _pressSpeed, _compressionForce,
                 _bladeTangentialForce, _bladeSpinDirection, _bladePushRadius, _sideDampingOnContact, _maxBlockVelocity))
+        {
+            RegisterBlockCut();
             RegisterResistance();
+        }
+    }
+
+    private void RegisterBlockCut()
+    {
+        _lastBlockCutTime = Time.time;
     }
 
     private void RegisterResistance()
