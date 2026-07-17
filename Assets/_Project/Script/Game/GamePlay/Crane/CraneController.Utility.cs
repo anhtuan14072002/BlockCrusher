@@ -11,14 +11,17 @@ namespace Crusher
             return _joints.Count > 0 && _joints[0] != null ? _joints[0].position : transform.position;
         }
 
-        private void ClampSawTargetToReach()
+        private bool ClampSawTargetToReach()
         {
             Vector3 rootPosition = GetRootPosition();
             Vector3 offset = _sawTarget - rootPosition;
             float maxReach = GetActiveReach();
 
-            if (offset.sqrMagnitude > maxReach * maxReach)
-                _sawTarget = rootPosition + offset.normalized * maxReach;
+            if (offset.sqrMagnitude <= maxReach * maxReach)
+                return false;
+
+            _sawTarget = rootPosition + offset.normalized * maxReach;
+            return true;
         }
 
         private Vector3 GetSawPosition()

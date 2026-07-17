@@ -13,14 +13,15 @@ namespace Crusher
             _sawTarget += moveDirection * (_sawMoveSpeed * moveMultiplier * Time.deltaTime);
             _sawTarget.x = Mathf.Clamp(_sawTarget.x, _targetXBounds.x, _targetXBounds.y);
             _sawTarget.y = Mathf.Clamp(_sawTarget.y, _targetYBounds.x, _targetYBounds.y);
-            ClampSawTargetToReach();
+            bool reachClamped = ClampSawTargetToReach();
 
             if (_isSuctionMode && _suctionDevice != null)
                 _sawTarget = _suctionDevice.ClampSawTarget(GetSawPosition(), _sawTarget);
 
             Vector3 actualMoveDirection = _sawTarget - previousTarget;
-            if (actualMoveDirection.sqrMagnitude > 0.0001f)
-                _lastSawMoveDirection = actualMoveDirection.normalized;
+            Vector3 facingDirection = reachClamped ? moveDirection : actualMoveDirection;
+            if (facingDirection.sqrMagnitude > 0.0001f)
+                _lastSawMoveDirection = facingDirection.normalized;
         }
 
         private void ApplySawAtPosition(Vector3 sawPosition)
