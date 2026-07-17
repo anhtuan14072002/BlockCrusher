@@ -128,7 +128,7 @@ namespace Crusher
             _activeJointCount++;
             ApplyActiveJointCount();
             _useSawInputRotation = false;
-            SeedZigZagPoseToSaw();
+            SeedCoiledPoseToSaw();
             SolveJointsToSaw();
             ApplySawAtPosition(lockedSawPosition);
             _saw.rotation = lockedSawRotation;
@@ -162,12 +162,12 @@ namespace Crusher
 
         public void StopRound()
         {
+            ResetCranePose();
             if (_roundEnded) return;
 
             _roundEnded = true;
             ResetFuelToInitial();
             SetFuelAvailable(false);
-            ResetCranePose();
             ResetJoystick();
             _joystick.gameObject.SetActive(false);
         }

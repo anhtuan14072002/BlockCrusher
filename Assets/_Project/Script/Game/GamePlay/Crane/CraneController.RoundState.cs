@@ -4,13 +4,13 @@ namespace Crusher
 {
     public sealed partial class CraneController
     {
-        [SerializeField] private Vector3 _roundStartSawLocalPosition = new(-0.43f, 4.278f, 0f);
-
         private bool _roundEnded = true;
+        private Vector3 _roundStartSawLocalPosition;
         private Quaternion _initialSawLocalRotation;
 
         private void InitializeRoundState()
         {
+            _roundStartSawLocalPosition = _saw.localPosition;
             _initialSawLocalRotation = _saw.localRotation;
             ResetJoystick();
             _joystick.gameObject.SetActive(false);
@@ -29,7 +29,7 @@ namespace Crusher
             _sawTarget = _saw.position;
             _lastSawMoveDirection = Vector3.zero;
             _useSawInputRotation = false;
-            SeedZigZagPoseToSaw();
+            SeedCoiledPoseToSaw();
             SolveJointsToSaw();
             _saw.localRotation = _initialSawLocalRotation;
             _useSawInputRotation = true;

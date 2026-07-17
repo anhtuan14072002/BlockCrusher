@@ -64,46 +64,81 @@ namespace Crusher
             else if (sawDirection.sqrMagnitude > 0.0001f)
                 _saw.rotation = GetSegmentRotation(sawDirection) * _sawRotationOffset;
         }
-        private void SeedZigZagPoseToSaw()
+        private void SeedCoiledPoseToSaw()
         {
             if (_saw == null || _activeJointCount <= 1)
                 return;
+
             Vector3 rootPosition = GetRootPosition();
             Vector3 sawPosition = _saw.position;
             float reach = GetActiveReach();
             float targetDistance = Vector3.Distance(rootPosition, sawPosition);
             if (targetDistance <= 0.0001f)
                 return;
+
             int segmentCount = _activeJointCount;
             Vector3 forward = (sawPosition - rootPosition) / targetDistance;
-            Vector3 bendNormal = GetPreferredZigZagNormal(rootPosition, forward);
-            float slack = Mathf.Max(0f, reach - targetDistance);
-            float amplitude = Mathf.Min(_segmentLength * 0.55f, slack * 0.5f);
-            if (amplitude <= 0.0001f)
-                amplitude = _segmentLength * 0.25f;
+            Vector3 bendNormal = new Vector3(-forward.y, forward.x, 0f);
+            float firstRadius = GetSolverSegmentLength(0);
+            if (targetDistance < firstRadius)
+                return;
+
             _solvePositions[0] = rootPosition;
+            float remainingReach = reach - firstRadius;
+            float walkedLength = firstRadius;
+            float currentRadius = firstRadius;
+            float totalTurn = 0f;
             for (int i = 1; i < segmentCount; i++)
             {
-                float t = i / (float)segmentCount;
-                float sign = (i & 1) == 0 ? -1f : 1f;
-                _solvePositions[i] = Vector3.Lerp(rootPosition, sawPosition, t) + bendNormal * (amplitude * sign);
+                float segmentLength = GetSolverSegmentLength(i);
+                walkedLength += segmentLength;
+                float nextRadius = Mathf.Lerp(
+                    firstRadius,
+                    targetDistance,
+                    (walkedLength - firstRadius) / remainingReach);
+                totalTurn += GetCoilAngleStep(currentRadius, nextRadius, segmentLength);
+                currentRadius = nextRadius;
             }
+
+            float angle = -totalTurn;
+            _solvePositions[1] = rootPosition
+                                 + forward * (Mathf.Cos(angle) * firstRadius)
+                                 + bendNormal * (Mathf.Sin(angle) * firstRadius);
+            walkedLength = firstRadius;
+            currentRadius = firstRadius;
+            for (int i = 1; i < segmentCount; i++)
+            {
+                float segmentLength = GetSolverSegmentLength(i);
+                walkedLength += segmentLength;
+                float nextRadius = Mathf.Lerp(
+                    firstRadius,
+                    targetDistance,
+                    (walkedLength - firstRadius) / remainingReach);
+                angle += GetCoilAngleStep(currentRadius, nextRadius, segmentLength);
+                _solvePositions[i + 1] = rootPosition
+                                         + forward * (Mathf.Cos(angle) * nextRadius)
+                                         + bendNormal * (Mathf.Sin(angle) * nextRadius);
+                currentRadius = nextRadius;
+            }
+
             _solvePositions[segmentCount] = sawPosition;
             ApplySolvedJoints();
         }
-        private Vector3 GetPreferredZigZagNormal(Vector3 rootPosition, Vector3 forward)
+
+        private static float GetCoilAngleStep(float currentRadius, float nextRadius, float segmentLength)
         {
-            Vector3 normal = new Vector3(-forward.y, forward.x, 0f);
-            float side = 0f;
-            for (int i = 1; i < _activeJointCount; i++)
-            {
-                Transform joint = _joints[i];
-                if (joint != null)
-                    side += Vector3.Dot(joint.position - rootPosition, normal);
-            }
-            if (Mathf.Abs(side) > 0.0001f)
-                return normal * Mathf.Sign(side);
-            return normal;
+            float cosine = (
+                currentRadius * currentRadius
+                + nextRadius * nextRadius
+                - segmentLength * segmentLength)
+                / (2f * currentRadius * nextRadius);
+            return Mathf.Acos(Mathf.Clamp(cosine, -1f, 1f));
+        }
+
+        private float GetSolverSegmentLength(int segmentIndex)
+        {
+            float segmentLength = _segmentLengths[segmentIndex];
+            return segmentLength > 0.0001f ? segmentLength : _segmentLength;
         }
     }
 }

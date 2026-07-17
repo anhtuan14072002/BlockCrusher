@@ -7,6 +7,7 @@ public sealed class CameraEdgeFollow : MonoBehaviour
     [SerializeField] private Vector2 _minViewport = new Vector2(0.28f, 0.24f);
     [SerializeField] private Vector2 _maxViewport = new Vector2(0.72f, 0.76f);
     [SerializeField] private float _smoothTime = 0.12f;
+    [SerializeField] private float _focusSmoothTime = 0.22f;
 
     private Vector3 _velocity;
     private Transform _transform;
@@ -14,6 +15,7 @@ public sealed class CameraEdgeFollow : MonoBehaviour
     private float _lastAspect;
     private float _worldHeight;
     private float _worldWidth;
+    private bool _isFocusing;
 
     private void Awake()
     {
@@ -27,11 +29,39 @@ public sealed class CameraEdgeFollow : MonoBehaviour
     {
         if (_target == null || _camera == null) return;
         RefreshCameraSize();
-        Vector3 targetPosition = GetCameraTargetPosition();
+        Vector3 targetPosition = _isFocusing
+            ? GetCenteredCameraPosition()
+            : GetCameraTargetPosition();
         Vector3 cameraPosition = _transform.position;
+        float sqrDistance = (targetPosition - cameraPosition).sqrMagnitude;
 
-        if ((targetPosition - cameraPosition).sqrMagnitude <= 0.000001f) return;
-        _transform.position = Vector3.SmoothDamp(cameraPosition, targetPosition, ref _velocity, _smoothTime);
+        if (_isFocusing && sqrDistance <= 0.0001f)
+        {
+            _transform.position = targetPosition;
+            _velocity = Vector3.zero;
+            _isFocusing = false;
+            return;
+        }
+
+        if (sqrDistance <= 0.000001f) return;
+
+        float smoothTime = _isFocusing ? _focusSmoothTime : _smoothTime;
+        _transform.position = Vector3.SmoothDamp(cameraPosition, targetPosition, ref _velocity, smoothTime);
+    }
+
+    public void FocusTarget()
+    {
+        _velocity = Vector3.zero;
+        _isFocusing = true;
+    }
+
+    private Vector3 GetCenteredCameraPosition()
+    {
+        Vector3 viewportPosition = _camera.WorldToViewportPoint(_target.position);
+        Vector3 cameraPosition = _transform.position;
+        cameraPosition.x += (viewportPosition.x - 0.5f) * _worldWidth;
+        cameraPosition.y += (viewportPosition.y - 0.5f) * _worldHeight;
+        return cameraPosition;
     }
 
     private Vector3 GetCameraTargetPosition()

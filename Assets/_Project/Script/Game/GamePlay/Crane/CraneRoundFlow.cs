@@ -14,6 +14,7 @@ namespace Crusher
         [SerializeField] private Button _playButton;
         [SerializeField] private Button _btnBack;
         [SerializeField] private TextureBlockSpawner _blockSpawner;
+        [SerializeField] private CameraEdgeFollow _cameraFollow;
 
         private void Awake()
         {
@@ -42,11 +43,14 @@ namespace Crusher
         private void BackRound()
         {
             CraneController.Instance.StopRound();
+            _cameraFollow.FocusTarget();
             ShowUpgradeScreen();
         }
 
         private void ContinueRound()
         {
+            CraneController.Instance.StopRound();
+            _cameraFollow.FocusTarget();
             _popupEndRound.SetActive(false);
             ShowUpgradeScreen();
         }
