@@ -42,6 +42,8 @@ namespace Crusher
         [SerializeField, Min(1f)] private float _maxFuel = 30f;
         [SerializeField, Min(0f)] private float _initialFuel = 30f;
         [SerializeField, Min(0f)] private float _fuelBurnRate = 1f;
+        [SerializeField, Min(0f)] private float _fuelBurnRateIncreaseMultiplier = 1f;
+        [SerializeField, Min(0f)] private float _fuelBurnRateSawScaleIncreaseMultiplier = 1f;
         [SerializeField, Min(0f)] private float _fuelUpgradeStep = 10f;
         [SerializeField] private Image _fuelFillMask;
         [SerializeField] private TMP_Text _fuelPercentText;
@@ -136,7 +138,18 @@ namespace Crusher
 
         public void IncreaseSawContactMoveMultiplier()
         {
+            float previousMultiplier = _sawContactMoveMultiplier;
             _sawContactMoveMultiplier = Mathf.Min(1f, _sawContactMoveMultiplier + _sawContactMoveMultiplierStep);
+            float speedIncreaseRate = _sawContactMoveMultiplier / previousMultiplier - 1f;
+            _fuelBurnRate *= 1f + speedIncreaseRate * _fuelBurnRateIncreaseMultiplier;
+        }
+
+        public void IncreaseSawHeadScale()
+        {
+            float previousScale = _sawCutter.transform.localScale.x;
+            _sawCutter.IncreaseSawHeadScale();
+            float scaleIncreaseRate = _sawCutter.transform.localScale.x / previousScale - 1f;
+            _fuelBurnRate *= 1f + scaleIncreaseRate * _fuelBurnRateSawScaleIncreaseMultiplier;
         }
 
         public void StartRound()

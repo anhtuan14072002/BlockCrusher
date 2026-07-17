@@ -31,27 +31,14 @@ public sealed class SawBlockCutter : MonoBehaviour
     {
         get
         {
-            if (Time.time <= _resistanceUntil)
-                return 0f;
-
+            if (Time.time <= _resistanceUntil) return 0f;
+            
             return Mathf.Clamp01((Time.time - _resistanceUntil) / _resistanceRecoveryDuration);
         }
     }
 
     internal bool IsCuttingBlock => Time.time <= _lastBlockCutTime + Time.fixedDeltaTime * 2f;
-
-    public void IncreaseSawHeadScale()
-    {
-        float currentScale = transform.localScale.x;
-        float nextScale = Mathf.Min(currentScale + _sawHeadScaleStep, _maxSawHeadScale);
-        if (nextScale <= currentScale)
-            return;
-
-        float scaleMultiplier = nextScale / currentScale;
-        transform.localScale *= scaleMultiplier;
-        TextureBlockSpawner.ScaleSawReleaseRadiusForActiveSpawners(scaleMultiplier);
-    }
-
+    
     private void Awake()
     {
         _bladeVisual ??= transform;
@@ -138,6 +125,18 @@ public sealed class SawBlockCutter : MonoBehaviour
         _chunkCache.Clear();
     }
 
+    public void IncreaseSawHeadScale()
+    {
+        float currentScale = transform.localScale.x;
+        float nextScale = Mathf.Min(currentScale + _sawHeadScaleStep, _maxSawHeadScale);
+        
+        if (nextScale <= currentScale) return;
+
+        float scaleMultiplier = nextScale / currentScale;
+        transform.localScale *= scaleMultiplier;
+        TextureBlockSpawner.ScaleSawReleaseRadiusForActiveSpawners(scaleMultiplier);
+    }
+    
     private void ReleaseAndPush(Collider other)
     {
         Vector3 contactPoint = other.ClosestPoint(transform.position);

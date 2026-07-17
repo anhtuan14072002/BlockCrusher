@@ -7,7 +7,6 @@ namespace Crusher
     public sealed class CraneUpgradeUI : MonoBehaviour
     {
         [SerializeField] private CraneController _craneController;
-        [SerializeField] private SawBlockCutter _sawCutter;
         [SerializeField] private TextMeshProUGUI _suckedBlockCountText;
         [SerializeField] private Button _increaseSawContactSpeedButton;
         [SerializeField] private Button _increaseSawScaleButton;
@@ -48,7 +47,7 @@ namespace Crusher
 
         private void IncreaseSawScale()
         {
-            _sawCutter.IncreaseSawHeadScale();
+            _craneController.IncreaseSawHeadScale();
         }
 
         private void IncreaseFuelCapacity()
