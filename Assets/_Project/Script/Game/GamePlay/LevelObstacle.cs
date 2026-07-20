@@ -219,7 +219,7 @@ public sealed class LevelObstacle : MonoBehaviour
 
     private void CreateConvexCollider()
     {
-        using NativeList<float3> points = new NativeList<float3>(Allocator.Temp);
+        using NativeList<float3> points = new NativeList<float3>(Allocator.TempJob);
         _shape.GetBakedConvexProperties(points);
         if (points.Length < 4)
             return;
@@ -230,7 +230,7 @@ public sealed class LevelObstacle : MonoBehaviour
 
     private void CreateMeshCollider()
     {
-        using NativeList<float3> vertices = new NativeList<float3>(Allocator.Temp);
+        using NativeList<float3> vertices = new NativeList<float3>(Allocator.TempJob);
         using NativeList<int3> triangles = new NativeList<int3>(Allocator.Temp);
         _shape.GetBakedMeshProperties(vertices, triangles);
         if (vertices.Length == 0 || triangles.Length == 0)
