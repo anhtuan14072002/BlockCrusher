@@ -15,7 +15,9 @@ namespace Crusher
             _sawTarget.y = Mathf.Clamp(_sawTarget.y, _targetYBounds.x, _targetYBounds.y);
             bool reachClamped = ClampSawTargetToReach();
 
-            if (_isSuctionMode && _suctionDevice != null)
+            if (!_isSuctionMode && _sawCutter != null)
+                _sawTarget = _sawCutter.ClampObstacleTarget(GetSawPosition(), _sawTarget);
+            else if (_suctionDevice != null)
                 _sawTarget = _suctionDevice.ClampSawTarget(GetSawPosition(), _sawTarget);
 
             Vector3 actualMoveDirection = _sawTarget - previousTarget;

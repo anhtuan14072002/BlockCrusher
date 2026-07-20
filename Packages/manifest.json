@@ -10,12 +10,10 @@
     }
   ],
   "dependencies": {
-    "com.coplaydev.coplay": "https://github.com/CoplayDev/coplay-unity-plugin.git#beta",
+    "com.annulusgames.lit-motion": "https://github.com/annulusgames/LitMotion.git?path=src/LitMotion/Assets/LitMotion",
     "com.coplaydev.unity-mcp": "https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#main",
     "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask",
     "com.kyrylokuzyk.primetween": "file:../Assets/Plugins/PrimeTween/internal/com.kyrylokuzyk.primetween.tgz",
-    "com.trove.common": "0.3.6",
-    "com.trove.tweens": "0.3.3",
     "com.tuna.comon": "https://github.com/anhtuan14072002/Core.git?path=/com.tuna.comon",
     "com.tuna.config": "https://github.com/anhtuan14072002/Core.git?path=/com.tuna.config",
     "com.tuna.core": "https://github.com/anhtuan14072002/Core.git?path=/com.tuna.core",

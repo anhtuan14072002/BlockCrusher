@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 4006374709741783715}
   - component: {fileID: 7025930913786966314}
   - component: {fileID: 1716893171969237237}
-  - component: {fileID: 4150843910926866675}
+  - component: {fileID: 960628577540372396}
   m_Layer: 0
   m_Name: Effect Camera
   m_TagString: Untagged
@@ -73,9 +73,9 @@ Camera:
   m_Depth: 0
   m_CullingMask:
     serializedVersion: 2
-    m_Bits: 512
+    m_Bits: 0
   m_RenderingPath: -1
-  m_TargetTexture: {fileID: 8400000, guid: 1b5a71d425a80d34f96d3ac50db183b4, type: 2}
+  m_TargetTexture: {fileID: 8400000, guid: e9a694d72a3e5284ebeaa02a6e27a395, type: 2}
   m_TargetDisplay: 0
   m_TargetEye: 3
   m_HDR: 0
@@ -93,7 +93,7 @@ AudioListener:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7006615191469824624}
   m_Enabled: 1
---- !u!114 &4150843910926866675
+--- !u!114 &960628577540372396
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -102,9 +102,9 @@ MonoBehaviour:
   m_GameObject: {fileID: 7006615191469824624}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b7462449f31a3194894ec40db2c09abd, type: 3}
+  m_Script: {fileID: 11500000, guid: cc859d71ee5365e4aa27635670b17070, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  iterations: 7
-  blurSpread: 0.7
-  blurShader: {fileID: 4800000, guid: cd9d32a42147e9447bed4a4f20d5a4d6, type: 3}
+  iterations: 3
+  blurSpread: 0.6
+  blurShader: {fileID: 4800000, guid: 9923624f966072341a73e9ae604fe779, type: 3}

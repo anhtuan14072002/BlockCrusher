@@ -1,5 +1,9 @@
 using System.Collections.Generic;
+using Unity.Entities;
+using Unity.Mathematics;
+using Unity.Physics.Authoring;
 using UnityEngine;
+using PhysicsCollider = Unity.Physics.Collider;
 
 public sealed class SawBlockCutter : MonoBehaviour
 {
@@ -26,6 +30,10 @@ public sealed class SawBlockCutter : MonoBehaviour
     private float _lastBlockCutTime = float.NegativeInfinity;
     private bool _hasMovedSinceEnable;
     private readonly Dictionary<Collider, TextureBlockChunk> _chunkCache = new Dictionary<Collider, TextureBlockChunk>(16);
+    private PhysicsShapeAuthoring _physicsShape;
+    private MeshFilter _meshFilter;
+    private BlobAssetReference<PhysicsCollider> _obstacleQueryCollider;
+    private Vector3 _obstacleQueryScale;
 
     public float ResistanceRecovery
     {
@@ -42,6 +50,8 @@ public sealed class SawBlockCutter : MonoBehaviour
     private void Awake()
     {
         _bladeVisual ??= transform;
+        _physicsShape = GetComponent<PhysicsShapeAuthoring>();
+        _meshFilter = GetComponent<MeshFilter>();
         _previousPosition = transform.position;
     }
 
@@ -125,6 +135,12 @@ public sealed class SawBlockCutter : MonoBehaviour
         _chunkCache.Clear();
     }
 
+    private void OnDestroy()
+    {
+        if (_obstacleQueryCollider.IsCreated)
+            _obstacleQueryCollider.Dispose();
+    }
+
     public void IncreaseSawHeadScale()
     {
         float currentScale = transform.localScale.x;
@@ -135,6 +151,51 @@ public sealed class SawBlockCutter : MonoBehaviour
         float scaleMultiplier = nextScale / currentScale;
         transform.localScale *= scaleMultiplier;
         TextureBlockSpawner.ScaleSawReleaseRadiusForActiveSpawners(scaleMultiplier);
+    }
+
+    internal Vector3 ClampObstacleTarget(Vector3 from, Vector3 to)
+    {
+        if (!EnsureObstacleQueryCollider())
+            return to;
+
+        return LevelObstacle.ClampSawTarget(from, to, _obstacleQueryCollider, transform.rotation);
+    }
+
+    private bool EnsureObstacleQueryCollider()
+    {
+        Vector3 scale = transform.lossyScale;
+        if (_obstacleQueryCollider.IsCreated && scale == _obstacleQueryScale)
+            return true;
+
+        if (_obstacleQueryCollider.IsCreated)
+            _obstacleQueryCollider.Dispose();
+
+        float radiusScale = Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.y));
+        Unity.Physics.SphereGeometry geometry;
+        if (_physicsShape != null && _physicsShape.ShapeType == ShapeType.Sphere)
+        {
+            geometry = _physicsShape.GetSphereProperties(out quaternion _);
+            geometry.Center = new float3(
+                geometry.Center.x * scale.x,
+                geometry.Center.y * scale.y,
+                geometry.Center.z * scale.z);
+            geometry.Radius *= radiusScale;
+        }
+        else
+        {
+            Bounds bounds = _meshFilter.sharedMesh.bounds;
+            geometry = new Unity.Physics.SphereGeometry
+            {
+                Center = new float3(
+                    bounds.center.x * scale.x,
+                    bounds.center.y * scale.y,
+                    bounds.center.z * scale.z),
+                Radius = Mathf.Max(bounds.extents.x, bounds.extents.y) * radiusScale
+            };
+        }
+        _obstacleQueryCollider = Unity.Physics.SphereCollider.Create(geometry);
+        _obstacleQueryScale = scale;
+        return _obstacleQueryCollider.IsCreated;
     }
     
     private void ReleaseAndPush(Collider other)

@@ -271,6 +271,8 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         };
         textureJob.Schedule(_cellColors.Length, 64).Complete();
         texturePixels.Dispose();
+        LevelObstacle.MaskSpawnCells(_cellSolid, _runtimeParent, _offset, _gridWidth, _gridHeight, _cellSize,
+            _chunkColliderDepth);
         _runtimeChunkMaterial = ResolveChunkMaterial();
         CreateChunks();
     }
@@ -864,6 +866,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
             _hasReleasedBlockQuery = true;
             EnsurePhysicsStep();
             EnsureReleasedBlockWalls();
+            LevelObstacle.EnsurePhysicsEntities(_ecsWorld);
         }
         return true;
     }

@@ -12,9 +12,10 @@ namespace Crusher
             Vector3 targetPosition = _sawTarget;
             Vector3 rootToTarget = targetPosition - rootPosition;
             float maxReach = GetActiveReach();
+            float straightReach = Mathf.Max(0f, maxReach - 0.001f);
             for (int i = 0; i < _activeJointCount; i++)
                 _solvePositions[i] = _joints[i] != null ? _joints[i].position : rootPosition;
-            if (rootToTarget.sqrMagnitude >= maxReach * maxReach)
+            if (rootToTarget.sqrMagnitude >= straightReach * straightReach)
             {
                 Vector3 direction = rootToTarget.normalized;
                 _solvePositions[0] = rootPosition;
@@ -25,9 +26,9 @@ namespace Crusher
                 return;
             }
             _solvePositions[0] = rootPosition;
-            _solvePositions[segmentCount] = targetPosition;
             for (int iteration = 0; iteration < _ikIterations; iteration++)
             {
+                _solvePositions[segmentCount] = targetPosition;
                 for (int i = segmentCount - 1; i >= 0; i--)
                 {
                     Vector3 direction = (_solvePositions[i] - _solvePositions[i + 1]).normalized;
@@ -39,7 +40,8 @@ namespace Crusher
                     Vector3 direction = (_solvePositions[i] - _solvePositions[i - 1]).normalized;
                     _solvePositions[i] = _solvePositions[i - 1] + direction * _segmentLengths[i - 1];
                 }
-                _solvePositions[segmentCount] = targetPosition;
+                if ((_solvePositions[segmentCount] - targetPosition).sqrMagnitude <= 0.000001f)
+                    break;
             }
             ApplySolvedJoints();
         }
