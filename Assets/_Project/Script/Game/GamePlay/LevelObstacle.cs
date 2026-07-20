@@ -19,6 +19,7 @@ public sealed class LevelObstacle : MonoBehaviour
     private PhysicsShapeAuthoring _shape;
     private BlobAssetReference<ColliderBlob> _collider;
     private RigidBody _rigidBody;
+    private RigidTransform _worldFromBody;
     private Aabb _bounds;
     private World _physicsWorld;
     private Entity _physicsEntity;
@@ -156,31 +157,120 @@ public sealed class LevelObstacle : MonoBehaviour
             return true;
 
         _shape ??= GetComponent<PhysicsShapeAuthoring>();
-        if (_shape.ShapeType != ShapeType.Mesh)
-            return false;
+        float4x4 shapeToWorld = _shape.GetShapeToWorldMatrix();
+        float4x4 localToShape =
+            math.mul(math.inverse(shapeToWorld), (float4x4)transform.localToWorldMatrix);
 
-        using NativeList<float3> vertices = new NativeList<float3>(Allocator.Temp);
-        using NativeList<int3> triangles = new NativeList<int3>(Allocator.Temp);
-        _shape.GetMeshProperties(vertices, triangles);
-        if (vertices.Length == 0 || triangles.Length == 0)
-            return false;
-
-        NativeArray<float3> vertexArray = vertices.AsArray();
-        for (int i = 0; i < vertexArray.Length; i++)
+        switch (_shape.ShapeType)
         {
-            Vector3 world = transform.TransformPoint(vertexArray[i]);
-            vertexArray[i] = ToFloat3(world);
+            case ShapeType.Box:
+                _collider = Unity.Physics.BoxCollider.Create(_shape.GetBakedBoxProperties());
+                break;
+            case ShapeType.Capsule:
+                CreateCapsuleCollider(localToShape);
+                break;
+            case ShapeType.ConvexHull:
+                CreateConvexCollider();
+                break;
+            case ShapeType.Cylinder:
+                _collider = Unity.Physics.CylinderCollider.Create(_shape.GetBakedCylinderProperties());
+                break;
+            case ShapeType.Mesh:
+                CreateMeshCollider();
+                break;
+            case ShapeType.Plane:
+                CreatePlaneCollider(localToShape);
+                break;
+            case ShapeType.Sphere:
+                CreateSphereCollider(localToShape);
+                break;
         }
 
-        _collider = Unity.Physics.MeshCollider.Create(vertexArray, triangles.AsArray());
+        if (!_collider.IsCreated)
+            return false;
+
+        _worldFromBody = new RigidTransform(ToQuaternion(transform.rotation), ToFloat3(transform.position));
         _rigidBody = new RigidBody
         {
             Collider = _collider,
-            WorldFromBody = RigidTransform.identity,
+            WorldFromBody = _worldFromBody,
             Scale = 1f
         };
         _bounds = _rigidBody.CalculateAabb();
-        return _collider.IsCreated;
+        return true;
+    }
+
+    private void CreateCapsuleCollider(float4x4 localToShape)
+    {
+        CapsuleGeometryAuthoring authoring = _shape.GetCapsuleProperties();
+        float3 center = math.transform(localToShape, authoring.Center);
+        float3 axis = TransformVector(localToShape, math.mul(authoring.Orientation, new float3(0f, 0f, 1f)));
+        float3 radiusX = TransformVector(localToShape, math.mul(authoring.Orientation, new float3(1f, 0f, 0f)));
+        float3 radiusY = TransformVector(localToShape, math.mul(authoring.Orientation, new float3(0f, 1f, 0f)));
+        float halfSegment = math.max(0f, authoring.Height * 0.5f - authoring.Radius);
+
+        _collider = Unity.Physics.CapsuleCollider.Create(new CapsuleGeometry
+        {
+            Vertex0 = center + axis * halfSegment,
+            Vertex1 = center - axis * halfSegment,
+            Radius = authoring.Radius * math.max(math.length(radiusX), math.length(radiusY))
+        });
+    }
+
+    private void CreateConvexCollider()
+    {
+        using NativeList<float3> points = new NativeList<float3>(Allocator.Temp);
+        _shape.GetBakedConvexProperties(points);
+        if (points.Length < 4)
+            return;
+
+        _collider = Unity.Physics.ConvexCollider.Create(
+            points.AsArray(), _shape.ConvexHullGenerationParameters.ToRunTime());
+    }
+
+    private void CreateMeshCollider()
+    {
+        using NativeList<float3> vertices = new NativeList<float3>(Allocator.Temp);
+        using NativeList<int3> triangles = new NativeList<int3>(Allocator.Temp);
+        _shape.GetBakedMeshProperties(vertices, triangles);
+        if (vertices.Length == 0 || triangles.Length == 0)
+            return;
+
+        _collider = Unity.Physics.MeshCollider.Create(vertices.AsArray(), triangles.AsArray());
+    }
+
+    private void CreatePlaneCollider(float4x4 localToShape)
+    {
+        _shape.GetPlaneProperties(out float3 center, out float2 size, out quaternion orientation);
+        float3 halfSize = new float3(size.x * 0.5f, 0f, size.y * 0.5f);
+        float3 vertex0 = center + math.mul(orientation, halfSize * new float3(-1f, 0f, 1f));
+        float3 vertex1 = center + math.mul(orientation, halfSize * new float3(1f, 0f, 1f));
+        float3 vertex2 = center + math.mul(orientation, halfSize * new float3(1f, 0f, -1f));
+        float3 vertex3 = center + math.mul(orientation, halfSize * new float3(-1f, 0f, -1f));
+
+        _collider = Unity.Physics.PolygonCollider.CreateQuad(
+            math.transform(localToShape, vertex0),
+            math.transform(localToShape, vertex1),
+            math.transform(localToShape, vertex2),
+            math.transform(localToShape, vertex3));
+    }
+
+    private void CreateSphereCollider(float4x4 localToShape)
+    {
+        SphereGeometry geometry = _shape.GetSphereProperties(out quaternion orientation);
+        float radiusScale = math.max(
+            math.length(TransformVector(localToShape, math.mul(orientation, new float3(1f, 0f, 0f)))),
+            math.max(
+                math.length(TransformVector(localToShape, math.mul(orientation, new float3(0f, 1f, 0f)))),
+                math.length(TransformVector(localToShape, math.mul(orientation, new float3(0f, 0f, 1f))))));
+        geometry.Center = math.transform(localToShape, geometry.Center);
+        geometry.Radius *= radiusScale;
+        _collider = Unity.Physics.SphereCollider.Create(geometry);
+    }
+
+    private static float3 TransformVector(float4x4 matrix, float3 vector)
+    {
+        return math.mul(matrix, new float4(vector, 0f)).xyz;
     }
 
     // Surface overlap misses cells fully enclosed by a mesh, so use odd-even ray crossings for the interior.
@@ -230,7 +320,8 @@ public sealed class LevelObstacle : MonoBehaviour
         _physicsWorld = world;
         EntityManager entityManager = world.EntityManager;
         _physicsEntity = entityManager.CreateEntity(typeof(LocalTransform), typeof(PhysicsCollider));
-        entityManager.SetComponentData(_physicsEntity, LocalTransform.Identity);
+        entityManager.SetComponentData(_physicsEntity,
+            LocalTransform.FromPositionRotation(_worldFromBody.pos, _worldFromBody.rot));
         entityManager.SetComponentData(_physicsEntity, new PhysicsCollider { Value = _collider });
         entityManager.AddSharedComponent(_physicsEntity, new PhysicsWorldIndex(0));
     }
@@ -261,8 +352,7 @@ public sealed class LevelObstacle : MonoBehaviour
     private void ValidateSetup()
     {
         _shape ??= GetComponent<PhysicsShapeAuthoring>();
-        Debug.Assert(_shape.ShapeType == ShapeType.Mesh, "Obstacle Physics Shape must use Mesh.", this);
-        Debug.Assert(EnsureCollider(), "Obstacle needs a valid render mesh for its Physics Shape.", this);
+        Debug.Assert(EnsureCollider(), $"Obstacle needs valid {_shape.ShapeType} geometry.", this);
     }
 
     private static float3 ToFloat3(Vector3 value)
