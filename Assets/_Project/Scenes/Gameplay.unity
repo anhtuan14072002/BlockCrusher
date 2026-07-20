@@ -2768,6 +2768,8 @@ MonoBehaviour:
   _voxelRandomYRotation: 20
   _maxPhysicsDebrisPerFrame: 0
   _chunkSize: 16
+  _maxChunkSpawnsPerFrame: 1
+  _chunkSpawnFadeDuration: 0.2
   _maxChunkRebuildsPerFrame: 2
   _releasedBlockDamping: 2.5
   _releasedBlockAngularDamping: 4
@@ -5806,6 +5808,8 @@ MonoBehaviour:
   _voxelRandomYRotation: 20
   _maxPhysicsDebrisPerFrame: 0
   _chunkSize: 56
+  _maxChunkSpawnsPerFrame: 1
+  _chunkSpawnFadeDuration: 0.2
   _maxChunkRebuildsPerFrame: 2
   _releasedBlockDamping: 2.5
   _releasedBlockAngularDamping: 4

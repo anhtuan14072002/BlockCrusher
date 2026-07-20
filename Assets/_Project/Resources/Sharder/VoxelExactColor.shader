@@ -4,6 +4,7 @@ Shader "BlockCrusher/VoxelExactColor"
     {
         _EdgeColor ("Edge Color", Color) = (0,0,0,1)
         _Color ("Color", Color) = (1,1,1,1)
+        _SpawnProgress ("Spawn Progress", Range(0,1)) = 1
         _EdgeStrength ("Edge Strength", Range(0,1)) = 0.45
         _EdgeWidth ("Edge Width", Range(0.001,0.15)) = 0.035
     }
@@ -32,6 +33,7 @@ Shader "BlockCrusher/VoxelExactColor"
 
             UNITY_INSTANCING_BUFFER_START(Props)
                 UNITY_DEFINE_INSTANCED_PROP(fixed4, _Color)
+                UNITY_DEFINE_INSTANCED_PROP(half, _SpawnProgress)
             UNITY_INSTANCING_BUFFER_END(Props)
 
             struct appdata
@@ -66,6 +68,12 @@ Shader "BlockCrusher/VoxelExactColor"
                 UNITY_SETUP_INSTANCE_ID(i);
                 fixed4 color = i.color * UNITY_ACCESS_INSTANCED_PROP(Props, _Color);
                 color.a = 1;
+                half spawnProgress = saturate(UNITY_ACCESS_INSTANCED_PROP(Props, _SpawnProgress));
+                if (spawnProgress < 0.999)
+                {
+                    float dither = frac(52.9829189 * frac(dot(floor(i.vertex.xy), float2(0.06711056, 0.00583715))));
+                    clip(spawnProgress - dither - 0.0001);
+                }
 
                 #ifndef UNITY_COLORSPACE_GAMMA
                     color.rgb = GammaToLinearSpace(color.rgb);

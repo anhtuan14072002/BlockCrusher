@@ -47,4 +47,10 @@ internal struct ChunkRuntime
     
     public bool IsDetailed;
 
+    public bool IsCreated;
+
+    public bool HasSpawned;
+
+    public float SpawnFadeStartTime;
+
 }

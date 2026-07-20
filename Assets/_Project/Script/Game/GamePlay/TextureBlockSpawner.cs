@@ -26,6 +26,8 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     [SerializeField, Range(0f, 30f)] private float _voxelRandomYRotation = 20f;
     [SerializeField, Min(0)] private int _maxPhysicsDebrisPerFrame;
     [SerializeField, Range(8, 64)] private int _chunkSize = 24;
+    [SerializeField, Range(1, 8)] private int _maxChunkSpawnsPerFrame = 1;
+    [SerializeField, Min(0f)] private float _chunkSpawnFadeDuration = 0.2f;
     [SerializeField, Range(1, 8)] private int _maxChunkRebuildsPerFrame = 2;
     [SerializeField, Range(0f, 20f)] private float _releasedBlockDamping = 2.5f;
     [SerializeField, Range(0f, 20f)] private float _releasedBlockAngularDamping = 4f;
@@ -42,6 +44,8 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     private static readonly List<TextureBlockSpawner> ActiveSpawners = new();
     private static int _nextOwnerId = 1;
     private readonly List<int> _dirtyChunks = new(16);
+    private readonly List<int> _pendingChunkSpawns = new(64);
+    private readonly List<int> _fadingChunks = new(16);
     private readonly List<int> _scheduledChunkRebuilds = new(8);
     private readonly List<JobHandle> _scheduledChunkHandles = new(8);
     private readonly List<Entity> _releasedBlockEntities = new(1024);
@@ -62,6 +66,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     private Mesh _releasedBlockMesh;
     private RenderMaterial _releasedBlockMaterial;
     private MaterialPropertyBlock _releasedBlockPropertyBlock;
+    private MaterialPropertyBlock _chunkPropertyBlock;
     private byte[] _chunkDirty;
     private Transform _runtimeParent;
     private RenderMaterial _runtimeChunkMaterial;
@@ -70,6 +75,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     private int _gridWidth;
     private int _gridHeight;
     private int _chunkColumns;
+    private int _nextPendingChunkSpawn;
     private float _cellSize;
     private float _releasedBlockScale = 1f;
     private int _physicsDebrisFrame = -1;
@@ -87,6 +93,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     private int _displayRenderFrame = -1;
     private int _scheduledRenderFrame = -1;
     private static readonly int ColorId = Shader.PropertyToID("_Color");
+    private static readonly int SpawnProgressId = Shader.PropertyToID("_SpawnProgress");
     public static int SuckedBlockCount { get; private set; }
     public static event System.Action<int> BlocksSucked;
     internal static void NotifyBlocksSucked(int count)
@@ -214,6 +221,9 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     private void LateUpdate()
     {
         DrawReleasedBlocks();
+        UpdateChunkSpawnFades();
+        if (ProcessPendingChunkSpawns())
+            return;
         if (_dirtyChunks.Count == 0)
             return;
         int rebuildCount = Mathf.Min(_maxChunkRebuildsPerFrame, _dirtyChunks.Count);
@@ -283,8 +293,11 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         DisposeChunks();
         _chunks.Clear();
         _dirtyChunks.Clear();
+        _pendingChunkSpawns.Clear();
+        _fadingChunks.Clear();
         _scheduledChunkRebuilds.Clear();
         _scheduledChunkHandles.Clear();
+        _nextPendingChunkSpawn = 0;
         _chunkDirty = null;
         ClearReleasedBlockEntities();
         Transform parent = _container != null ? _container : transform;
@@ -375,6 +388,8 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         int chunkIndex = chunkY * _chunkColumns + chunkX;
         if ((uint)chunkIndex >= (uint)_chunks.Count || _chunkDirty[chunkIndex] != 0)
             return;
+        if (!_chunks[chunkIndex].IsCreated)
+            return;
         _chunkDirty[chunkIndex] = 1;
         _dirtyChunks.Add(chunkIndex);
     }
@@ -395,37 +410,90 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     }
     private void CreateChunks()
     {
-        RenderMaterial material = _runtimeChunkMaterial;
         _chunkColumns = Mathf.CeilToInt(_gridWidth / (float)_chunkSize);
         int chunkRows = Mathf.CeilToInt(_gridHeight / (float)_chunkSize);
         int chunkCount = _chunkColumns * chunkRows;
         _chunkDirty = new byte[chunkCount];
-        for (int chunkY = 0; chunkY < chunkRows; chunkY++)
+        _pendingChunkSpawns.Clear();
+        _nextPendingChunkSpawn = 0;
+        for (int i = 0; i < chunkCount; i++)
         {
-            for (int chunkX = 0; chunkX < _chunkColumns; chunkX++)
-            {
-                int startX = chunkX * _chunkSize;
-                int startY = chunkY * _chunkSize;
-                int width = Mathf.Min(_chunkSize, _gridWidth - startX);
-                int height = Mathf.Min(_chunkSize, _gridHeight - startY);
-                GameObject chunkObject = new GameObject("TextureChunk_" + chunkX + "_" + chunkY);
-                chunkObject.transform.SetParent(_runtimeParent, false);
-                MeshFilter meshFilter = chunkObject.AddComponent<MeshFilter>();
-                MeshRenderer meshRenderer = chunkObject.AddComponent<MeshRenderer>();
-                TextureBlockChunk chunk = chunkObject.AddComponent<TextureBlockChunk>();
-                Mesh mesh = new Mesh { name = "TextureChunk_Mesh_" + chunkX + "_" + chunkY };
-                mesh.MarkDynamic();
-                meshFilter.sharedMesh = mesh;
-                meshRenderer.sharedMaterial = material;
-                chunk.Initialize(this);
-                _chunks.Add(CreateChunkRuntime(mesh, meshRenderer, startX, startY, width, height,
-                    _renderVoxelDetailFromStart));
-            }
+            _chunks.Add(default);
+            _pendingChunkSpawns.Add(i);
         }
+        _pendingChunkSpawns.Sort(CompareChunkDistanceFromCenter);
+
+        if (Application.isPlaying)
+            return;
+
         _scheduledChunkRebuilds.Clear();
-        for (int i = 0; i < _chunks.Count; i++)
-            _scheduledChunkRebuilds.Add(i);
+        while (_nextPendingChunkSpawn < _pendingChunkSpawns.Count)
+        {
+            int chunkIndex = _pendingChunkSpawns[_nextPendingChunkSpawn++];
+            CreateChunk(chunkIndex);
+            _scheduledChunkRebuilds.Add(chunkIndex);
+        }
         ScheduleAndApplyChunkRebuilds();
+    }
+    private bool ProcessPendingChunkSpawns()
+    {
+        if (_nextPendingChunkSpawn >= _pendingChunkSpawns.Count)
+            return false;
+
+        int spawnCount = Mathf.Min(_maxChunkSpawnsPerFrame,
+            _pendingChunkSpawns.Count - _nextPendingChunkSpawn);
+        _scheduledChunkRebuilds.Clear();
+        for (int i = 0; i < spawnCount; i++)
+        {
+            int chunkIndex = _pendingChunkSpawns[_nextPendingChunkSpawn++];
+            CreateChunk(chunkIndex);
+            _scheduledChunkRebuilds.Add(chunkIndex);
+        }
+        ScheduleAndApplyChunkRebuilds();
+        return true;
+    }
+    private int CompareChunkDistanceFromCenter(int leftIndex, int rightIndex)
+    {
+        float centerX = (_gridWidth - 1) * 0.5f;
+        float centerY = (_gridHeight - 1) * 0.5f;
+        float leftDistance = GetChunkDistanceSqr(leftIndex, centerX, centerY);
+        float rightDistance = GetChunkDistanceSqr(rightIndex, centerX, centerY);
+        int distanceOrder = leftDistance.CompareTo(rightDistance);
+        return distanceOrder != 0 ? distanceOrder : leftIndex.CompareTo(rightIndex);
+    }
+    private float GetChunkDistanceSqr(int chunkIndex, float centerX, float centerY)
+    {
+        int chunkX = chunkIndex % _chunkColumns;
+        int chunkY = chunkIndex / _chunkColumns;
+        int startX = chunkX * _chunkSize;
+        int startY = chunkY * _chunkSize;
+        int width = Mathf.Min(_chunkSize, _gridWidth - startX);
+        int height = Mathf.Min(_chunkSize, _gridHeight - startY);
+        float deltaX = startX + (width - 1) * 0.5f - centerX;
+        float deltaY = startY + (height - 1) * 0.5f - centerY;
+        return deltaX * deltaX + deltaY * deltaY;
+    }
+    private void CreateChunk(int chunkIndex)
+    {
+        int chunkX = chunkIndex % _chunkColumns;
+        int chunkY = chunkIndex / _chunkColumns;
+        int startX = chunkX * _chunkSize;
+        int startY = chunkY * _chunkSize;
+        int width = Mathf.Min(_chunkSize, _gridWidth - startX);
+        int height = Mathf.Min(_chunkSize, _gridHeight - startY);
+        GameObject chunkObject = new GameObject("TextureChunk_" + chunkX + "_" + chunkY);
+        chunkObject.transform.SetParent(_runtimeParent, false);
+        MeshFilter meshFilter = chunkObject.AddComponent<MeshFilter>();
+        MeshRenderer meshRenderer = chunkObject.AddComponent<MeshRenderer>();
+        TextureBlockChunk chunk = chunkObject.AddComponent<TextureBlockChunk>();
+        Mesh mesh = new Mesh { name = "TextureChunk_Mesh_" + chunkX + "_" + chunkY };
+        mesh.MarkDynamic();
+        meshFilter.sharedMesh = mesh;
+        meshRenderer.sharedMaterial = _runtimeChunkMaterial;
+        meshRenderer.enabled = false;
+        chunk.Initialize(this);
+        _chunks[chunkIndex] = CreateChunkRuntime(mesh, meshRenderer, startX, startY, width, height,
+            _renderVoxelDetailFromStart);
     }
     private ChunkRuntime CreateChunkRuntime(Mesh mesh, MeshRenderer renderer, int startX, int startY, int width,
         int height, bool isDetailed)
@@ -442,6 +510,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
             Width = width,
             Height = height,
             IsDetailed = isDetailed,
+            IsCreated = true,
             Visited = new NativeArray<byte>(maxCells, Allocator.Persistent),
             Vertices = new NativeList<Vector3>(vertexCapacity, Allocator.Persistent),
             Colors = new NativeList<Color32>(vertexCapacity, Allocator.Persistent),
@@ -465,6 +534,8 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
             if ((uint)chunkIndex >= (uint)_chunks.Count)
                 continue;
             ChunkRuntime chunk = _chunks[chunkIndex];
+            if (!chunk.IsCreated)
+                continue;
             chunk.Vertices.Clear();
             chunk.Colors.Clear();
             chunk.Uvs.Clear();
@@ -532,9 +603,47 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
             if ((uint)chunkIndex >= (uint)_chunks.Count)
                 continue;
             ChunkRuntime chunk = _chunks[chunkIndex];
+            if (!chunk.IsCreated)
+                continue;
+            bool isFirstBuild = !chunk.HasSpawned;
             ApplyChunkMesh(ref chunk);
+            if (isFirstBuild)
+                BeginChunkSpawnFade(chunkIndex, ref chunk);
             _chunks[chunkIndex] = chunk;
         }
+    }
+    private void BeginChunkSpawnFade(int chunkIndex, ref ChunkRuntime chunk)
+    {
+        chunk.HasSpawned = true;
+        if (!Application.isPlaying || _chunkSpawnFadeDuration <= 0f)
+        {
+            SetChunkSpawnProgress(chunk.Renderer, 1f);
+            return;
+        }
+
+        chunk.SpawnFadeStartTime = Time.time;
+        SetChunkSpawnProgress(chunk.Renderer, 0f);
+        _fadingChunks.Add(chunkIndex);
+    }
+    private void UpdateChunkSpawnFades()
+    {
+        for (int i = _fadingChunks.Count - 1; i >= 0; i--)
+        {
+            int chunkIndex = _fadingChunks[i];
+            ChunkRuntime chunk = _chunks[chunkIndex];
+            float progress = Mathf.Clamp01((Time.time - chunk.SpawnFadeStartTime) / _chunkSpawnFadeDuration);
+            SetChunkSpawnProgress(chunk.Renderer, progress);
+            if (progress < 1f)
+                continue;
+
+            _fadingChunks.RemoveAt(i);
+        }
+    }
+    private void SetChunkSpawnProgress(MeshRenderer renderer, float progress)
+    {
+        _chunkPropertyBlock ??= new MaterialPropertyBlock();
+        _chunkPropertyBlock.SetFloat(SpawnProgressId, progress);
+        renderer.SetPropertyBlock(_chunkPropertyBlock);
     }
     private void ApplyChunkMesh(ref ChunkRuntime chunk)
     {
@@ -616,6 +725,8 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         for (int i = 0; i < _chunks.Count; i++)
         {
             ChunkRuntime chunk = _chunks[i];
+            if (!chunk.IsCreated)
+                continue;
             if (chunk.Visited.IsCreated)
                 chunk.Visited.Dispose();
             if (chunk.Vertices.IsCreated)
