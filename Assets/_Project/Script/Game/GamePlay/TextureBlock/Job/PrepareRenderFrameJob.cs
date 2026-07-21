@@ -15,7 +15,7 @@ internal partial struct PrepareRenderFrameJob : IJobEntity
 
     private void Execute(Entity entity, in LocalTransform transformData, in ReleasedBlockComponent block)
     {
-        if (block.OwnerId != OwnerId)
+        if (block.OwnerId != OwnerId || block.UsesExternalVisual != 0)
             return;
 
         int index = Count.Value;

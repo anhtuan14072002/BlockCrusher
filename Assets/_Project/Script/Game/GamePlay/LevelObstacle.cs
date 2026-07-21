@@ -16,6 +16,16 @@ public sealed class LevelObstacle : MonoBehaviour
     private static readonly List<LevelObstacle> ActiveObstacles = new();
     private static readonly float3 InsideRayDirection = math.normalize(new float3(1f, 0.3713907f, 0.529103f));
 
+    [SerializeField] private bool _childrenAreBlocks;
+
+    private bool _initialStateCaptured;
+    private bool _initialActiveSelf;
+    private bool _initialEnabled;
+    private Vector3 _initialLocalPosition;
+    private Quaternion _initialLocalRotation;
+    private Vector3 _initialLocalScale;
+    private ChildInitialState[] _initialChildren;
+
     private PhysicsShapeAuthoring _shape;
     private BlobAssetReference<ColliderBlob> _collider;
     private RigidBody _rigidBody;
@@ -23,6 +33,11 @@ public sealed class LevelObstacle : MonoBehaviour
     private Aabb _bounds;
     private World _physicsWorld;
     private Entity _physicsEntity;
+
+    private void Awake()
+    {
+        CaptureInitialState();
+    }
 
     private void OnEnable()
     {
@@ -87,6 +102,44 @@ public sealed class LevelObstacle : MonoBehaviour
         }
     }
 
+    internal static void ResetPreplacedBlocks()
+    {
+        LevelObstacle[] obstacles =
+            FindObjectsByType<LevelObstacle>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        for (int i = 0; i < obstacles.Length; i++)
+        {
+            LevelObstacle obstacle = obstacles[i];
+            if (obstacle != null && obstacle._childrenAreBlocks)
+                obstacle.RestoreInitialState();
+        }
+    }
+
+    internal static void RegisterPreplacedBlocks(TextureBlockSpawner spawner)
+    {
+        LevelObstacle[] obstacles =
+            FindObjectsByType<LevelObstacle>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+        for (int i = 0; i < obstacles.Length; i++)
+        {
+            LevelObstacle obstacle = obstacles[i];
+            if (obstacle == null || !obstacle._childrenAreBlocks)
+                continue;
+
+            Transform obstacleTransform = obstacle.transform;
+            for (int childIndex = 0; childIndex < obstacleTransform.childCount; childIndex++)
+            {
+                Transform child = obstacleTransform.GetChild(childIndex);
+                if (!child.gameObject.activeInHierarchy ||
+                    !child.TryGetComponent(out PhysicsShapeAuthoring shape) || shape.ShapeType != ShapeType.Sphere ||
+                    !child.TryGetComponent(out MeshRenderer renderer))
+                {
+                    continue;
+                }
+
+                spawner.RegisterPreplacedBlock(child, renderer);
+            }
+        }
+    }
+
     internal static Vector3 ClampSawTarget(Vector3 from, Vector3 to,
         BlobAssetReference<ColliderBlob> sawCollider, Quaternion sawRotation)
     {
@@ -126,7 +179,7 @@ public sealed class LevelObstacle : MonoBehaviour
         for (int i = 0; i < ActiveObstacles.Count; i++)
         {
             LevelObstacle obstacle = ActiveObstacles[i];
-            if (obstacle == null || !obstacle.EnsureCollider() ||
+            if (obstacle == null || obstacle._childrenAreBlocks || !obstacle.EnsureCollider() ||
                 !obstacle._rigidBody.CastCollider(input, out ColliderCastHit hit) ||
                 hit.Fraction >= closestFraction)
             {
@@ -198,6 +251,67 @@ public sealed class LevelObstacle : MonoBehaviour
         };
         _bounds = _rigidBody.CalculateAabb();
         return true;
+    }
+
+    private void CaptureInitialState()
+    {
+        if (!_childrenAreBlocks || _initialStateCaptured)
+            return;
+
+        _initialStateCaptured = true;
+        _initialActiveSelf = gameObject.activeSelf;
+        _initialEnabled = enabled;
+        _initialLocalPosition = transform.localPosition;
+        _initialLocalRotation = transform.localRotation;
+        _initialLocalScale = transform.localScale;
+
+        int childCount = transform.childCount;
+        _initialChildren = new ChildInitialState[childCount];
+        for (int i = 0; i < childCount; i++)
+        {
+            Transform child = transform.GetChild(i);
+            child.TryGetComponent(out Renderer renderer);
+            _initialChildren[i] = new ChildInitialState
+            {
+                Transform = child,
+                LocalPosition = child.localPosition,
+                LocalRotation = child.localRotation,
+                LocalScale = child.localScale,
+                ActiveSelf = child.gameObject.activeSelf,
+                Renderer = renderer,
+                RendererEnabled = renderer != null && renderer.enabled
+            };
+        }
+    }
+
+    private void RestoreInitialState()
+    {
+        CaptureInitialState();
+
+        transform.SetLocalPositionAndRotation(_initialLocalPosition, _initialLocalRotation);
+        transform.localScale = _initialLocalScale;
+        for (int i = 0; i < _initialChildren.Length; i++)
+        {
+            ChildInitialState child = _initialChildren[i];
+            if (child.Transform == null)
+                continue;
+
+            child.Transform.SetLocalPositionAndRotation(child.LocalPosition, child.LocalRotation);
+            child.Transform.localScale = child.LocalScale;
+            child.Transform.gameObject.SetActive(child.ActiveSelf);
+            if (child.Renderer != null)
+                child.Renderer.enabled = child.RendererEnabled;
+        }
+
+        gameObject.SetActive(_initialActiveSelf);
+        enabled = _initialEnabled;
+
+        if (_collider.IsCreated)
+        {
+            _worldFromBody = new RigidTransform(ToQuaternion(transform.rotation), ToFloat3(transform.position));
+            _rigidBody.WorldFromBody = _worldFromBody;
+            _bounds = _rigidBody.CalculateAabb();
+        }
     }
 
     private void CreateCapsuleCollider(float4x4 localToShape)
@@ -309,6 +423,12 @@ public sealed class LevelObstacle : MonoBehaviour
 
     private void EnsurePhysicsEntity(World world)
     {
+        if (_childrenAreBlocks)
+        {
+            DestroyPhysicsEntity();
+            return;
+        }
+
         if (!EnsureCollider())
             return;
 
@@ -368,5 +488,16 @@ public sealed class LevelObstacle : MonoBehaviour
     private static quaternion ToQuaternion(Quaternion value)
     {
         return new quaternion(value.x, value.y, value.z, value.w);
+    }
+
+    private struct ChildInitialState
+    {
+        public Transform Transform;
+        public Vector3 LocalPosition;
+        public Quaternion LocalRotation;
+        public Vector3 LocalScale;
+        public bool ActiveSelf;
+        public Renderer Renderer;
+        public bool RendererEnabled;
     }
 }

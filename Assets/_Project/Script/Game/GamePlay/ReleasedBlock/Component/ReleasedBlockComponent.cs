@@ -9,6 +9,7 @@ public struct ReleasedBlockComponent : IComponentData
     public float4 Color;
     public float LockedZ;
     public float MaxPlanarSpeed;
+    public byte UsesExternalVisual;
     public byte StableFrames;
     public byte SuctionPathIndex;
 }

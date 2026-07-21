@@ -49,6 +49,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     private readonly List<int> _scheduledChunkRebuilds = new(8);
     private readonly List<JobHandle> _scheduledChunkHandles = new(8);
     private readonly List<Entity> _releasedBlockEntities = new(1024);
+    private readonly List<PreplacedBlockVisual> _preplacedBlockVisuals = new(64);
     private readonly List<Entity> _releasedBlockWallEntities = new(4);
     private readonly List<BlobAssetReference<Collider>> _releasedBlockWallColliders = new(4);
     private readonly RenderFrameData[] _renderFrames = new RenderFrameData[2];
@@ -220,6 +221,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     }
     private void LateUpdate()
     {
+        SyncPreplacedBlockVisuals();
         DrawReleasedBlocks();
         UpdateChunkSpawnFades();
         if (ProcessPendingChunkSpawns())
@@ -245,6 +247,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         if (_texture == null)
             return;
         Clear();
+        LevelObstacle.ResetPreplacedBlocks();
         Color32[] pixels;
         try
         {
@@ -285,6 +288,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
             _chunkColliderDepth);
         _runtimeChunkMaterial = ResolveChunkMaterial();
         CreateChunks();
+        LevelObstacle.RegisterPreplacedBlocks(this);
     }
     [ContextMenu("Clear")]
     public void Clear()
@@ -795,13 +799,48 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         float safeMaxVelocity = GetSafePhysicsVelocity(maxVelocity);
         Vector3 clampedVelocity = Vector3.ClampMagnitude(velocity, safeMaxVelocity);
         clampedVelocity = RedirectVelocityFromSolid(position, clampedVelocity);
+        CreateReleasedBlockEntity(position, Quaternion.identity, _releasedBlockScale, color, clampedVelocity,
+            safeMaxVelocity, false);
+    }
+
+    internal void RegisterPreplacedBlock(Transform blockTransform, Renderer renderer)
+    {
+        if (!EnsureReleasedBlockResources() || !EnsureEcsReady())
+            return;
+
+        Vector3 scale = blockTransform.lossyScale;
+        float uniformScale = Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z));
+        RenderMaterial material = renderer.sharedMaterial;
+        Color32 color = material != null && material.HasProperty(ColorId)
+            ? material.GetColor(ColorId)
+            : Color.white;
+        Entity entity = CreateReleasedBlockEntity(blockTransform.position, blockTransform.rotation, uniformScale,
+            color, Vector3.zero, GetSafePhysicsVelocity(float.MaxValue), true);
+        if (entity == Entity.Null)
+            return;
+
+        renderer.enabled = true;
+        _preplacedBlockVisuals.Add(new PreplacedBlockVisual
+        {
+            Entity = entity,
+            BlockTransform = blockTransform,
+            Renderer = renderer
+        });
+    }
+
+    private Entity CreateReleasedBlockEntity(Vector3 position, Quaternion rotation, float scale, Color32 color,
+        Vector3 velocity, float maxVelocity, bool usesExternalVisual)
+    {
         if (_releasedBlockEntities.Count >= _maxReleasedPhysicsBlocks)
             TrimReleasedBlockEntityList();
         while (_releasedBlockEntities.Count >= _maxReleasedPhysicsBlocks && _releasedBlockEntities.Count > 0)
             DestroyReleasedBlockEntityAt(0);
+        if (_releasedBlockEntities.Count >= _maxReleasedPhysicsBlocks)
+            return Entity.Null;
+
         Entity entity = _entityManager.CreateEntity(_releasedBlockArchetype);
         _entityManager.SetComponentData(entity, LocalTransform.FromPositionRotationScale(
-            new float3(position.x, position.y, position.z), quaternion.identity, _releasedBlockScale));
+            ToFloat3(position), ToQuaternion(rotation), scale));
         _entityManager.SetComponentData(entity, new PhysicsCollider { Value = _releasedBlockCollider });
         PhysicsMass physicsMass = PhysicsMass.CreateDynamic(
             _releasedBlockCollider.Value.MassProperties, _releasedBlockMass);
@@ -810,7 +849,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         _entityManager.SetComponentData(entity, physicsMass);
         _entityManager.SetComponentData(entity, new PhysicsVelocity
         {
-            Linear = new float3(clampedVelocity.x, clampedVelocity.y, clampedVelocity.z),
+            Linear = ToFloat3(velocity),
             Angular = float3.zero
         });
         _entityManager.SetComponentData(entity, new PhysicsDamping
@@ -824,11 +863,13 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
             OwnerId = _ownerId,
             Color = ToFloat4(color),
             LockedZ = position.z,
-            MaxPlanarSpeed = safeMaxVelocity,
+            MaxPlanarSpeed = maxVelocity,
+            UsesExternalVisual = usesExternalVisual ? (byte)1 : (byte)0,
             SuctionPathIndex = byte.MaxValue
         });
         _entityManager.SetComponentEnabled<SuctionTransit>(entity, false);
         _releasedBlockEntities.Add(entity);
+        return entity;
     }
     private float GetSafePhysicsVelocity(float requestedMaxVelocity)
     {
@@ -1190,6 +1231,35 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
                 _renderBatchCounts[i], _releasedBlockPropertyBlock, ShadowCastingMode.Off, false, gameObject.layer);
         }
     }
+    private void SyncPreplacedBlockVisuals()
+    {
+        if (!_hasReleasedBlockQuery || _ecsWorld == null || !_ecsWorld.IsCreated)
+            return;
+
+        for (int i = _preplacedBlockVisuals.Count - 1; i >= 0; i--)
+        {
+            PreplacedBlockVisual visual = _preplacedBlockVisuals[i];
+            if (visual.BlockTransform == null)
+            {
+                _preplacedBlockVisuals.RemoveAt(i);
+                continue;
+            }
+
+            if (!_entityManager.Exists(visual.Entity))
+            {
+                if (visual.Renderer != null)
+                    visual.Renderer.enabled = false;
+                _preplacedBlockVisuals.RemoveAt(i);
+                continue;
+            }
+
+            LocalTransform entityTransform = _entityManager.GetComponentData<LocalTransform>(visual.Entity);
+            visual.BlockTransform.SetPositionAndRotation(
+                new Vector3(entityTransform.Position.x, entityTransform.Position.y, entityTransform.Position.z),
+                new Quaternion(entityTransform.Rotation.value.x, entityTransform.Rotation.value.y,
+                    entityTransform.Rotation.value.z, entityTransform.Rotation.value.w));
+        }
+    }
     private void TrimReleasedBlockEntityList()
     {
         if (!EnsureEcsReady())
@@ -1203,6 +1273,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         if (!EnsureEcsReady())
         {
             _releasedBlockEntities.Clear();
+            _preplacedBlockVisuals.Clear();
             return;
         }
         for (int i = _releasedBlockEntities.Count - 1; i >= 0; i--)
@@ -1213,6 +1284,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         for (int i = 0; i < entities.Length; i++)
             if (blocks[i].OwnerId == _ownerId && _entityManager.Exists(entities[i]))
                 _entityManager.DestroyEntity(entities[i]);
+        _preplacedBlockVisuals.Clear();
     }
     private void DestroyReleasedBlockEntityAt(int index)
     {
@@ -1319,6 +1391,10 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     {
         return new float3(value.x, value.y, value.z);
     }
+    private static quaternion ToQuaternion(Quaternion value)
+    {
+        return new quaternion(value.x, value.y, value.z, value.w);
+    }
     private static float4 ToFloat4(Vector4 value)
     {
         return new float4(value.x, value.y, value.z, value.w);
@@ -1339,6 +1415,12 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         uint hash = (uint)(x * 73856093) ^ (uint)(y * 19349663);
         float normalized = (hash & 1023u) * (1f / 1023f);
         return (normalized * 2f - 1f) * maxAngle;
+    }
+    private struct PreplacedBlockVisual
+    {
+        public Entity Entity;
+        public Transform BlockTransform;
+        public Renderer Renderer;
     }
     private void DisposeCells()
     {
