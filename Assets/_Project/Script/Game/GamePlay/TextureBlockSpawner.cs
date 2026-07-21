@@ -107,7 +107,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     internal static void RemoveActiveSpawnerAt(int index) => ActiveSpawners.RemoveAt(index);
     public static bool ReleaseAtWorldForActiveSpawners(Vector3 worldPoint, Vector3 pressDirection, float pressSpeed,
         float outwardForce, float tangentialForce, float spinDirection, float bladeRadius, float sideDamping,
-        float maxVelocity)
+        float maxVelocity, float releaseRadiusOverride)
     {
         bool releasedAny = false;
         for (int i = ActiveSpawners.Count - 1; i >= 0; i--)
@@ -119,7 +119,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
                 continue;
             }
             releasedAny |= spawner.ReleaseAtWorld(worldPoint, pressDirection, pressSpeed, outwardForce, tangentialForce,
-                spinDirection, bladeRadius, sideDamping, maxVelocity);
+                spinDirection, bladeRadius, sideDamping, maxVelocity, releaseRadiusOverride);
         }
         return releasedAny;
     }
@@ -315,17 +315,19 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         }
     }
     public bool ReleaseAtWorld(Vector3 worldPoint, Vector3 pressDirection, float pressSpeed, float outwardForce,
-        float tangentialForce, float spinDirection, float bladeRadius, float sideDamping, float maxVelocity)
+        float tangentialForce, float spinDirection, float bladeRadius, float sideDamping, float maxVelocity,
+        float releaseRadiusOverride)
     {
         if (!_cellSolid.IsCreated || _runtimeParent == null)
             return false;
         QueueSawPush(worldPoint, pressDirection, pressSpeed, outwardForce, tangentialForce, spinDirection,
             bladeRadius, maxVelocity);
         Vector3 localPoint = _runtimeParent.InverseTransformPoint(worldPoint);
-        float radiusSqr = _sawReleaseRadius * _sawReleaseRadius;
+        float releaseRadius = releaseRadiusOverride > 0f ? releaseRadiusOverride : _sawReleaseRadius;
+        float radiusSqr = releaseRadius * releaseRadius;
         int centerX = Mathf.RoundToInt((localPoint.x - _offset.x) / _cellSize);
         int centerY = Mathf.RoundToInt((localPoint.y - _offset.y) / _cellSize);
-        int radiusCells = Mathf.Max(1, Mathf.CeilToInt(_sawReleaseRadius / _cellSize));
+        int radiusCells = Mathf.Max(1, Mathf.CeilToInt(releaseRadius / _cellSize));
         int minX = Mathf.Max(0, centerX - radiusCells);
         int maxX = Mathf.Min(_gridWidth - 1, centerX + radiusCells);
         int minY = Mathf.Max(0, centerY - radiusCells);

@@ -9,9 +9,10 @@ public sealed class TextureBlockChunk : MonoBehaviour
     
     }
     public bool ReleaseAtWorld(Vector3 worldPoint, Vector3 pressDirection, float pressSpeed, float outwardForce,
-        float tangentialForce, float spinDirection, float bladeRadius, float sideDamping, float maxVelocity)
+        float tangentialForce, float spinDirection, float bladeRadius, float sideDamping, float maxVelocity,
+        float releaseRadiusOverride)
     {
         return _spawner != null && _spawner.ReleaseAtWorld(worldPoint, pressDirection, pressSpeed, outwardForce,
-            tangentialForce, spinDirection, bladeRadius, sideDamping, maxVelocity);
+            tangentialForce, spinDirection, bladeRadius, sideDamping, maxVelocity, releaseRadiusOverride);
     }
 }

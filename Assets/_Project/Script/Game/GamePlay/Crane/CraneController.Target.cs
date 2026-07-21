@@ -6,7 +6,8 @@ namespace Crusher
     {
         private void MoveSawTarget(Vector2 input)
         {
-            float resistanceRecovery = _sawCutter != null ? _sawCutter.ResistanceRecovery : 1f;
+            SawBlockCutter activeCutter = ActiveCutter;
+            float resistanceRecovery = activeCutter != null ? activeCutter.ResistanceRecovery : 1f;
             float moveMultiplier = Mathf.Lerp(_sawContactMoveMultiplier, 1f, resistanceRecovery);
             Vector3 moveDirection = GetSawMoveDirection(input);
             Vector3 previousTarget = _sawTarget;
@@ -15,8 +16,8 @@ namespace Crusher
             _sawTarget.y = Mathf.Clamp(_sawTarget.y, _targetYBounds.x, _targetYBounds.y);
             bool reachClamped = ClampSawTargetToReach();
 
-            if (!_isSuctionMode && _sawCutter != null)
-                _sawTarget = _sawCutter.ClampObstacleTarget(GetSawPosition(), _sawTarget);
+            if (!IsSuctionMode && activeCutter != null)
+                _sawTarget = activeCutter.ClampObstacleTarget(GetSawPosition(), _sawTarget);
             else if (_suctionDevice != null)
                 _sawTarget = _suctionDevice.ClampSawTarget(GetSawPosition(), _sawTarget);
 

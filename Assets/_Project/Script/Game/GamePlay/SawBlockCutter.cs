@@ -11,6 +11,7 @@ public sealed class SawBlockCutter : MonoBehaviour
     [SerializeField] private float _bladeTangentialForce = 32f;
     [SerializeField] private float _bladeSpinDirection = 1f;
     [SerializeField] private float _bladeSpinSpeed = 900f;
+    [SerializeField] private Vector3 _bladeSpinAxis = Vector3.forward;
     [SerializeField] private float _bladePushRadius = 0.55f;
     [SerializeField] private float _maxSawVelocity = 8f;
     [SerializeField] private float _cutSweepStep = 0.08f;
@@ -20,7 +21,9 @@ public sealed class SawBlockCutter : MonoBehaviour
     [SerializeField] private float _resistanceRecoveryDuration = 0.3f;
     [SerializeField] private float _sawHeadScaleStep = 0.2f;
     [SerializeField] private float _maxSawHeadScale = 2f;
+    [SerializeField, Min(0f)] private float _releaseRadiusOverride;
     [SerializeField] private Transform _bladeVisual;
+    [SerializeField] private Vector3 _contactOffset;
 
     private Vector3 _previousPosition;
     private Vector3 _sawVelocity;
@@ -52,12 +55,12 @@ public sealed class SawBlockCutter : MonoBehaviour
         _bladeVisual ??= transform;
         _physicsShape = GetComponent<PhysicsShapeAuthoring>();
         _meshFilter = GetComponent<MeshFilter>();
-        _previousPosition = transform.position;
+        _previousPosition = GetCutPosition();
     }
 
     private void OnEnable()
     {
-        _previousPosition = transform.position;
+        _previousPosition = GetCutPosition();
         _sawVelocity = Vector3.zero;
         _pressDirection = Vector3.zero;
         _pressSpeed = 0f;
@@ -68,13 +71,13 @@ public sealed class SawBlockCutter : MonoBehaviour
     private void Update()
     {
         if (_bladeVisual == null || _bladeSpinSpeed == 0f) return;
-        _bladeVisual.Rotate(0f, 0f, _bladeSpinSpeed * Mathf.Sign(_bladeSpinDirection) * Time.deltaTime, Space.Self);
+        _bladeVisual.Rotate(_bladeSpinAxis, _bladeSpinSpeed * Mathf.Sign(_bladeSpinDirection) * Time.deltaTime, Space.Self);
     }
 
     private void FixedUpdate()
     {
         Vector3 previousPosition = _previousPosition;
-        Vector3 currentPosition = transform.position;
+        Vector3 currentPosition = GetCutPosition();
         if ((currentPosition - previousPosition).sqrMagnitude > 0.000001f)
             _hasMovedSinceEnable = true;
         float inverseDeltaTime = Time.fixedDeltaTime > 0f ? 1f / Time.fixedDeltaTime : 0f;
@@ -200,7 +203,7 @@ public sealed class SawBlockCutter : MonoBehaviour
     
     private void ReleaseAndPush(Collider other)
     {
-        Vector3 contactPoint = other.ClosestPoint(transform.position);
+        Vector3 contactPoint = other.ClosestPoint(GetCutPosition());
         ReleaseAndPush(other, contactPoint);
     }
 
@@ -208,7 +211,8 @@ public sealed class SawBlockCutter : MonoBehaviour
     {
         TextureBlockChunk chunk = GetChunk(other);
         if (chunk != null && chunk.ReleaseAtWorld(contactPoint, _pressDirection, _pressSpeed, _compressionForce,
-                _bladeTangentialForce, _bladeSpinDirection, _bladePushRadius, _sideDampingOnContact, _maxBlockVelocity))
+                _bladeTangentialForce, _bladeSpinDirection, _bladePushRadius, _sideDampingOnContact, _maxBlockVelocity,
+                _releaseRadiusOverride))
         {
             RegisterBlockCut();
             RegisterResistance();
@@ -238,7 +242,7 @@ public sealed class SawBlockCutter : MonoBehaviour
             Vector3 samplePosition = Vector3.Lerp(from, to, i / (float)steps);
             releasedAny |= TextureBlockSpawner.ReleaseAtWorldForActiveSpawners(samplePosition, _pressDirection,
                 _pressSpeed, _compressionForce, _bladeTangentialForce, _bladeSpinDirection, _bladePushRadius,
-                _sideDampingOnContact, _maxBlockVelocity);
+                _sideDampingOnContact, _maxBlockVelocity, _releaseRadiusOverride);
         }
 
         return releasedAny;
@@ -257,5 +261,10 @@ public sealed class SawBlockCutter : MonoBehaviour
         chunk = other.GetComponentInParent<TextureBlockChunk>();
         _chunkCache.Add(other, chunk);
         return chunk;
+    }
+
+    private Vector3 GetCutPosition()
+    {
+        return transform.TransformPoint(_contactOffset);
     }
 }

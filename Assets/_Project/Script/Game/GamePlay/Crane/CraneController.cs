@@ -9,6 +9,14 @@ namespace Crusher
 {
     public sealed partial class CraneController : MonoBehaviour
     {
+        private enum ToolMode
+        {
+            Saw,
+            Drill,
+            Suction,
+            Count
+        }
+
         public static CraneController Instance { get; private set; }
 
         [SerializeField] private Joystick _joystick;
@@ -33,6 +41,7 @@ namespace Crusher
         [SerializeField] private Transform _saw;
         
         [SerializeField] private SawBlockCutter _sawCutter;
+        [SerializeField] private SawBlockCutter _drillCutter;
         [SerializeField] private SuctionDevice _suctionDevice;
 
         [SerializeField] private Button _switchToolButton;
@@ -61,8 +70,11 @@ namespace Crusher
         private Vector3 _sawTarget;
         private float _activeReach;
 
-        private bool _isSuctionMode;
+        private ToolMode _toolMode;
         private bool _useSawInputRotation = true;
+
+        private bool IsSuctionMode => _toolMode == ToolMode.Suction;
+        private SawBlockCutter ActiveCutter => _toolMode == ToolMode.Drill ? _drillCutter : _sawCutter;
 
         private void Awake()
         {
@@ -108,7 +120,7 @@ namespace Crusher
             if (_roundEnded) return;
 
             if (_suctionDevice != null)
-                _suctionDevice.ProcessSuction(_isSuctionMode && HasFuel);
+                _suctionDevice.ProcessSuction(IsSuctionMode && HasFuel);
         }
 
         public void AddJoint()
@@ -189,19 +201,21 @@ namespace Crusher
             ApplyActiveJointCount();
             CacheSawCutter();
             _sawTarget = GetSawPosition();
-            SetToolActive(false);
+            SetToolActive(ToolMode.Saw);
         }
 
         private void ToggleTool()
         {
-            _isSuctionMode = !_isSuctionMode;
-            SetToolActive(_isSuctionMode);
+            _toolMode = (ToolMode)(((int)_toolMode + 1) % (int)ToolMode.Count);
+            SetToolActive(_toolMode);
         }
         
-        private void SetToolActive(bool isSuction)
+        private void SetToolActive(ToolMode mode)
         {
-            if (_sawCutter != null) _sawCutter.gameObject.SetActive(!isSuction);
-            if (_suctionDevice != null) _suctionDevice.gameObject.SetActive(isSuction);
+            _toolMode = mode;
+            if (_sawCutter != null) _sawCutter.gameObject.SetActive(mode == ToolMode.Saw);
+            if (_drillCutter != null) _drillCutter.gameObject.SetActive(mode == ToolMode.Drill);
+            if (_suctionDevice != null) _suctionDevice.gameObject.SetActive(mode == ToolMode.Suction);
         }
 
         internal void AppendSuctionTubePath(ref FixedList512Bytes<float3> path)
