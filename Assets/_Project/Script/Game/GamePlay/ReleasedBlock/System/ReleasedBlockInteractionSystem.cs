@@ -9,6 +9,7 @@ using Unity.Transforms;
 public partial struct ReleasedBlockInteractionSystem : ISystem
 {
     private EntityQuery _query;
+    private EntityQuery _motionQuery;
     private EntityQuery _suctionTransitQuery;
     private NativeReference<int> _suckedCount;
     private JobHandle _lastInteractionHandle;
@@ -24,6 +25,13 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
             .WithAllRW<SuctionTransit>()
             .WithAllRW<Simulate>()
             .WithAllRW<LocalTransform>()
+            .WithOptions(EntityQueryOptions.IgnoreComponentEnabledState)
+            .Build();
+        _motionQuery = SystemAPI.QueryBuilder()
+            .WithAllRW<LocalTransform>()
+            .WithAllRW<PhysicsVelocity>()
+            .WithAll<ReleasedBlockComponent>()
+            .WithAll<SuctionTransit>()
             .WithOptions(EntityQueryOptions.IgnoreComponentEnabledState)
             .Build();
         _suctionTransitQuery = SystemAPI.QueryBuilder()
@@ -95,7 +103,7 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
                 continue;
             }
             if (spawner.TryCreatePendingSawPushJob(out TextureBlockSpawner.SawPushJob sawPushJob))
-                dependency = sawPushJob.ScheduleParallel(_query, dependency);
+                dependency = sawPushJob.ScheduleParallel(_motionQuery, dependency);
         }
 
         for (int i = TextureBlockSpawner.ActiveSpawnerCount - 1; i >= 0; i--)
@@ -105,7 +113,7 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
                 spawner.TryCreateSolidConstraintJob(
                     out TextureBlockSpawner.ReleasedBlockSolidConstraintJob solidConstraintJob))
             {
-                dependency = solidConstraintJob.ScheduleParallel(_query, dependency);
+                dependency = solidConstraintJob.ScheduleParallel(_motionQuery, dependency);
             }
         }
         state.Dependency = dependency;
