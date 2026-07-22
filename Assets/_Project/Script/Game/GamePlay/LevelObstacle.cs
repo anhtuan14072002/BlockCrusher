@@ -27,6 +27,10 @@ public sealed class LevelObstacle : MonoBehaviour
     {
         if (!ActiveObstacles.Contains(this))
             ActiveObstacles.Add(this);
+
+        World world = World.DefaultGameObjectInjectionWorld;
+        if (world != null && world.IsCreated)
+            EnsurePhysicsEntity(world);
     }
 
     private void OnDisable()
@@ -36,26 +40,13 @@ public sealed class LevelObstacle : MonoBehaviour
     }
 
     internal static void MaskSpawnCells(NativeArray<byte> cellSolid, Transform gridTransform, Vector3 offset,
-        int gridWidth, int gridHeight, float cellSize, float colliderDepth)
+        int gridWidth, int gridHeight, float cellSize)
     {
         LevelObstacle[] obstacles =
             FindObjectsByType<LevelObstacle>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
         if (obstacles.Length == 0)
             return;
 
-        Vector3 scale = gridTransform.lossyScale;
-        float3 cellWorldSize = new float3(
-            cellSize * Mathf.Abs(scale.x),
-            cellSize * Mathf.Abs(scale.y),
-            colliderDepth * Mathf.Abs(scale.z));
-        using BlobAssetReference<ColliderBlob> cellCollider = Unity.Physics.BoxCollider.Create(new BoxGeometry
-        {
-            Center = float3.zero,
-            Size = cellWorldSize,
-            Orientation = quaternion.identity,
-            BevelRadius = 0f
-        });
-        quaternion rotation = ToQuaternion(gridTransform.rotation);
         using NativeList<PhysicsRaycastHit> rayHits = new NativeList<PhysicsRaycastHit>(16, Allocator.Temp);
 
         for (int y = 0; y < gridHeight; y++)
@@ -68,15 +59,12 @@ public sealed class LevelObstacle : MonoBehaviour
 
                 Vector3 worldCenter = gridTransform.TransformPoint(
                     offset + new Vector3(x * cellSize, y * cellSize, 0f));
-                ColliderDistanceInput input = new ColliderDistanceInput(
-                    cellCollider, 0.0001f, new RigidTransform(rotation, ToFloat3(worldCenter)));
 
                 for (int i = 0; i < obstacles.Length; i++)
                 {
                     LevelObstacle obstacle = obstacles[i];
                     if (obstacle != null && obstacle.EnsureCollider() &&
-                        (obstacle._rigidBody.CalculateDistance(input) ||
-                         obstacle.ContainsPoint(ToFloat3(worldCenter), rayHits)))
+                        obstacle.ContainsPoint(ToFloat3(worldCenter), rayHits))
                     {
                         cellSolid[cellIndex] = 0;
                         break;
