@@ -978,6 +978,10 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
             Offset = ToFloat3(_offset),
             CellSize = _cellSize,
             BlockRadius = _cellSize * 0.48f,
+            GridBoundsMin = new float2(_offset.x, _offset.y) - _cellSize * 0.98f,
+            GridBoundsMax = new float2(
+                _offset.x + (_gridWidth - 1) * _cellSize,
+                _offset.y + (_gridHeight - 1) * _cellSize) + _cellSize * 0.98f,
             DeltaTime = Mathf.Max(Time.fixedDeltaTime, 0.001f),
             GridWidth = _gridWidth,
             GridHeight = _gridHeight,
@@ -1365,6 +1369,8 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         public float3 Offset;
         public float CellSize;
         public float BlockRadius;
+        public float2 GridBoundsMin;
+        public float2 GridBoundsMax;
         public float DeltaTime;
         public int GridWidth;
         public int GridHeight;
@@ -1391,6 +1397,8 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         {
             float3 localPosition = math.transform(WorldToLocal, worldPosition);
             float2 position = localPosition.xy;
+            if (math.any((position < GridBoundsMin) | (position > GridBoundsMax)))
+                return worldPosition;
 
             for (int iteration = 0; iteration < 4; iteration++)
             {

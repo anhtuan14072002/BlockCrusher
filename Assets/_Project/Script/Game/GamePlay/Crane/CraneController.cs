@@ -207,12 +207,40 @@ namespace Crusher
         internal void AppendSuctionTubePath(ref FixedList512Bytes<float3> path)
         {
             int lastJointIndex = Mathf.Min(_activeJointCount, _joints.Count) - 1;
-            for (int i = lastJointIndex; i >= 0; i--)
+            int availableSlots = path.Capacity - path.Length;
+            if (lastJointIndex < 0 || availableSlots <= 0) return;
+
+            int sampledJointCount = Mathf.Min(lastJointIndex + 1, availableSlots);
+            if (sampledJointCount == 1)
             {
-                Transform joint = _joints[i];
+                Transform rootJoint = _joints[0];
+                if (rootJoint != null)
+                    path.Add(new float3(rootJoint.position.x, rootJoint.position.y, rootJoint.position.z));
+                return;
+            }
+
+            // Ponytail: FixedList512 holds 42 float3s; sample excess joints and preserve both tube ends.
+            // Move the path to shared native storage only if full >41-joint fidelity becomes necessary.
+            int sampleDenominator = sampledJointCount - 1;
+            for (int i = 0; i < sampledJointCount; i++)
+            {
+                int jointIndex = lastJointIndex -
+                    (i * lastJointIndex + sampleDenominator / 2) / sampleDenominator;
+                Transform joint = _joints[jointIndex];
                 if (joint != null)
                     path.Add(new float3(joint.position.x, joint.position.y, joint.position.z));
             }
+
+#if UNITY_EDITOR
+            Transform expectedRoot = _joints[0];
+            if (expectedRoot != null)
+            {
+                float3 rootPosition = new float3(expectedRoot.position.x, expectedRoot.position.y,
+                    expectedRoot.position.z);
+                Debug.Assert(math.distancesq(path[path.Length - 1], rootPosition) < 0.000001f,
+                    "Suction path sampling must preserve the root joint.");
+            }
+#endif
         }
     }
 }

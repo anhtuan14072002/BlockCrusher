@@ -10,6 +10,7 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
 {
     private EntityQuery _query;
     private EntityQuery _suctionTransitQuery;
+    private NativeList<ReleasedBlockInteractionRequest> _requests;
     private NativeReference<int> _suckedCount;
     private JobHandle _lastInteractionHandle;
     private bool _hasPendingSuckedCount;
@@ -35,12 +36,15 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
             .WithAllRW<Simulate>()
             .WithAllRW<LocalTransform>()
             .Build();
+        _requests = new NativeList<ReleasedBlockInteractionRequest>(8, Allocator.Persistent);
         _suckedCount = new NativeReference<int>(Allocator.Persistent);
     }
 
     public void OnDestroy(ref SystemState state)
     {
         FlushSuckedCount();
+        if (_requests.IsCreated)
+            _requests.Dispose();
         if (_suckedCount.IsCreated)
             _suckedCount.Dispose();
     }
@@ -53,9 +57,8 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
         int requestCount = ReleasedBlockInteractionQueue.Count;
         if (requestCount > 0)
         {
-            NativeArray<ReleasedBlockInteractionRequest> requests =
-                new NativeArray<ReleasedBlockInteractionRequest>(requestCount, Allocator.TempJob,
-                    NativeArrayOptions.UninitializedMemory);
+            _requests.ResizeUninitialized(requestCount);
+            NativeArray<ReleasedBlockInteractionRequest> requests = _requests.AsArray();
             ReleasedBlockInteractionQueue.CopyToAndClear(requests);
             _suckedCount.Value = 0;
             bool requiresAllBlocks = false;
@@ -81,7 +84,7 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
                 SuckedCount = _suckedCount
             }.Schedule(requiresAllBlocks ? _query : _suctionTransitQuery, dependency);
 
-            dependency = JobHandle.CombineDependencies(interactionHandle, requests.Dispose(interactionHandle));
+            dependency = interactionHandle;
             _lastInteractionHandle = interactionHandle;
             _hasPendingSuckedCount = true;
         }

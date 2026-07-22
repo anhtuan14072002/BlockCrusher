@@ -116,7 +116,6 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
 
                     direction /= distance;
                     block.SuctionPathIndex = (byte)pathIndex;
-                    block.StableFrames = 0;
                     simulate.ValueRW = true;
                     gravity.Value = 0f;
                     float3 targetVelocity = direction * math.min(request.Force * distance, request.MaxVelocity);

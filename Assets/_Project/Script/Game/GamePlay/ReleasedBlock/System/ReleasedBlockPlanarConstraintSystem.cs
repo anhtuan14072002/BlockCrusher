@@ -16,9 +16,7 @@ public partial struct ReleasedBlockPlanarConstraintSystem : ISystem
             .WithAllRW<LocalTransform>()
             .WithAllRW<PhysicsVelocity>()
             .WithAllRW<PhysicsGravityFactor>()
-            .WithAllRW<ReleasedBlockComponent>()
-            .WithAllRW<Simulate>()
-            .WithOptions(EntityQueryOptions.IgnoreComponentEnabledState)
+            .WithAll<ReleasedBlockComponent, Simulate>()
             .Build();
         state.RequireForUpdate(_query);
     }
