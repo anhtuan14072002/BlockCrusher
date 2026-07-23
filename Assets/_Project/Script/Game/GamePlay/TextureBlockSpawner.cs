@@ -38,6 +38,14 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     [SerializeField] private Transform[] _releasedBlockWalls;
     [SerializeField] private bool _centerTexture = true;
     [SerializeField] private bool _spawnOnAwake = true;
+    [Header("Metaball Water")]
+    [SerializeField] private bool _spawnMetaballWater = true;
+    [SerializeField, Min(0)] private int _waterClusterCount = 3;
+    [SerializeField, Min(1)] private int _waterCellsPerClusterMin = 10;
+    [SerializeField, Min(1)] private int _waterCellsPerClusterMax = 20;
+    [SerializeField, Range(1f, 3f)] private float _waterParticleScale = 1.65f;
+    [SerializeField] private ParticleSystem _metaballParticles;
+    [SerializeField] private RenderMaterial _metaballSourceMaterial;
     private readonly List<ChunkRuntime> _chunks = new();
     private static readonly List<TextureBlockSpawner> ActiveSpawners = new();
     private static int _nextOwnerId = 1;
@@ -45,6 +53,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     private readonly List<int> _scheduledChunkRebuilds = new(8);
     private readonly List<JobHandle> _scheduledChunkHandles = new(8);
     private readonly List<Entity> _releasedBlockEntities = new(1024);
+    private readonly List<Entity> _metaballWaterEntities = new(64);
     private readonly List<Entity> _releasedBlockWallEntities = new(4);
     private readonly List<BlobAssetReference<Collider>> _releasedBlockWallColliders = new(4);
     private readonly RenderFrameData[] _renderFrames = new RenderFrameData[2];
@@ -74,6 +83,8 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     private float _releasedBlockScale = 1f;
     private int _physicsDebrisFrame = -1;
     private int _physicsDebrisSpawnedThisFrame;
+    private ParticleSystem.Particle[] _metaballParticleBuffer;
+    private int _spawnedWaterCellCount;
     private bool _hasReleasedBlockQuery;
     private bool _hasPendingSawPush;
     private Vector3 _pendingSawCenter;
@@ -213,6 +224,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     }
     private void LateUpdate()
     {
+        UpdateMetaballWaterRendering();
         DrawReleasedBlocks();
         if (_dirtyChunks.Count == 0)
             return;
@@ -273,11 +285,13 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         texturePixels.Dispose();
         LevelObstacle.MaskSpawnCells(_cellSolid, _runtimeParent, _offset, _gridWidth, _gridHeight, _cellSize);
         _runtimeChunkMaterial = ResolveChunkMaterial();
+        SpawnMetaballWater();
         CreateChunks();
     }
     [ContextMenu("Clear")]
     public void Clear()
     {
+        ClearMetaballWater();
         DisposeCells();
         DisposeChunks();
         _chunks.Clear();
@@ -290,6 +304,8 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         for (int i = parent.childCount - 1; i >= 0; i--)
         {
             Transform child = parent.GetChild(i);
+            if (_metaballParticles != null && child == _metaballParticles.transform)
+                continue;
             if (Application.isPlaying)
                 Destroy(child.gameObject);
             else
@@ -657,6 +673,162 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     {
         return _offset + new Vector3(x * _cellSize, y * _cellSize, 0f);
     }
+    private void SpawnMetaballWater()
+    {
+        if (!_spawnMetaballWater || _metaballParticles == null || _waterClusterCount == 0)
+            return;
+
+        int margin = 2;
+        List<int> seeds = new List<int>();
+        for (int y = margin; y < _gridHeight - margin; y++)
+        {
+            for (int x = margin; x < _gridWidth - margin; x++)
+            {
+                int index = y * _gridWidth + x;
+                if (_cellSolid[index] != 0)
+                    seeds.Add(index);
+            }
+        }
+
+        int minCells = Mathf.Min(_waterCellsPerClusterMin, _waterCellsPerClusterMax);
+        int maxCells = Mathf.Max(_waterCellsPerClusterMin, _waterCellsPerClusterMax);
+        List<int> waterCells = new List<int>(_waterClusterCount * maxCells);
+        List<int> frontier = new List<int>(maxCells * 4);
+
+        for (int cluster = 0; cluster < _waterClusterCount && seeds.Count > 0; cluster++)
+        {
+            int seedIndex = UnityEngine.Random.Range(0, seeds.Count);
+            int seed = seeds[seedIndex];
+            seeds[seedIndex] = seeds[seeds.Count - 1];
+            seeds.RemoveAt(seeds.Count - 1);
+            if (_cellSolid[seed] == 0)
+            {
+                cluster--;
+                continue;
+            }
+
+            int targetCount = UnityEngine.Random.Range(minCells, maxCells + 1);
+            int clusterStart = waterCells.Count;
+            AddWaterCell(seed, waterCells, frontier, margin);
+            while (waterCells.Count - clusterStart < targetCount && frontier.Count > 0)
+            {
+                int frontierIndex = UnityEngine.Random.Range(0, frontier.Count);
+                int cell = frontier[frontierIndex];
+                frontier[frontierIndex] = frontier[frontier.Count - 1];
+                frontier.RemoveAt(frontier.Count - 1);
+                if (_cellSolid[cell] != 0)
+                    AddWaterCell(cell, waterCells, frontier, margin);
+            }
+            frontier.Clear();
+        }
+
+        SpawnMetaballWaterBlocks(waterCells);
+    }
+    private void AddWaterCell(int cell, List<int> waterCells, List<int> frontier, int margin)
+    {
+        _cellSolid[cell] = 0;
+        waterCells.Add(cell);
+        int x = cell % _gridWidth;
+        int y = cell / _gridWidth;
+        AddWaterFrontier(x - 1, y, frontier, margin);
+        AddWaterFrontier(x + 1, y, frontier, margin);
+        AddWaterFrontier(x, y - 1, frontier, margin);
+        AddWaterFrontier(x, y + 1, frontier, margin);
+    }
+    private void AddWaterFrontier(int x, int y, List<int> frontier, int margin)
+    {
+        if (x < margin || x >= _gridWidth - margin || y < margin || y >= _gridHeight - margin)
+            return;
+        int cell = y * _gridWidth + x;
+        if (_cellSolid[cell] != 0)
+            frontier.Add(cell);
+    }
+    private void SpawnMetaballWaterBlocks(List<int> waterCells)
+    {
+        if (!EnsureReleasedBlockResources() || !EnsureEcsReady())
+            return;
+
+        ParticleSystem.MainModule main = _metaballParticles.main;
+        main.loop = false;
+        main.playOnAwake = false;
+        main.simulationSpace = ParticleSystemSimulationSpace.Local;
+        main.maxParticles = Mathf.Max(1, waterCells.Count);
+        ParticleSystem.EmissionModule emission = _metaballParticles.emission;
+        emission.enabled = false;
+        ParticleSystem.ShapeModule shape = _metaballParticles.shape;
+        shape.enabled = false;
+        ParticleSystemRenderer renderer = _metaballParticles.GetComponent<ParticleSystemRenderer>();
+        renderer.renderMode = ParticleSystemRenderMode.Billboard;
+        renderer.sharedMaterial = _metaballSourceMaterial;
+
+        float depth = -_chunkColliderDepth * 0.5f;
+        float maxVelocity = GetSafePhysicsVelocity(float.MaxValue);
+        for (int i = 0; i < waterCells.Count; i++)
+        {
+            int cell = waterCells[i];
+            Vector3 position = GetCellLocalPosition(cell % _gridWidth, cell / _gridWidth);
+            position.z = depth;
+            position = _runtimeParent.TransformPoint(position);
+            Entity entity = CreateReleasedBlockEntity(position, new Color32(255, 255, 255, 255),
+                Vector3.zero, maxVelocity, true, false);
+            _metaballWaterEntities.Add(entity);
+        }
+
+        _metaballParticles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        _metaballParticles.Play(false);
+        UpdateMetaballWaterRendering();
+    }
+    private void UpdateMetaballWaterRendering()
+    {
+        if (_metaballParticles == null || _metaballWaterEntities.Count == 0 || !EnsureEcsReady())
+            return;
+
+        _entityManager.CompleteDependencyBeforeRO<LocalTransform>();
+        if (_metaballParticleBuffer == null || _metaballParticleBuffer.Length < _metaballWaterEntities.Count)
+            _metaballParticleBuffer = new ParticleSystem.Particle[_metaballWaterEntities.Count];
+
+        int particleCount = 0;
+        float size = _cellSize * _waterParticleScale;
+        for (int i = _metaballWaterEntities.Count - 1; i >= 0; i--)
+        {
+            Entity entity = _metaballWaterEntities[i];
+            if (!_entityManager.Exists(entity))
+            {
+                _metaballWaterEntities.RemoveAt(i);
+                continue;
+            }
+
+            float3 worldPosition = _entityManager.GetComponentData<LocalTransform>(entity).Position;
+            Vector3 position = _metaballParticles.transform.InverseTransformPoint(
+                new Vector3(worldPosition.x, worldPosition.y, worldPosition.z));
+            _metaballParticleBuffer[particleCount++] = new ParticleSystem.Particle
+            {
+                position = position,
+                startSize = size,
+                startColor = Color.white,
+                remainingLifetime = 86400f,
+                startLifetime = 86400f
+            };
+        }
+
+        _metaballParticles.SetParticles(_metaballParticleBuffer, particleCount);
+        _spawnedWaterCellCount = particleCount;
+    }
+    private void ClearMetaballWater()
+    {
+        _spawnedWaterCellCount = 0;
+        _metaballWaterEntities.Clear();
+        if (_metaballParticles != null)
+            _metaballParticles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+    }
+    [ContextMenu("Validate Metaball Water")]
+    private void ValidateMetaballWater()
+    {
+        Debug.Assert(!_spawnMetaballWater ||
+                     (_metaballParticles != null && _spawnedWaterCellCount > 0 &&
+                      _metaballParticles.particleCount == _spawnedWaterCellCount),
+            "Metaball water is not wired or did not spawn.", this);
+    }
     private void QueueReleasedBlockSpawn(Vector3 localPosition, Color32 color, Vector3 sawCenter,
         Vector3 pressDirection,
         float pressSpeed, float outwardForce, float tangentialForce, float spinDirection, float bladeRadius,
@@ -683,10 +855,16 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         float safeMaxVelocity = GetSafePhysicsVelocity(maxVelocity);
         Vector3 clampedVelocity = Vector3.ClampMagnitude(velocity, safeMaxVelocity);
         clampedVelocity = RedirectVelocityFromSolid(position, clampedVelocity);
+        CreateReleasedBlockEntity(position, color, clampedVelocity, safeMaxVelocity, false, true);
+    }
+    private Entity CreateReleasedBlockEntity(Vector3 position, Color32 color, Vector3 velocity,
+        float maxVelocity, bool renderAsMetaball, bool enableSolidConstraint)
+    {
         if (_releasedBlockEntities.Count >= _maxReleasedPhysicsBlocks)
             TrimReleasedBlockEntityList();
         while (_releasedBlockEntities.Count >= _maxReleasedPhysicsBlocks && _releasedBlockEntities.Count > 0)
             DestroyReleasedBlockEntityAt(0);
+
         Entity entity = _entityManager.CreateEntity(_releasedBlockArchetype);
         _entityManager.SetComponentData(entity, LocalTransform.FromPositionRotationScale(
             new float3(position.x, position.y, position.z), quaternion.identity, _releasedBlockScale));
@@ -698,7 +876,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         _entityManager.SetComponentData(entity, physicsMass);
         _entityManager.SetComponentData(entity, new PhysicsVelocity
         {
-            Linear = new float3(clampedVelocity.x, clampedVelocity.y, clampedVelocity.z),
+            Linear = new float3(velocity.x, velocity.y, velocity.z),
             Angular = float3.zero
         });
         _entityManager.SetComponentData(entity, new PhysicsDamping
@@ -712,13 +890,15 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
             OwnerId = _ownerId,
             Color = ToFloat4(color),
             LockedZ = position.z,
-            MaxPlanarSpeed = safeMaxVelocity,
+            MaxPlanarSpeed = maxVelocity,
             SuctionPathIndex = byte.MaxValue,
-            SolidConstraintFrames = ReleasedBlockComponent.SolidConstraintDuration
+            SolidConstraintFrames = enableSolidConstraint ? ReleasedBlockComponent.SolidConstraintDuration : (byte)0,
+            RenderAsMetaball = renderAsMetaball ? (byte)1 : (byte)0
         });
-        _entityManager.SetComponentEnabled<ReleasedBlockSolidConstraint>(entity, true);
+        _entityManager.SetComponentEnabled<ReleasedBlockSolidConstraint>(entity, enableSolidConstraint);
         _entityManager.SetComponentEnabled<SuctionTransit>(entity, false);
         _releasedBlockEntities.Add(entity);
+        return entity;
     }
     private float GetSafePhysicsVelocity(float requestedMaxVelocity)
     {
@@ -1122,6 +1302,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     {
         ClearReleasedBlockEntities();
         _releasedBlockEntities.Clear();
+        _metaballWaterEntities.Clear();
     }
     private void DisposeReleasedBlockResources()
     {

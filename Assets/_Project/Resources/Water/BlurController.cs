@@ -1,66 +1,102 @@
-///-----------------------------------------------------------------
-///   Class:          BlurController
-///   Description:    Created by Unity, edited by VC.
-///   Author:         VueCode
-///   GitHub:         https://github.com/ivuecode/
-///-----------------------------------------------------------------
 using UnityEngine;
 
 [ExecuteInEditMode]
 public class BlurController : MonoBehaviour
 {
-    [Header("Blue Settings")]
-    public int iterations = 3;                   // Blur iterations - larger number means more blur.
-    public float blurSpread = 0.6f;              // Blur spread for each iteration. Lower values give better looking blur.
-    static Material m_Material = null;
-    protected Material material { get { if (m_Material == null) { m_Material = new Material(blurShader) { hideFlags = HideFlags.DontSave }; } return m_Material; } }
+    public Camera sourceCamera;
+    [Min(0)] public int iterations = 3;
+    public float blurSpread = 0.6f;
+    public Shader blurShader;
 
-    public Shader blurShader = null;             // The blur iteration shader just takes 4 texture samples and averages them.
-                                                 // By applying it repeatedly and spreading out sample locations
-                                                 // we get a Gaussian blur approximation.
+    private Camera _camera;
+    private Material _material;
 
-
-    // Performs one blur iteration.
-    public void FourTapCone(RenderTexture source, RenderTexture dest, int iteration)
+    private Material Material
     {
-        float off = 0.5f + iteration * blurSpread;
-        Graphics.BlitMultiTap(source, dest, material,
-                               new Vector2(-off, -off),
-                               new Vector2(-off, off),
-                               new Vector2(off, off),
-                               new Vector2(off, -off));
+        get
+        {
+            if (_material == null && blurShader != null)
+                _material = new Material(blurShader) { hideFlags = HideFlags.DontSave };
+            return _material;
+        }
     }
 
-    // Downsamples the texture to a quarter resolution.
+    private void OnEnable()
+    {
+        _camera = GetComponent<Camera>();
+        SyncCamera();
+    }
+
+    private void LateUpdate()
+    {
+        SyncCamera();
+    }
+
+    private void SyncCamera()
+    {
+        if (_camera == null || sourceCamera == null)
+            return;
+        Transform sourceTransform = sourceCamera.transform;
+        transform.SetPositionAndRotation(sourceTransform.position, sourceTransform.rotation);
+        _camera.orthographic = sourceCamera.orthographic;
+        _camera.orthographicSize = sourceCamera.orthographicSize;
+        _camera.fieldOfView = sourceCamera.fieldOfView;
+        _camera.aspect = sourceCamera.aspect;
+        _camera.nearClipPlane = sourceCamera.nearClipPlane;
+        _camera.farClipPlane = sourceCamera.farClipPlane;
+    }
+
+    private void FourTapCone(RenderTexture source, RenderTexture destination, int iteration)
+    {
+        float offset = 0.5f + iteration * blurSpread;
+        Graphics.BlitMultiTap(source, destination, Material,
+            new Vector2(-offset, -offset),
+            new Vector2(-offset, offset),
+            new Vector2(offset, offset),
+            new Vector2(offset, -offset));
+    }
+
     private void DownSample4x(RenderTexture source, RenderTexture dest)
     {
-        float off = 1.0f;
-        Graphics.BlitMultiTap(source, dest, material,
-                               new Vector2(-off, -off),
-                               new Vector2(-off, off),
-                               new Vector2(off, off),
-                               new Vector2(off, -off));
+        const float offset = 1f;
+        Graphics.BlitMultiTap(source, dest, Material,
+            new Vector2(-offset, -offset),
+            new Vector2(-offset, offset),
+            new Vector2(offset, offset),
+            new Vector2(offset, -offset));
     }
 
-    // Called by the camera to apply the image effect
-    void OnRenderImage(RenderTexture source, RenderTexture destination)
+    private void OnRenderImage(RenderTexture source, RenderTexture destination)
     {
-        int rtW = source.width / 4;
-        int rtH = source.height / 4;
-        RenderTexture buffer = RenderTexture.GetTemporary(rtW, rtH, 0);
-
-        // Copy source to the 4x4 smaller texture.
+        if (Material == null)
+        {
+            Graphics.Blit(source, destination);
+            return;
+        }
+        int width = Mathf.Max(1, source.width / 4);
+        int height = Mathf.Max(1, source.height / 4);
+        RenderTexture buffer = RenderTexture.GetTemporary(width, height, 0);
         DownSample4x(source, buffer);
-
-        // Blur the small texture
         for (int i = 0; i < iterations; i++)
         {
-            RenderTexture buffer2 = RenderTexture.GetTemporary(rtW, rtH, 0);
-            FourTapCone(buffer, buffer2, i);
+            RenderTexture next = RenderTexture.GetTemporary(width, height, 0);
+            FourTapCone(buffer, next, i);
             RenderTexture.ReleaseTemporary(buffer);
-            buffer = buffer2;
+            buffer = next;
         }
         Graphics.Blit(buffer, destination);
         RenderTexture.ReleaseTemporary(buffer);
+    }
+
+    private void OnDisable()
+    {
+        if (_material != null)
+        {
+            if (Application.isPlaying)
+                Destroy(_material);
+            else
+                DestroyImmediate(_material);
+            _material = null;
+        }
     }
 }

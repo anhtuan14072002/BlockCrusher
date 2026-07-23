@@ -11,6 +11,7 @@ public struct ReleasedBlockComponent : IComponentData
     public float MaxPlanarSpeed;
     public byte SuctionPathIndex;
     public byte SolidConstraintFrames;
+    public byte RenderAsMetaball;
 }
 
 public struct SuctionTransit : IComponentData, IEnableableComponent
