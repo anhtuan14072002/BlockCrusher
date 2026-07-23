@@ -713,8 +713,10 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
             Color = ToFloat4(color),
             LockedZ = position.z,
             MaxPlanarSpeed = safeMaxVelocity,
-            SuctionPathIndex = byte.MaxValue
+            SuctionPathIndex = byte.MaxValue,
+            SolidConstraintFrames = ReleasedBlockComponent.SolidConstraintDuration
         });
+        _entityManager.SetComponentEnabled<ReleasedBlockSolidConstraint>(entity, true);
         _entityManager.SetComponentEnabled<SuctionTransit>(entity, false);
         _releasedBlockEntities.Add(entity);
     }
@@ -857,7 +859,8 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
             _releasedBlockArchetype = _entityManager.CreateArchetype(
                 typeof(LocalTransform), typeof(PhysicsCollider), typeof(PhysicsMass), typeof(PhysicsVelocity),
                 typeof(PhysicsDamping), typeof(PhysicsGravityFactor), typeof(Simulate),
-                typeof(ReleasedBlockComponent), typeof(SuctionTransit), typeof(PhysicsWorldIndex));
+                typeof(ReleasedBlockComponent), typeof(ReleasedBlockSolidConstraint), typeof(SuctionTransit),
+                typeof(PhysicsWorldIndex));
             _releasedBlockQuery = _entityManager.CreateEntityQuery(
                 ComponentType.ReadOnly<ReleasedBlockComponent>(),
                 ComponentType.ReadOnly<LocalTransform>(),
@@ -1258,8 +1261,9 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         public int GridHeight;
         public int OwnerId;
 
-        private void Execute(in LocalTransform transform, in ReleasedBlockComponent block,
-            ref PhysicsVelocity velocity, EnabledRefRO<SuctionTransit> suctionTransit)
+        private void Execute(in LocalTransform transform, ref ReleasedBlockComponent block,
+            ref PhysicsVelocity velocity, EnabledRefRW<ReleasedBlockSolidConstraint> solidConstraint,
+            EnabledRefRO<SuctionTransit> suctionTransit)
         {
             if (block.OwnerId != OwnerId || suctionTransit.ValueRO)
                 return;
@@ -1271,6 +1275,8 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
             if (distanceSq > radiusSq)
                 return;
 
+            block.SolidConstraintFrames = ReleasedBlockComponent.SolidConstraintDuration;
+            solidConstraint.ValueRW = true;
             float distance = math.sqrt(distanceSq);
             float2 outward = distance > 0.0001f
                 ? delta / distance
@@ -1377,10 +1383,18 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
         public int OwnerId;
 
         private void Execute(ref LocalTransform transform, ref PhysicsVelocity velocity,
-            in ReleasedBlockComponent block, EnabledRefRO<SuctionTransit> suctionTransit)
+            ref ReleasedBlockComponent block, EnabledRefRW<ReleasedBlockSolidConstraint> solidConstraint)
         {
-            if (block.OwnerId != OwnerId || suctionTransit.ValueRO)
+            if (block.OwnerId != OwnerId)
                 return;
+            if (block.SuctionPathIndex != byte.MaxValue || block.SolidConstraintFrames == 0)
+            {
+                block.SolidConstraintFrames = 0;
+                solidConstraint.ValueRW = false;
+                return;
+            }
+
+            block.SolidConstraintFrames--;
 
             float3 position = transform.Position;
             float3 resolvedPosition = ResolvePenetration(position);
@@ -1391,6 +1405,9 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
             predictedPosition.z = resolvedPosition.z;
             float3 resolvedPrediction = ResolvePenetration(predictedPosition);
             ApplyCorrection(ref velocity, resolvedPrediction - predictedPosition);
+
+            if (block.SolidConstraintFrames == 0)
+                solidConstraint.ValueRW = false;
         }
 
         private float3 ResolvePenetration(float3 worldPosition)

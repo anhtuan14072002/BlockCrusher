@@ -10,6 +10,7 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
 {
     private EntityQuery _query;
     private EntityQuery _suctionTransitQuery;
+    private EntityQuery _solidConstraintQuery;
     private NativeList<ReleasedBlockInteractionRequest> _requests;
     private NativeReference<int> _suckedCount;
     private JobHandle _lastInteractionHandle;
@@ -22,6 +23,7 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
             .WithAllRW<PhysicsCollider>()
             .WithAllRW<PhysicsGravityFactor>()
             .WithAllRW<ReleasedBlockComponent>()
+            .WithAllRW<ReleasedBlockSolidConstraint>()
             .WithAllRW<SuctionTransit>()
             .WithAllRW<Simulate>()
             .WithAllRW<LocalTransform>()
@@ -34,6 +36,12 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
             .WithAllRW<ReleasedBlockComponent>()
             .WithAllRW<SuctionTransit>()
             .WithAllRW<Simulate>()
+            .WithAllRW<LocalTransform>()
+            .Build();
+        _solidConstraintQuery = SystemAPI.QueryBuilder()
+            .WithAllRW<PhysicsVelocity>()
+            .WithAllRW<ReleasedBlockComponent>()
+            .WithAllRW<ReleasedBlockSolidConstraint>()
             .WithAllRW<LocalTransform>()
             .Build();
         _requests = new NativeList<ReleasedBlockInteractionRequest>(8, Allocator.Persistent);
@@ -89,6 +97,7 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
             _hasPendingSuckedCount = true;
         }
 
+        bool scheduledSawPush = false;
         for (int i = TextureBlockSpawner.ActiveSpawnerCount - 1; i >= 0; i--)
         {
             TextureBlockSpawner spawner = TextureBlockSpawner.GetActiveSpawner(i);
@@ -98,7 +107,16 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
                 continue;
             }
             if (spawner.TryCreatePendingSawPushJob(out TextureBlockSpawner.SawPushJob sawPushJob))
+            {
                 dependency = sawPushJob.ScheduleParallel(_query, dependency);
+                scheduledSawPush = true;
+            }
+        }
+
+        if (!scheduledSawPush && _solidConstraintQuery.IsEmpty)
+        {
+            state.Dependency = dependency;
+            return;
         }
 
         for (int i = TextureBlockSpawner.ActiveSpawnerCount - 1; i >= 0; i--)
@@ -108,7 +126,7 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
                 spawner.TryCreateSolidConstraintJob(
                     out TextureBlockSpawner.ReleasedBlockSolidConstraintJob solidConstraintJob))
             {
-                dependency = solidConstraintJob.ScheduleParallel(_query, dependency);
+                dependency = solidConstraintJob.ScheduleParallel(_solidConstraintQuery, dependency);
             }
         }
         state.Dependency = dependency;

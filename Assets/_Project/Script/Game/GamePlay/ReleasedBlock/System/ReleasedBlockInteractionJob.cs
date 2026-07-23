@@ -35,6 +35,8 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
                 case ReleasedBlockInteractionType.Conveyor:
                     if (IsInsideBounds(position, request.BoundsMin, request.BoundsMax))
                     {
+                        block.SolidConstraintFrames = ReleasedBlockComponent.SolidConstraintDuration;
+                        CommandBuffer.SetComponentEnabled<ReleasedBlockSolidConstraint>(sortKey, entity, true);
                         float currentSpeed = math.dot(velocity.Linear, request.Direction);
                         float targetSpeed = MoveTowards(currentSpeed, request.Speed,
                             request.Acceleration * request.DeltaTime);
@@ -67,6 +69,8 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
                     {
                         collider.Value = default;
                         block.LockedZ -= request.RenderDepth;
+                        block.SolidConstraintFrames = 0;
+                        CommandBuffer.SetComponentEnabled<ReleasedBlockSolidConstraint>(sortKey, entity, false);
                         suctionTransit.ValueRW = true;
                     }
 
