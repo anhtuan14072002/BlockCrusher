@@ -1,5 +1,5 @@
-using Unity.Entities;
 using Unity.Assertions;
+using Unity.Entities;
 
 namespace Unity.Physics.Stateful
 {
@@ -29,7 +29,7 @@ namespace Unity.Physics.Stateful
         public Entity GetOtherEntity(Entity entity)
         {
             Assert.IsTrue((entity == EntityA) || (entity == EntityB));
-            return (entity == EntityA) ? EntityB : EntityA;
+            return entity == EntityA ? EntityB : EntityA;
         }
 
         public int CompareTo(StatefulTriggerEvent other) => ISimulationEventUtilities.CompareEvents(this, other);

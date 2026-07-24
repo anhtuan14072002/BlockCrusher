@@ -45,6 +45,7 @@ namespace Unity.Physics.Stateful
 
             // Estimated impulse applied
             public float EstimatedImpulse;
+
             // Average contact point position
             public float3 AverageContactPointPosition;
 

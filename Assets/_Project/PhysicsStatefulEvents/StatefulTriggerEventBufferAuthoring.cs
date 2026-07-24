@@ -10,7 +10,7 @@ namespace Unity.Physics.Stateful
 
     public class StatefulTriggerEventBufferAuthoring : MonoBehaviour
     {
-        class StatefulTriggerEventBufferAuthoringBaker : Baker<StatefulTriggerEventBufferAuthoring>
+        private sealed class StatefulTriggerEventBufferAuthoringBaker : Baker<StatefulTriggerEventBufferAuthoring>
         {
             public override void Bake(StatefulTriggerEventBufferAuthoring authoring)
             {
@@ -19,7 +19,8 @@ namespace Unity.Physics.Stateful
             }
         }
     }
-    
-    public struct StatefulTriggerEventExclude : IComponentData {}
 
+    public struct StatefulTriggerEventExclude : IComponentData
+    {
+    }
 }

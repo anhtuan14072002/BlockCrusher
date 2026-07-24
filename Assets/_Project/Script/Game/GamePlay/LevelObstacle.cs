@@ -100,6 +100,55 @@ public sealed class LevelObstacle : MonoBehaviour
         return position;
     }
 
+    internal static bool TryGetJointChainContact(
+        Vector3[] points, int segmentCount, float radius, out Vector3 contactNormal)
+    {
+        contactNormal = Vector3.zero;
+        if (radius <= 0f)
+            return false;
+
+        for (int obstacleIndex = 0; obstacleIndex < ActiveObstacles.Count; obstacleIndex++)
+        {
+            LevelObstacle obstacle = ActiveObstacles[obstacleIndex];
+            if (obstacle == null || !obstacle.EnsureCollider())
+                continue;
+
+            for (int segmentIndex = 0; segmentIndex < segmentCount; segmentIndex++)
+            {
+                if (obstacle._rigidBody.CheckCapsule(
+                        ToFloat3(points[segmentIndex]),
+                        ToFloat3(points[segmentIndex + 1]),
+                        radius,
+                        CollisionFilter.Default))
+                {
+                    NativeList<DistanceHit> hits = new NativeList<DistanceHit>(4, Allocator.Temp);
+                    obstacle._rigidBody.OverlapCapsule(
+                        ToFloat3(points[segmentIndex]),
+                        ToFloat3(points[segmentIndex + 1]),
+                        radius,
+                        ref hits,
+                        CollisionFilter.Default);
+
+                    float deepestDistance = float.MaxValue;
+                    for (int hitIndex = 0; hitIndex < hits.Length; hitIndex++)
+                    {
+                        DistanceHit hit = hits[hitIndex];
+                        if (hit.Distance >= deepestDistance)
+                            continue;
+
+                        deepestDistance = hit.Distance;
+                        contactNormal = ToVector3(hit.SurfaceNormal).normalized;
+                    }
+
+                    hits.Dispose();
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     private static bool TryCastSaw(Vector3 from, Vector3 to,
         BlobAssetReference<ColliderBlob> sawCollider, Quaternion sawRotation,
         out ColliderCastHit closestHit)

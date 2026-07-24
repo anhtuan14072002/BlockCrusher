@@ -19,8 +19,11 @@ internal sealed class RenderFrameData
 
     public void Dispose()
     {
-        if (Matrices.IsCreated) Matrices.Dispose();
-        if (Colors.IsCreated) Colors.Dispose();
-        if (Count.IsCreated) Count.Dispose();
+        if (Matrices.IsCreated)
+            Matrices.Dispose();
+        if (Colors.IsCreated)
+            Colors.Dispose();
+        if (Count.IsCreated)
+            Count.Dispose();
     }
 }

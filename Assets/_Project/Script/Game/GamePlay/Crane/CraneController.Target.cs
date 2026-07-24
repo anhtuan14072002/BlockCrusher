@@ -28,13 +28,15 @@ namespace Crusher
 
         private void ApplySawAtPosition(Vector3 sawPosition)
         {
-            if (_saw == null || _activeJointCount == 0) return;
+            if (_saw == null || _activeJointCount == 0)
+                return;
 
             _sawTarget = sawPosition;
             _saw.position = sawPosition;
 
             Transform lastJoint = _joints[_activeJointCount - 1];
-            if (lastJoint == null) return;
+            if (lastJoint == null)
+                return;
 
             Vector3 sawDirection = sawPosition - lastJoint.position;
             if (sawDirection.sqrMagnitude > 0.0001f)

@@ -11,35 +11,35 @@ namespace Crusher
     {
         public static CraneController Instance { get; private set; }
 
+        [Header("Input")]
         [SerializeField] private Joystick _joystick;
         [SerializeField] private Camera _movementCamera;
-        
-        [Space] 
+
+        [Header("Movement")]
         [SerializeField] private float _sawMoveSpeed = 3.5f;
         [SerializeField, Range(0.05f, 1f)] private float _sawContactMoveMultiplier = 0.35f;
         [SerializeField, Range(0.01f, 0.5f)] private float _sawContactMoveMultiplierStep = 0.1f;
-
         [SerializeField] private Vector2 _targetXBounds;
         [SerializeField] private Vector2 _targetYBounds;
-        
+
+        [Header("Joint Chain")]
         [SerializeField] private GameObject _jointPrefab;
         [SerializeField] private int _ikIterations = 16;
         [SerializeField] private int _activeJointCount = 4;
         [SerializeField] private int _maxJointCount = 7;
-        
         [SerializeField] private float _segmentLength = 1.15f;
-        
+        [SerializeField, Min(0f)] private float _jointCollisionRadius = 0.13f;
         [SerializeField] private List<Transform> _joints = new();
         [SerializeField] private Transform _saw;
-        
+
+        [Header("Tools")]
         [SerializeField] private SawBlockCutter _sawCutter;
         [SerializeField] private SuctionDevice _suctionDevice;
-
         [SerializeField] private Button _switchToolButton;
         [SerializeField] private Button _addJointButton;
 
         [Header("Fuel Settings")]
-        [SerializeField, Min(1f)] private float _maxFuel = 30f;
+        [SerializeField, Min(1f)] private float _maxFuel = 100f;
         [SerializeField, Min(0f)] private float _initialFuel = 30f;
         [SerializeField, Min(0f)] private float _fuelBurnRate = 1f;
         [SerializeField, Min(0f)] private float _fuelBurnRateIncreaseMultiplier = 1f;
@@ -67,11 +67,6 @@ namespace Crusher
         private void Awake()
         {
             Instance = this;
-/*#if UNITY_EDITOR
-            Application.targetFrameRate = 120;
-#else
-            Application.targetFrameRate = 60;
-#endif*/
             Application.targetFrameRate = 60;
             SetUpCraneController();
             InitializeFuel();
@@ -84,20 +79,21 @@ namespace Crusher
                 Instance = null;
 
             if (_switchToolButton != null)
-            {
                 _switchToolButton.onClick.RemoveListener(ToggleTool);
-            }
         }
 
         private void Update()
         {
-            if (_roundEnded) return;
+            if (_roundEnded)
+                return;
 
             UpdateFuel();
-            if (_roundEnded || !HasFuel) return;
+            if (_roundEnded || !HasFuel)
+                return;
 
             Vector2 input = _joystick != null ? _joystick.Direction : Vector2.zero;
-            if (input.sqrMagnitude <= 0.0001f) return;
+            if (input.sqrMagnitude <= 0.0001f)
+                return;
 
             MoveSawTarget(input);
             SolveJointsToSaw();
@@ -105,7 +101,8 @@ namespace Crusher
 
         private void FixedUpdate()
         {
-            if (_roundEnded) return;
+            if (_roundEnded)
+                return;
 
             if (_suctionDevice != null)
                 _suctionDevice.ProcessSuction(_isSuctionMode && HasFuel);
@@ -113,17 +110,20 @@ namespace Crusher
 
         public void AddJoint()
         {
-            if (_activeJointCount >= _maxJointCount) return;
+            if (_activeJointCount >= _maxJointCount)
+                return;
 
             Vector3 lockedSawPosition = GetSawPosition();
             Quaternion lockedSawRotation = _saw.rotation;
             int insertIndex = _activeJointCount - 1;
             int storageIndex = _activeJointCount;
             Transform insertedJoint = GetOrCreateJoint(storageIndex);
-            
-            if (insertedJoint == null) return;
+
+            if (insertedJoint == null)
+                return;
+
             _sawTarget = lockedSawPosition;
-            
+
             InsertJointBeforeLast(insertIndex, storageIndex, insertedJoint);
             _activeJointCount++;
             ApplyActiveJointCount();
@@ -163,7 +163,8 @@ namespace Crusher
         public void StopRound()
         {
             ResetCranePose();
-            if (_roundEnded) return;
+            if (_roundEnded)
+                return;
 
             _roundEnded = true;
             ResetFuelToInitial();
@@ -175,7 +176,7 @@ namespace Crusher
         private void SetUpCraneController()
         {
             _switchToolButton.onClick.AddListener(ToggleTool);
-            
+
             int existingJointCount = GetExistingJointCount();
             _maxJointCount = Mathf.Max(_maxJointCount, existingJointCount);
             _activeJointCount = existingJointCount > 0 ? Mathf.Clamp(_activeJointCount, 1, existingJointCount) : 0;
@@ -197,18 +198,21 @@ namespace Crusher
             _isSuctionMode = !_isSuctionMode;
             SetToolActive(_isSuctionMode);
         }
-        
+
         private void SetToolActive(bool isSuction)
         {
-            if (_sawCutter != null) _sawCutter.gameObject.SetActive(!isSuction);
-            if (_suctionDevice != null) _suctionDevice.gameObject.SetActive(isSuction);
+            if (_sawCutter != null)
+                _sawCutter.gameObject.SetActive(!isSuction);
+            if (_suctionDevice != null)
+                _suctionDevice.gameObject.SetActive(isSuction);
         }
 
         internal void AppendSuctionTubePath(ref FixedList512Bytes<float3> path)
         {
             int lastJointIndex = Mathf.Min(_activeJointCount, _joints.Count) - 1;
             int availableSlots = path.Capacity - path.Length;
-            if (lastJointIndex < 0 || availableSlots <= 0) return;
+            if (lastJointIndex < 0 || availableSlots <= 0)
+                return;
 
             int sampledJointCount = Mathf.Min(lastJointIndex + 1, availableSlots);
             if (sampledJointCount == 1)
@@ -218,9 +222,7 @@ namespace Crusher
                     path.Add(new float3(rootJoint.position.x, rootJoint.position.y, rootJoint.position.z));
                 return;
             }
-
-            // Ponytail: FixedList512 holds 42 float3s; sample excess joints and preserve both tube ends.
-            // Move the path to shared native storage only if full >41-joint fidelity becomes necessary.
+            
             int sampleDenominator = sampledJointCount - 1;
             for (int i = 0; i < sampledJointCount; i++)
             {

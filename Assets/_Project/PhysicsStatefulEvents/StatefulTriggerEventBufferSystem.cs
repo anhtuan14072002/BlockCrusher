@@ -1,9 +1,9 @@
+using Unity.Burst;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Physics;
 using Unity.Physics.Systems;
-using Unity.Collections;
-using Unity.Burst;
 
 namespace Unity.Physics.Stateful
 {
@@ -21,11 +21,11 @@ namespace Unity.Physics.Stateful
     [BurstCompile]
     public partial struct StatefulTriggerEventBufferSystem : ISystem
     {
-        private StatefulSimulationEventBuffers<StatefulTriggerEvent> m_StateFulEventBuffers;
-        private ComponentHandles m_ComponentHandles;
-        private EntityQuery m_TriggerEventQuery;
+        private StatefulSimulationEventBuffers<StatefulTriggerEvent> _statefulEventBuffers;
+        private ComponentHandles _componentHandles;
+        private EntityQuery _triggerEventQuery;
 
-        struct ComponentHandles
+        private struct ComponentHandles
         {
             public ComponentLookup<StatefulTriggerEventExclude> EventExcludes;
             public BufferLookup<StatefulTriggerEvent> EventBuffers;
@@ -50,19 +50,19 @@ namespace Unity.Physics.Stateful
                 .WithAllRW<StatefulTriggerEvent>()
                 .WithNone<StatefulTriggerEventExclude>();
 
-            m_StateFulEventBuffers = new StatefulSimulationEventBuffers<StatefulTriggerEvent>();
-            m_StateFulEventBuffers.AllocateBuffers();
+            _statefulEventBuffers = new StatefulSimulationEventBuffers<StatefulTriggerEvent>();
+            _statefulEventBuffers.AllocateBuffers();
 
-            m_TriggerEventQuery = state.GetEntityQuery(builder);
-            state.RequireForUpdate(m_TriggerEventQuery);
+            _triggerEventQuery = state.GetEntityQuery(builder);
+            state.RequireForUpdate(_triggerEventQuery);
 
-            m_ComponentHandles = new ComponentHandles(ref state);
+            _componentHandles = new ComponentHandles(ref state);
         }
 
         [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
-            m_StateFulEventBuffers.Dispose();
+            _statefulEventBuffers.Dispose();
         }
 
         [BurstCompile]
@@ -74,15 +74,15 @@ namespace Unity.Physics.Stateful
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            m_ComponentHandles.Update(ref state);
+            _componentHandles.Update(ref state);
 
             state.Dependency = new ClearTriggerEventDynamicBufferJob()
-                .ScheduleParallel(m_TriggerEventQuery, state.Dependency);
+                .ScheduleParallel(_triggerEventQuery, state.Dependency);
 
-            m_StateFulEventBuffers.SwapBuffers();
+            _statefulEventBuffers.SwapBuffers();
 
-            var currentEvents = m_StateFulEventBuffers.Current;
-            var previousEvents = m_StateFulEventBuffers.Previous;
+            NativeList<StatefulTriggerEvent> currentEvents = _statefulEventBuffers.Current;
+            NativeList<StatefulTriggerEvent> previousEvents = _statefulEventBuffers.Previous;
 
             state.Dependency = new StatefulEventCollectionJobs.CollectTriggerEvents
             {
@@ -94,10 +94,10 @@ namespace Unity.Physics.Stateful
             {
                 CurrentEvents = currentEvents,
                 PreviousEvents = previousEvents,
-                EventBuffers = m_ComponentHandles.EventBuffers,
+                EventBuffers = _componentHandles.EventBuffers,
 
                 UseExcludeComponent = true,
-                EventExcludeLookup = m_ComponentHandles.EventExcludes
+                EventExcludeLookup = _componentHandles.EventExcludes
             }.Schedule(state.Dependency);
         }
     }

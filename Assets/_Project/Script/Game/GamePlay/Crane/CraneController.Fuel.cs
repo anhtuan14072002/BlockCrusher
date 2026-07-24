@@ -25,6 +25,7 @@ namespace Crusher
 
             _initialFuel = Mathf.Min(_maxFuel, _initialFuel + _fuelUpgradeStep);
             _currentFuel = Mathf.Min(_maxFuel, _currentFuel + _fuelUpgradeStep);
+            
             SetFuelAvailable(!_roundEnded);
             RefreshFuelUI();
         }
@@ -47,8 +48,10 @@ namespace Crusher
 
         private void UpdateFuel()
         {
-            if (!_fuelEnabled || _currentFuel <= 0f || _isSuctionMode ||
-                _sawCutter == null || !_sawCutter.IsCuttingBlock) return;
+            if (!_fuelEnabled || _currentFuel <= 0f || _isSuctionMode || _sawCutter == null || !_sawCutter.IsCuttingBlock)
+            {
+                return;
+            }
 
             _currentFuel = Mathf.Max(0f, _currentFuel - _fuelBurnRate * Time.deltaTime);
             RefreshFuelUI();
@@ -67,7 +70,7 @@ namespace Crusher
         }
 
         private void RefreshFuelUI()
-        {
+        { 
             float normalizedFuel = _maxFuel > 0f ? _currentFuel / _maxFuel : 0f;
             _fuelFillMask.fillAmount = normalizedFuel;
 

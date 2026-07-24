@@ -108,11 +108,9 @@ public sealed partial class TextureBlockSpawner
         if (_pendingSawRadius <= 0f || !_cellSolid.IsCreated || _runtimeParent == null)
             return false;
 
-        Matrix4x4 matrix = _runtimeParent.worldToLocalMatrix;
-        float4x4 worldToLocal = new float4x4(ToFloat4(matrix.GetColumn(0)), ToFloat4(matrix.GetColumn(1)),
-            ToFloat4(matrix.GetColumn(2)), ToFloat4(matrix.GetColumn(3)));
+        float4x4 worldToLocal = ToFloat4x4(_runtimeParent.worldToLocalMatrix);
         float safeMaxVelocity = math.min(_pendingSawMaxVelocity,
-            _cellSize * 0.75f / math.max(Time.fixedDeltaTime, 0.001f));
+            _cellSize * MaxCellTravelPerStep / math.max(Time.fixedDeltaTime, MinimumPhysicsDeltaTime));
 
         job = new SawPushJob
         {
@@ -141,17 +139,11 @@ public sealed partial class TextureBlockSpawner
         if (!_cellSolid.IsCreated || _runtimeParent == null)
             return false;
 
-        Matrix4x4 worldToLocalMatrix = _runtimeParent.worldToLocalMatrix;
-        Matrix4x4 localToWorldMatrix = _runtimeParent.localToWorldMatrix;
         job = new ReleasedBlockSolidConstraintJob
         {
             CellSolid = _cellSolid,
-            WorldToLocal = new float4x4(ToFloat4(worldToLocalMatrix.GetColumn(0)),
-                ToFloat4(worldToLocalMatrix.GetColumn(1)), ToFloat4(worldToLocalMatrix.GetColumn(2)),
-                ToFloat4(worldToLocalMatrix.GetColumn(3))),
-            LocalToWorld = new float4x4(ToFloat4(localToWorldMatrix.GetColumn(0)),
-                ToFloat4(localToWorldMatrix.GetColumn(1)), ToFloat4(localToWorldMatrix.GetColumn(2)),
-                ToFloat4(localToWorldMatrix.GetColumn(3))),
+            WorldToLocal = ToFloat4x4(_runtimeParent.worldToLocalMatrix),
+            LocalToWorld = ToFloat4x4(_runtimeParent.localToWorldMatrix),
             Offset = ToFloat3(_offset),
             CellSize = _cellSize,
             BlockRadius = _cellSize * 0.48f,
@@ -159,7 +151,7 @@ public sealed partial class TextureBlockSpawner
             GridBoundsMax = new float2(
                 _offset.x + (_gridWidth - 1) * _cellSize,
                 _offset.y + (_gridHeight - 1) * _cellSize) + _cellSize * 0.98f,
-            DeltaTime = Mathf.Max(Time.fixedDeltaTime, 0.001f),
+            DeltaTime = Mathf.Max(Time.fixedDeltaTime, MinimumPhysicsDeltaTime),
             GridWidth = _gridWidth,
             GridHeight = _gridHeight,
             OwnerId = _ownerId

@@ -20,6 +20,7 @@ public sealed partial class TextureBlockSpawner
             Debug.LogError("TextureBlockSpawner needs a readable texture.", this);
             return;
         }
+
         int width = _texture.width;
         int height = _texture.height;
         _runtimeParent = _container != null ? _container : transform;
@@ -32,7 +33,8 @@ public sealed partial class TextureBlockSpawner
         DisposeCells();
         _cellColors = new NativeArray<Color32>(_gridWidth * _gridHeight, Allocator.Persistent);
         _cellSolid = new NativeArray<byte>(_gridWidth * _gridHeight, Allocator.Persistent);
-        NativeArray<Color32> texturePixels = new NativeArray<Color32>(pixels, Allocator.TempJob);
+
+        using NativeArray<Color32> texturePixels = new NativeArray<Color32>(pixels, Allocator.TempJob);
         TextureToCellsJob textureJob = new TextureToCellsJob
         {
             TexturePixels = texturePixels,
@@ -45,12 +47,13 @@ public sealed partial class TextureBlockSpawner
             AlphaLimit = (byte)Mathf.RoundToInt(_alphaThreshold * 255f)
         };
         textureJob.Schedule(_cellColors.Length, 64).Complete();
-        texturePixels.Dispose();
+
         LevelObstacle.MaskSpawnCells(_cellSolid, _runtimeParent, _offset, _gridWidth, _gridHeight, _cellSize);
         _runtimeChunkMaterial = ResolveChunkMaterial();
         SpawnMetaballWater();
         CreateChunks();
     }
+
     [ContextMenu("Clear")]
     public void Clear()
     {
@@ -69,12 +72,11 @@ public sealed partial class TextureBlockSpawner
             Transform child = parent.GetChild(i);
             if (_metaballParticles != null && child == _metaballParticles.transform)
                 continue;
-            if (Application.isPlaying)
-                Destroy(child.gameObject);
-            else
-                DestroyImmediate(child.gameObject);
+
+            DestroyUnityObject(child.gameObject);
         }
     }
+
     private void DisposeCells()
     {
         if (_cellColors.IsCreated)

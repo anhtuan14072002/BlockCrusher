@@ -10,17 +10,21 @@ namespace Crusher
             _segmentLengths = new float[_maxJointCount];
             _jointRotationOffsets = new Quaternion[_maxJointCount];
         }
+
         private void CacheModelPoseOffsets()
         {
             RefreshActiveSegmentData();
         }
+
         private void CacheFixedRoot()
         {
             Transform root = _joints.Count > 0 ? _joints[0] : null;
             if (root == null) return;
+
             _rootParent = root.parent;
             _rootLocalPosition = root.localPosition;
         }
+
         private void DetachSawFromJoints()
         {
             if (_saw != null && _saw.parent != transform)

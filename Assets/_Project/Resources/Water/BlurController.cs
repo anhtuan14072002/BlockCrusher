@@ -3,7 +3,10 @@ using UnityEngine;
 [ExecuteInEditMode]
 public class BlurController : MonoBehaviour
 {
+    [Header("Camera")]
     public Camera sourceCamera;
+
+    [Header("Blur")]
     [Min(0)] public int iterations = 3;
     public float blurSpread = 0.6f;
     public Shader blurShader;
@@ -17,6 +20,7 @@ public class BlurController : MonoBehaviour
         {
             if (_material == null && blurShader != null)
                 _material = new Material(blurShader) { hideFlags = HideFlags.DontSave };
+
             return _material;
         }
     }
@@ -36,6 +40,7 @@ public class BlurController : MonoBehaviour
     {
         if (_camera == null || sourceCamera == null)
             return;
+
         Transform sourceTransform = sourceCamera.transform;
         transform.SetPositionAndRotation(sourceTransform.position, sourceTransform.rotation);
         _camera.orthographic = sourceCamera.orthographic;
@@ -73,6 +78,7 @@ public class BlurController : MonoBehaviour
             Graphics.Blit(source, destination);
             return;
         }
+
         int width = Mathf.Max(1, source.width / 4);
         int height = Mathf.Max(1, source.height / 4);
         RenderTexture buffer = RenderTexture.GetTemporary(width, height, 0);
@@ -84,6 +90,7 @@ public class BlurController : MonoBehaviour
             RenderTexture.ReleaseTemporary(buffer);
             buffer = next;
         }
+
         Graphics.Blit(buffer, destination);
         RenderTexture.ReleaseTemporary(buffer);
     }
@@ -96,6 +103,7 @@ public class BlurController : MonoBehaviour
                 Destroy(_material);
             else
                 DestroyImmediate(_material);
+
             _material = null;
         }
     }

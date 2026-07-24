@@ -1,6 +1,6 @@
-using UnityEngine;
 using Unity.Collections;
 using Unity.Mathematics;
+using UnityEngine;
 
 namespace Crusher
 {
@@ -17,6 +17,7 @@ namespace Crusher
         [SerializeField] private float _pathWaypointRadius = 0.08f;
         [SerializeField] private float _pathLookAhead = 0.25f;
         [SerializeField] private float _tubeRenderDepth = 0.35f;
+
         private CraneController _craneController;
 
         private void Awake()
@@ -31,7 +32,9 @@ namespace Crusher
             suctionPath.Add(new float3(refTransform.position.x, refTransform.position.y, refTransform.position.z));
             if (_craneController != null)
                 _craneController.AppendSuctionTubePath(ref suctionPath);
-            TextureBlockSpawner.ApplySuctionForActiveSpawners(refTransform.position, refTransform.rotation, _suctionBoxSize, 
+
+            TextureBlockSpawner.ApplySuctionForActiveSpawners(
+                refTransform.position, refTransform.rotation, _suctionBoxSize,
                 _suctionForce, _suctionAcceleration, _maxBlockVelocity, _arrivalDamping, _tubeExitRadius,
                 _pathWaypointRadius, _pathLookAhead, _tubeRenderDepth, suctionPath, Time.fixedDeltaTime,
                 allowCapture);

@@ -9,11 +9,11 @@ internal struct TextureToCellsJob : IJobParallelFor
     [ReadOnly] public NativeArray<Color32> TexturePixels;
     [WriteOnly] public NativeArray<Color32> CellColors;
     [WriteOnly] public NativeArray<byte> CellSolid;
-    
+
     public int TextureWidth;
     public int TextureHeight;
     public int GridWidth;
-    
+
     public int SampleStep;
     public byte AlphaLimit;
 
@@ -23,13 +23,16 @@ internal struct TextureToCellsJob : IJobParallelFor
         int cellY = index / GridWidth;
         int sourceX = cellX * SampleStep;
         int sourceY = cellY * SampleStep;
-        
-        if (sourceX >= TextureWidth) sourceX = TextureWidth - 1;
-        if (sourceY >= TextureHeight) sourceY = TextureHeight - 1;
+
+        if (sourceX >= TextureWidth)
+            sourceX = TextureWidth - 1;
+        if (sourceY >= TextureHeight)
+            sourceY = TextureHeight - 1;
 
         Color32 color = TexturePixels[sourceY * TextureWidth + sourceX];
         bool solid = color.a > AlphaLimit;
-        if (solid) color.a = 255;
+        if (solid)
+            color.a = 255;
 
         CellColors[index] = color;
         CellSolid[index] = solid ? (byte)1 : (byte)0;

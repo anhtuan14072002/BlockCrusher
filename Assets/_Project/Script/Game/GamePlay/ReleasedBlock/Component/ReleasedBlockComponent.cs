@@ -1,6 +1,6 @@
 using Unity.Entities;
-
 using Unity.Mathematics;
+
 public struct ReleasedBlockComponent : IComponentData
 {
     public const byte SolidConstraintDuration = 8;

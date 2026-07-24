@@ -4,6 +4,7 @@ using UnityEngine;
 public sealed class CraneClear : MonoBehaviour
 {
     private BoxCollider _clearCollider;
+
     private void Awake()
     {
         _clearCollider = GetComponent<BoxCollider>();

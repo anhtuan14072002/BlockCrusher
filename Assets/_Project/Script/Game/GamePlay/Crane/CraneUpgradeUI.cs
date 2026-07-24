@@ -38,8 +38,6 @@ namespace Crusher
                 RefreshSuckedBlockCount();
         }
 
-        
-        
         private void IncreaseSawContactSpeed()
         {
             _craneController.IncreaseSawContactMoveMultiplier();
@@ -55,7 +53,7 @@ namespace Crusher
             _craneController.IncreaseFuelCapacity();
         }
 
-        private void AddSuckedBlocks(int count)
+        private void AddSuckedBlocks(int _)
         {
             RefreshSuckedBlockCount();
         }
@@ -63,7 +61,8 @@ namespace Crusher
         private void RefreshSuckedBlockCount()
         {
             if (_suckedBlockCountText != null)
-                _suckedBlockCountText.text =  TextureBlockSpawner.SuckedBlockCount.ToString();
+                _suckedBlockCountText.text = TextureBlockSpawner.SuckedBlockCount.ToString();
+
             _displayedSuckedBlockCount = TextureBlockSpawner.SuckedBlockCount;
         }
     }

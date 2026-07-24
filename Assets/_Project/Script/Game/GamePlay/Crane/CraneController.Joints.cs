@@ -1,4 +1,5 @@
 using UnityEngine;
+
 namespace Crusher
 {
     public sealed partial class CraneController
@@ -18,12 +19,17 @@ namespace Crusher
             for (int i = 0; i < _activeJointCount; i++)
             {
                 Transform joint = _joints[i];
-                if (joint == null) continue;
+                if (joint == null)
+                    continue;
+
                 Vector3 direction = GetSegmentEndPosition(i) - joint.position;
-                if (direction.sqrMagnitude <= 0.0001f) continue;
+                if (direction.sqrMagnitude <= 0.0001f)
+                    continue;
+
                 _segmentLengths[i] = GetSegmentLength(i, direction.magnitude);
                 _jointRotationOffsets[i] = Quaternion.Inverse(GetSegmentRotation(direction)) * joint.rotation;
             }
+
             CacheSawRotationOffset();
             RefreshActiveReach();
         }
@@ -43,6 +49,7 @@ namespace Crusher
         private void RefreshActiveReach()
         {
             float reach = 0f;
+            
             for (int i = 0; i < _activeJointCount; i++)
                 reach += _segmentLengths[i];
 
@@ -54,6 +61,7 @@ namespace Crusher
             if (_saw == null || _activeJointCount == 0) return;
 
             Transform lastJoint = _joints[_activeJointCount - 1];
+         
             if (lastJoint == null) return;
 
             Vector3 direction = _saw.position - lastJoint.position;
@@ -70,8 +78,7 @@ namespace Crusher
             if (nextJointIndex < _joints.Count && _joints[nextJointIndex] != null)
                 return _joints[nextJointIndex].position;
 
-            if (_saw != null)
-                return _saw.position;
+            if (_saw != null) return _saw.position;
 
             return _joints[jointIndex].position + _joints[jointIndex].right * _segmentLength;
         }
@@ -79,10 +86,11 @@ namespace Crusher
         private Transform GetOrCreateJoint(int jointIndex)
         {
             EnsureJointSlot(jointIndex);
-            if (_joints[jointIndex] != null)
-                return _joints[jointIndex];
+            
+            if (_joints[jointIndex] != null) return _joints[jointIndex];
 
             Transform joint = CreateJointFromPrefab(jointIndex);
+            
             if (joint == null) return null;
 
             joint.name = "Joint_" + jointIndex;
@@ -108,24 +116,19 @@ namespace Crusher
         private void InsertJointBeforeLast(int insertIndex, int storageIndex, Transform insertedJoint)
         {
             Transform pushedJoint = _joints[insertIndex];
-            if (pushedJoint == null || insertedJoint == null || _saw == null)
-                return;
+            if (pushedJoint == null || insertedJoint == null || _saw == null) return;
 
             Vector3 pushedPosition = pushedJoint.position;
             Vector3 sawPosition = _saw.position;
             Vector3 direction = sawPosition - pushedPosition;
-            float segmentLength = _segmentLengths[insertIndex] > 0.0001f
-                ? _segmentLengths[insertIndex]
-                : _segmentLength;
+            float segmentLength = _segmentLengths[insertIndex] > 0.0001f ? _segmentLengths[insertIndex] : _segmentLength;
 
             insertedJoint.gameObject.SetActive(true);
             insertedJoint.position = pushedPosition;
             insertedJoint.rotation = pushedJoint.rotation;
             pushedJoint.position = sawPosition;
-            pushedJoint.rotation = direction.sqrMagnitude > 0.0001f
-                ? GetSegmentRotation(direction) * _jointRotationOffsets[insertIndex]
-                : pushedJoint.rotation;
-            
+            pushedJoint.rotation = direction.sqrMagnitude > 0.0001f ? GetSegmentRotation(direction) * _jointRotationOffsets[insertIndex] : pushedJoint.rotation;
+
             _segmentLengths[storageIndex] = segmentLength;
             _jointRotationOffsets[storageIndex] = _jointRotationOffsets[insertIndex];
             _sawTarget = sawPosition;

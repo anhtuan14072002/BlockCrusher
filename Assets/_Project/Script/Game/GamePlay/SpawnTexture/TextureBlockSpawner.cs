@@ -8,20 +8,37 @@ using RenderMaterial = UnityEngine.Material;
 
 public sealed partial class TextureBlockSpawner : MonoBehaviour
 {
+    private const int MaxInstancesPerBatch = 1023;
+    private const float MinimumPhysicsDeltaTime = 0.001f;
+    private const float MaxCellTravelPerStep = 0.75f;
+
+    private static readonly List<TextureBlockSpawner> ActiveSpawners = new();
+    private static readonly int ColorId = Shader.PropertyToID("_Color");
+    private static int _nextOwnerId = 1;
+
+    [Header("Source")]
     [SerializeField] private Texture2D _texture;
     [SerializeField] private Transform _container;
     [SerializeField] private RenderMaterial _chunkMaterial;
+    [SerializeField] private bool _spawnOnAwake = true;
+
+    [Header("Grid")]
     [SerializeField] private float _pixelSize = 0.12f;
     [SerializeField, Range(1, 16)] private int _sampleStep = 1;
     [SerializeField, Range(0f, 1f)] private float _alphaThreshold = 0.1f;
+    [SerializeField] private bool _centerTexture = true;
+
+    [Header("Chunk Rendering")]
     [SerializeField] private float _chunkColliderDepth = 0.25f;
-    [SerializeField] private float _sawReleaseRadius = 0.18f;
     [SerializeField] private bool _renderVoxelDetailFromStart = true;
     [SerializeField, Range(0.75f, 1f)] private float _detailVoxelScale = 0.94f;
     [SerializeField, Range(0f, 30f)] private float _voxelRandomYRotation = 20f;
-    [SerializeField, Min(0)] private int _maxPhysicsDebrisPerFrame;
     [SerializeField, Range(8, 64)] private int _chunkSize = 24;
     [SerializeField, Range(1, 8)] private int _maxChunkRebuildsPerFrame = 2;
+
+    [Header("Released Blocks")]
+    [SerializeField] private float _sawReleaseRadius = 0.18f;
+    [SerializeField, Min(0)] private int _maxPhysicsDebrisPerFrame;
     [SerializeField, Range(0f, 20f)] private float _releasedBlockDamping = 2.5f;
     [SerializeField, Range(0f, 20f)] private float _releasedBlockAngularDamping = 4f;
     [SerializeField, Range(0.01f, 10f)] private float _releasedBlockMass = 0.1f;
@@ -31,8 +48,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     [SerializeField, Range(0f, 1f)] private float _physicsRestitution;
     [SerializeField] private ReleasedBlockAuthoring _releasedBlockAuthoring;
     [SerializeField] private Transform[] _releasedBlockWalls;
-    [SerializeField] private bool _centerTexture = true;
-    [SerializeField] private bool _spawnOnAwake = true;
+
     [Header("Metaball Water")]
     [SerializeField] private bool _spawnMetaballWater = true;
     [SerializeField, Min(0)] private int _waterClusterCount = 3;
@@ -43,9 +59,6 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     [SerializeField] private RenderMaterial _metaballSourceMaterial;
 
     private readonly List<ChunkRuntime> _chunks = new();
-    private static readonly List<TextureBlockSpawner> ActiveSpawners = new();
-    private static int _nextOwnerId = 1;
-
     private readonly List<int> _dirtyChunks = new(16);
     private readonly List<int> _scheduledChunkRebuilds = new(8);
     private readonly List<JobHandle> _scheduledChunkHandles = new(8);
@@ -106,8 +119,6 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     private int _displayRenderFrame = -1;
     private int _scheduledRenderFrame = -1;
 
-    private static readonly int ColorId = Shader.PropertyToID("_Color");
-
     public static int SuckedBlockCount { get; private set; }
     public static event System.Action<int> BlocksSucked;
 
@@ -115,6 +126,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     {
         if (_ownerId == 0)
             _ownerId = _nextOwnerId++;
+
         if (!ActiveSpawners.Contains(this))
             ActiveSpawners.Add(this);
     }
@@ -145,8 +157,10 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     {
         UpdateMetaballWaterRendering();
         DrawReleasedBlocks();
+
         if (_dirtyChunks.Count == 0)
             return;
+
         int rebuildCount = Mathf.Min(_maxChunkRebuildsPerFrame, _dirtyChunks.Count);
         _scheduledChunkRebuilds.Clear();
         for (int i = 0; i < rebuildCount; i++)
@@ -156,8 +170,10 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
             _dirtyChunks.RemoveAt(lastIndex);
             if (_chunkDirty != null && chunkIndex >= 0 && chunkIndex < _chunkDirty.Length)
                 _chunkDirty[chunkIndex] = 0;
+
             _scheduledChunkRebuilds.Add(chunkIndex);
         }
+
         ScheduleAndApplyChunkRebuilds();
     }
 }

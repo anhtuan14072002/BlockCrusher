@@ -8,23 +8,23 @@ internal struct BuildChunkMeshJob : IJob
 {
     [ReadOnly] public NativeArray<Color32> CellColors;
     [ReadOnly] public NativeArray<byte> CellSolid;
-    
+
     public NativeArray<byte> Visited;
     public NativeList<Vector3> Vertices;
     public NativeList<Color32> Colors;
     public NativeList<Vector2> Uvs;
     public NativeList<int> Indices;
-    
+
     public int GridWidth;
     public int StartX;
     public int StartY;
-    
+
     public int ChunkWidth;
     public int ChunkHeight;
-    
+
     public float CellSize;
     public Vector3 Offset;
-    
+
     public byte UseVoxelDetail;
     public byte ExtrudeMergedQuads;
     public byte MergeAnySolid;

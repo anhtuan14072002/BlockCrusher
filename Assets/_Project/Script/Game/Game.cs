@@ -12,7 +12,7 @@ namespace Core
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void Bootstrap()
         {
-            var gameScene = SceneManager.CreateScene("Core", new CreateSceneParameters(LocalPhysicsMode.None));
+            Scene gameScene = SceneManager.CreateScene("Core", new CreateSceneParameters(LocalPhysicsMode.None));
             _instance = new GameObject("Core").AddComponent<Game>();
             SceneManager.MoveGameObjectToScene(_instance.gameObject, gameScene);
             Config = new GameConfig();

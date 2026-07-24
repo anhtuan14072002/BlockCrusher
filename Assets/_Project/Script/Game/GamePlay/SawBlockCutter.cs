@@ -7,6 +7,7 @@ using PhysicsCollider = Unity.Physics.Collider;
 
 public sealed class SawBlockCutter : MonoBehaviour
 {
+    [Header("Cutting")]
     [SerializeField] private float _compressionForce = 2.5f;
     [SerializeField] private float _bladeTangentialForce = 32f;
     [SerializeField] private float _bladeSpinDirection = 1f;
@@ -16,6 +17,8 @@ public sealed class SawBlockCutter : MonoBehaviour
     [SerializeField] private float _cutSweepStep = 0.08f;
     [SerializeField, Range(0f, 1f)] private float _sideDampingOnContact = 0.35f;
     [SerializeField] private float _maxBlockVelocity = 6f;
+
+    [Header("Feedback")]
     [SerializeField] private float _resistanceDuration = 0.18f;
     [SerializeField] private float _resistanceRecoveryDuration = 0.3f;
     [SerializeField] private float _sawHeadScaleStep = 0.2f;
@@ -29,7 +32,8 @@ public sealed class SawBlockCutter : MonoBehaviour
     private float _resistanceUntil;
     private float _lastBlockCutTime = float.NegativeInfinity;
     private bool _hasMovedSinceEnable;
-    private readonly Dictionary<Collider, TextureBlockChunk> _chunkCache = new Dictionary<Collider, TextureBlockChunk>(16);
+
+    private readonly Dictionary<Collider, TextureBlockChunk> _chunkCache = new(16);
     private PhysicsShapeAuthoring _physicsShape;
     private MeshFilter _meshFilter;
     private BlobAssetReference<PhysicsCollider> _obstacleQueryCollider;
@@ -39,14 +43,15 @@ public sealed class SawBlockCutter : MonoBehaviour
     {
         get
         {
-            if (Time.time <= _resistanceUntil) return 0f;
-            
+            if (Time.time <= _resistanceUntil)
+                return 0f;
+
             return Mathf.Clamp01((Time.time - _resistanceUntil) / _resistanceRecoveryDuration);
         }
     }
 
     internal bool IsCuttingBlock => Time.time <= _lastBlockCutTime + Time.fixedDeltaTime * 2f;
-    
+
     private void Awake()
     {
         _bladeVisual ??= transform;
@@ -67,7 +72,9 @@ public sealed class SawBlockCutter : MonoBehaviour
 
     private void Update()
     {
-        if (_bladeVisual == null || _bladeSpinSpeed == 0f) return;
+        if (_bladeVisual == null || _bladeSpinSpeed == 0f)
+            return;
+
         _bladeVisual.Rotate(0f, 0f, _bladeSpinSpeed * Mathf.Sign(_bladeSpinDirection) * Time.deltaTime, Space.Self);
     }
 
@@ -98,25 +105,33 @@ public sealed class SawBlockCutter : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        if (!_hasMovedSinceEnable) return;
+        if (!_hasMovedSinceEnable)
+            return;
+
         ReleaseAndPush(other);
     }
 
     private void OnTriggerStay(Collider other)
     {
-        if (!_hasMovedSinceEnable) return;
+        if (!_hasMovedSinceEnable)
+            return;
+
         ReleaseAndPush(other);
     }
 
     private void OnCollisionEnter(Collision collision)
     {
-        if (!_hasMovedSinceEnable) return;
+        if (!_hasMovedSinceEnable)
+            return;
+
         ReleaseAndPush(collision.collider, collision.GetContact(0).point);
     }
 
     private void OnCollisionStay(Collision collision)
     {
-        if (!_hasMovedSinceEnable) return;
+        if (!_hasMovedSinceEnable)
+            return;
+
         ReleaseAndPush(collision.collider, collision.GetContact(0).point);
     }
 
@@ -145,8 +160,9 @@ public sealed class SawBlockCutter : MonoBehaviour
     {
         float currentScale = transform.localScale.x;
         float nextScale = Mathf.Min(currentScale + _sawHeadScaleStep, _maxSawHeadScale);
-        
-        if (nextScale <= currentScale) return;
+
+        if (nextScale <= currentScale)
+            return;
 
         float scaleMultiplier = nextScale / currentScale;
         transform.localScale *= scaleMultiplier;
@@ -197,7 +213,7 @@ public sealed class SawBlockCutter : MonoBehaviour
         _obstacleQueryScale = scale;
         return _obstacleQueryCollider.IsCreated;
     }
-    
+
     private void ReleaseAndPush(Collider other)
     {
         Vector3 contactPoint = other.ClosestPoint(transform.position);

@@ -27,7 +27,9 @@ public sealed class CameraEdgeFollow : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (_target == null || _camera == null) return;
+        if (_target == null || _camera == null)
+            return;
+
         RefreshCameraSize();
         Vector3 targetPosition = _isFocusing
             ? GetCenteredCameraPosition()
@@ -43,7 +45,8 @@ public sealed class CameraEdgeFollow : MonoBehaviour
             return;
         }
 
-        if (sqrDistance <= 0.000001f) return;
+        if (sqrDistance <= 0.000001f)
+            return;
 
         float smoothTime = _isFocusing ? _focusSmoothTime : _smoothTime;
         _transform.position = Vector3.SmoothDamp(cameraPosition, targetPosition, ref _velocity, smoothTime);
@@ -84,12 +87,14 @@ public sealed class CameraEdgeFollow : MonoBehaviour
 
     private void RefreshCameraSize()
     {
-        if (_camera == null && _lastOrthographicSize > 0f) return;
+        if (_camera == null && _lastOrthographicSize > 0f)
+            return;
 
         float orthographicSize = _camera != null ? _camera.orthographicSize : 0f;
         float aspect = _camera != null ? _camera.aspect : 0f;
 
-        if (orthographicSize == _lastOrthographicSize && aspect == _lastAspect) return;
+        if (orthographicSize == _lastOrthographicSize && aspect == _lastAspect)
+            return;
 
         _lastOrthographicSize = orthographicSize;
         _lastAspect = aspect;

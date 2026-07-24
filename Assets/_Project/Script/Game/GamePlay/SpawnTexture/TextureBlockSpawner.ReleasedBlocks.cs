@@ -82,8 +82,8 @@ public sealed partial class TextureBlockSpawner
     }
     private float GetSafePhysicsVelocity(float requestedMaxVelocity)
     {
-        float fixedDeltaTime = Mathf.Max(Time.fixedDeltaTime, 0.001f);
-        float maxCellTravelVelocity = _cellSize * 0.75f / fixedDeltaTime;
+        float fixedDeltaTime = Mathf.Max(Time.fixedDeltaTime, MinimumPhysicsDeltaTime);
+        float maxCellTravelVelocity = _cellSize * MaxCellTravelPerStep / fixedDeltaTime;
         return Mathf.Min(requestedMaxVelocity, maxCellTravelVelocity);
     }
     private Vector3 RedirectVelocityFromSolid(Vector3 worldPosition, Vector3 velocity)

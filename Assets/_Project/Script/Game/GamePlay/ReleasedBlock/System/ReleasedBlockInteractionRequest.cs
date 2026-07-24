@@ -1,5 +1,5 @@
-using Unity.Mathematics;
 using Unity.Collections;
+using Unity.Mathematics;
 
 internal enum ReleasedBlockInteractionType : byte
 {

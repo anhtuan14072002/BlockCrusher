@@ -63,7 +63,8 @@ namespace Crusher
 
         private void CacheSawInputRotationOffset()
         {
-            if (_saw == null) return;
+            if (_saw == null)
+                return;
 
             _sawInputRotationOffset = Quaternion.Inverse(GetSegmentRotation(Vector3.up)) * _saw.rotation;
         }
