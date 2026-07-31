@@ -66,20 +66,16 @@ public sealed partial class TextureBlockSpawner
 
                 for (int y = centerY - 1; y <= centerY + 1; y++)
                 {
-                    if ((uint)y >= (uint)GridHeight)
-                        continue;
+                    if ((uint)y >= (uint)GridHeight) continue;
 
                     for (int x = centerX - 1; x <= centerX + 1; x++)
                     {
-                        if ((uint)x >= (uint)GridWidth || CellSolid[y * GridWidth + x] == 0)
-                            continue;
-
+                        if ((uint)x >= (uint)GridWidth || CellSolid[y * GridWidth + x] == 0) continue;
                         position = ResolveCellPenetration(position, x, y);
                     }
                 }
 
-                if (math.lengthsq(position - previousPosition) <= 0.00000001f)
-                    break;
+                if (math.lengthsq(position - previousPosition) <= 0.00000001f) break;
             }
 
             float3 resolvedWorldPosition = math.transform(LocalToWorld,

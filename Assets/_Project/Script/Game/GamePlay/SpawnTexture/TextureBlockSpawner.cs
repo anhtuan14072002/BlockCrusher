@@ -37,7 +37,7 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     [SerializeField, Range(1, 8)] private int _maxChunkRebuildsPerFrame = 2;
 
     [Header("Released Blocks")]
-    [SerializeField] private float _sawReleaseRadius = 0.18f;
+    [SerializeField] private float _sawReleaseRadius = 0.18f;       
     [SerializeField, Min(0)] private int _maxPhysicsDebrisPerFrame;
     [SerializeField, Range(0f, 20f)] private float _releasedBlockDamping = 2.5f;
     [SerializeField, Range(0f, 20f)] private float _releasedBlockAngularDamping = 4f;

@@ -79,6 +79,6 @@ namespace Crusher
 
             _fuelPercentText.SetText("{0}%", percent);
             _displayedFuelPercent = percent;
-        }
+        }           
     }
 }
