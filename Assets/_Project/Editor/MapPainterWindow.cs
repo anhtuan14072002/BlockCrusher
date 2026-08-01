@@ -18,6 +18,7 @@ public sealed class MapPainterWindow : EditorWindow
     private const float DefaultPrefabSize = 1f;
     private const string LevelFolder = "Assets/_Project/Resources/Level";
     private const string LevelSettingsFolder = "Assets/_Project/Editor/MapPainterData";
+    private static readonly string[] EditModeLabels = { "None", "Edit" };
 
     [SerializeField] private List<GameObject> _prefabs = new();
     [SerializeField] private List<bool> _selectedPrefabs = new();
@@ -95,7 +96,10 @@ public sealed class MapPainterWindow : EditorWindow
 
         _prefabSize = Mathf.Max(0.01f, EditorGUILayout.FloatField("Prefab Size", _prefabSize));
         _spacing = Mathf.Max(0f, EditorGUILayout.FloatField("Spacing", _spacing));
-        _paintEnabled = GUILayout.Toggle(_paintEnabled, "Paint In Scene", "Button");
+        bool wasPaintEnabled = _paintEnabled;
+        _paintEnabled = GUILayout.Toolbar(_paintEnabled ? 1 : 0, EditModeLabels) == 1;
+        if (wasPaintEnabled && !_paintEnabled)
+            EndStroke();
         _paintType = (PaintType)EditorGUILayout.EnumPopup("Paint Type", _paintType);
         EditorGUILayout.LabelField("Erase: hold right mouse and drag.", EditorStyles.miniLabel);
 

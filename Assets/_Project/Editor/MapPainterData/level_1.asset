@@ -15,7 +15,8 @@ MonoBehaviour:
   PaintPrefabs:
   - {fileID: 612727279210085569, guid: 3f4ebe89b85f2a147bdba89bc394f76d, type: 3}
   - {fileID: 8451396127400000001, guid: 6d52ec2798114e4a8e21a85df5927f93, type: 3}
-  SelectedPaintPrefabs: 0000
+  - {fileID: 3567369757448790777, guid: fa9e079026d6ea74c8991501d7bd3e2a, type: 3}
+  SelectedPaintPrefabs: 000000
   ObstaclePrefabs:
   - {fileID: 612727279210085569, guid: bd46ddcbff8273e44b60bfd9dbcf1ffe, type: 3}
   SelectedObstaclePrefabs: 01
@@ -27,5 +28,5 @@ MonoBehaviour:
   PaintType: 1
   PrefabSize: 1
   Spacing: 0
-  GridWidth: 10
-  GridHeight: 10
+  GridWidth: 30
+  GridHeight: 70

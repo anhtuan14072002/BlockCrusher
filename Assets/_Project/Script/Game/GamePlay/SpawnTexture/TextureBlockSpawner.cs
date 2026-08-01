@@ -51,9 +51,6 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
 
     [Header("Metaball Water")]
     [SerializeField] private bool _spawnMetaballWater = true;
-    [SerializeField, Min(0)] private int _waterClusterCount = 3;
-    [SerializeField, Min(1)] private int _waterCellsPerClusterMin = 10;
-    [SerializeField, Min(1)] private int _waterCellsPerClusterMax = 20;
     [SerializeField, Range(1f, 3f)] private float _waterParticleScale = 1.65f;
     [SerializeField] private ParticleSystem _metaballParticles;
     [SerializeField] private RenderMaterial _metaballSourceMaterial;

@@ -8,73 +8,36 @@ public sealed partial class TextureBlockSpawner
 {
     private void SpawnMetaballWater()
     {
-        if (!_spawnMetaballWater || _metaballParticles == null || _waterClusterCount == 0)
+        if (!_spawnMetaballWater || _metaballParticles == null)
             return;
 
-        int margin = 2;
-        List<int> seeds = new List<int>();
-        for (int y = margin; y < _gridHeight - margin; y++)
+        LevelWater[] waterPrefabs = FindObjectsByType<LevelWater>(
+            FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+        List<int> waterCells = new List<int>(waterPrefabs.Length);
+        for (int i = 0; i < waterPrefabs.Length; i++)
         {
-            for (int x = margin; x < _gridWidth - margin; x++)
-            {
-                int index = y * _gridWidth + x;
-                if (_cellSolid[index] != 0)
-                    seeds.Add(index);
-            }
+            if (TryGetWaterCell(waterPrefabs[i].transform.position, out int cell))
+                waterCells.Add(cell);
         }
 
-        int minCells = Mathf.Min(_waterCellsPerClusterMin, _waterCellsPerClusterMax);
-        int maxCells = Mathf.Max(_waterCellsPerClusterMin, _waterCellsPerClusterMax);
-        List<int> waterCells = new List<int>(_waterClusterCount * maxCells);
-        List<int> frontier = new List<int>(maxCells * 4);
-
-        for (int cluster = 0; cluster < _waterClusterCount && seeds.Count > 0; cluster++)
-        {
-            int seedIndex = UnityEngine.Random.Range(0, seeds.Count);
-            int seed = seeds[seedIndex];
-            seeds[seedIndex] = seeds[seeds.Count - 1];
-            seeds.RemoveAt(seeds.Count - 1);
-            if (_cellSolid[seed] == 0)
-            {
-                cluster--;
-                continue;
-            }
-
-            int targetCount = UnityEngine.Random.Range(minCells, maxCells + 1);
-            int clusterStart = waterCells.Count;
-            AddWaterCell(seed, waterCells, frontier, margin);
-            while (waterCells.Count - clusterStart < targetCount && frontier.Count > 0)
-            {
-                int frontierIndex = UnityEngine.Random.Range(0, frontier.Count);
-                int cell = frontier[frontierIndex];
-                frontier[frontierIndex] = frontier[frontier.Count - 1];
-                frontier.RemoveAt(frontier.Count - 1);
-                if (_cellSolid[cell] != 0)
-                    AddWaterCell(cell, waterCells, frontier, margin);
-            }
-            frontier.Clear();
-        }
-
-        SpawnMetaballWaterBlocks(waterCells);
+        if (waterCells.Count > 0)
+            SpawnMetaballWaterBlocks(waterCells);
     }
-    private void AddWaterCell(int cell, List<int> waterCells, List<int> frontier, int margin)
+
+    private bool TryGetWaterCell(Vector3 worldPosition, out int cell)
     {
+        Vector3 localPosition = _runtimeParent.InverseTransformPoint(worldPosition);
+        int x = Mathf.RoundToInt((localPosition.x - _offset.x) / _cellSize);
+        int y = Mathf.RoundToInt((localPosition.y - _offset.y) / _cellSize);
+        if ((uint)x >= (uint)_gridWidth || (uint)y >= (uint)_gridHeight)
+        {
+            cell = -1;
+            return false;
+        }
+
+        cell = y * _gridWidth + x;
         _cellSolid[cell] = 0;
-        waterCells.Add(cell);
-        int x = cell % _gridWidth;
-        int y = cell / _gridWidth;
-        AddWaterFrontier(x - 1, y, frontier, margin);
-        AddWaterFrontier(x + 1, y, frontier, margin);
-        AddWaterFrontier(x, y - 1, frontier, margin);
-        AddWaterFrontier(x, y + 1, frontier, margin);
-    }
-    private void AddWaterFrontier(int x, int y, List<int> frontier, int margin)
-    {
-        if (x < margin || x >= _gridWidth - margin || y < margin || y >= _gridHeight - margin)
-            return;
-        int cell = y * _gridWidth + x;
-        if (_cellSolid[cell] != 0)
-            frontier.Add(cell);
+        return true;
     }
     private void SpawnMetaballWaterBlocks(List<int> waterCells)
     {
@@ -158,6 +121,7 @@ public sealed partial class TextureBlockSpawner
     private void ValidateMetaballWater()
     {
         Debug.Assert(!_spawnMetaballWater ||
+                     FindObjectsByType<LevelWater>(FindObjectsInactive.Exclude, FindObjectsSortMode.None).Length == 0 ||
                      (_metaballParticles != null && _spawnedWaterCellCount > 0 &&
                       _metaballParticles.particleCount == _spawnedWaterCellCount),
             "Metaball water is not wired or did not spawn.", this);
