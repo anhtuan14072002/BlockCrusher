@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Physics;
@@ -23,9 +24,17 @@ internal struct ChunkRuntime
     public NativeList<Vector2> ColliderUvs;
     public NativeList<int> ColliderIndices;
 
+    public GameObject DecorationObject;
+    public Mesh DecorationMesh;
+    public MeshRenderer DecorationRenderer;
+    public int[] DecorationIndices;
+    public List<Vector3> DecorationVertices;
+    public List<Color32> DecorationColors;
+    public List<Vector2> DecorationUvs;
+    public List<int> DecorationTriangles;
+
     public int StartX;
     public int StartY;
     public int Width;
     public int Height;
-    public bool IsDetailed;
 }

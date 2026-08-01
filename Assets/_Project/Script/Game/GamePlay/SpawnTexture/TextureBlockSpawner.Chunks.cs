@@ -36,9 +36,9 @@ public sealed partial class TextureBlockSpawner
                 mesh.MarkDynamic();
                 meshFilter.sharedMesh = mesh;
                 meshRenderer.sharedMaterial = material;
+                ApplyCutMask(meshRenderer);
                 chunk.Initialize(this);
-                _chunks.Add(CreateChunkRuntime(mesh, meshRenderer, startX, startY, width, height,
-                    _renderVoxelDetailFromStart));
+                _chunks.Add(CreateChunkRuntime(mesh, meshRenderer, startX, startY, width, height));
             }
         }
         _scheduledChunkRebuilds.Clear();
@@ -47,11 +47,11 @@ public sealed partial class TextureBlockSpawner
         ScheduleAndApplyChunkRebuilds();
     }
     private ChunkRuntime CreateChunkRuntime(Mesh mesh, MeshRenderer renderer, int startX, int startY, int width,
-        int height, bool isDetailed)
+        int height)
     {
         int maxCells = width * height;
-        int vertexCapacity = isDetailed ? maxCells * 24 : maxCells * 4;
-        int indexCapacity = isDetailed ? maxCells * 36 : maxCells * 6;
+        int vertexCapacity = maxCells * 4;
+        int indexCapacity = maxCells * 6;
         return new ChunkRuntime
         {
             Mesh = mesh,
@@ -60,7 +60,6 @@ public sealed partial class TextureBlockSpawner
             StartY = startY,
             Width = width,
             Height = height,
-            IsDetailed = isDetailed,
             Visited = new NativeArray<byte>(maxCells, Allocator.Persistent),
             Vertices = new NativeList<Vector3>(vertexCapacity, Allocator.Persistent),
             Colors = new NativeList<Color32>(vertexCapacity, Allocator.Persistent),
@@ -77,6 +76,7 @@ public sealed partial class TextureBlockSpawner
     {
         if (_scheduledChunkRebuilds.Count == 0)
             return;
+        UpdateCutMask();
         _scheduledChunkHandles.Clear();
         for (int i = 0; i < _scheduledChunkRebuilds.Count; i++)
         {
@@ -108,11 +108,8 @@ public sealed partial class TextureBlockSpawner
                 ChunkHeight = chunk.Height,
                 CellSize = _cellSize,
                 Offset = _offset,
-                UseVoxelDetail = chunk.IsDetailed ? (byte)1 : (byte)0,
                 ExtrudeMergedQuads = 0,
                 MergeAnySolid = 0,
-                DetailVoxelScale = _detailVoxelScale,
-                RandomYRotation = _voxelRandomYRotation,
                 DetailDepth = _chunkColliderDepth
             };
             _scheduledChunkHandles.Add(meshJob.Schedule());
@@ -132,11 +129,8 @@ public sealed partial class TextureBlockSpawner
                 ChunkHeight = chunk.Height,
                 CellSize = _cellSize,
                 Offset = _offset,
-                UseVoxelDetail = 0,
                 ExtrudeMergedQuads = 1,
                 MergeAnySolid = 1,
-                DetailVoxelScale = _detailVoxelScale,
-                RandomYRotation = 0f,
                 DetailDepth = _chunkColliderDepth
             };
             _scheduledChunkHandles.Add(colliderJob.Schedule());
@@ -152,6 +146,7 @@ public sealed partial class TextureBlockSpawner
                 continue;
             ChunkRuntime chunk = _chunks[chunkIndex];
             ApplyChunkMesh(ref chunk);
+            ApplyChunkDecorations(ref chunk);
             _chunks[chunkIndex] = chunk;
         }
     }
@@ -166,8 +161,6 @@ public sealed partial class TextureBlockSpawner
             mesh.SetColors(chunk.Colors.AsArray());
             mesh.SetUVs(0, chunk.Uvs.AsArray());
             mesh.SetIndices(chunk.Indices.AsArray(), MeshTopology.Triangles, 0);
-            if (chunk.IsDetailed)
-                mesh.RecalculateNormals();
             mesh.RecalculateBounds();
             chunk.Renderer.enabled = true;
             ApplyChunkPhysicsCollider(ref chunk);

@@ -31,13 +31,16 @@ public sealed partial class TextureBlockSpawner
                 int cellIndex = y * _gridWidth + x;
                 if (_cellSolid[cellIndex] == 0)
                     continue;
-                Color32 color = _cellColors[cellIndex];
+                Color32 surfaceColor = _cellColors[cellIndex];
+                Color32 releasedColor = _cellReleasedColors[cellIndex];
+                ushort typeIndex = _cellReleasedTypes[cellIndex];
                 _cellSolid[cellIndex] = 0;
-                if (TryConsumePhysicsDebrisBudget())
-                {
-                    QueueReleasedBlockSpawn(cellLocal, color, worldPoint, pressDirection, pressSpeed, outwardForce,
-                        tangentialForce, spinDirection, bladeRadius, sideDamping, maxVelocity);
-                }
+                Vector3 releasedWorldPosition = _runtimeParent.TransformPoint(cellLocal);
+                EmitCutParticles(releasedWorldPosition, surfaceColor, releasedWorldPosition - worldPoint);
+                QueueReleasedBlockSpawn(cellLocal, releasedColor, typeIndex, worldPoint, pressDirection, pressSpeed,
+                    outwardForce, tangentialForce, spinDirection, bladeRadius, sideDamping, maxVelocity);
+                SpawnReleasedDecorationsAtCell(cellIndex, cellLocal, worldPoint, pressDirection, pressSpeed,
+                    outwardForce, tangentialForce, spinDirection, bladeRadius, sideDamping, maxVelocity);
                 MarkCellChunkDirty(x, y);
                 releasedAny = true;
             }
@@ -79,25 +82,15 @@ public sealed partial class TextureBlockSpawner
         int chunkX = cellX / _chunkSize;
         int chunkY = cellY / _chunkSize;
         int chunkIndex = chunkY * _chunkColumns + chunkX;
+        MarkChunkDirty(chunkIndex);
+        MarkDecorationChunksDirty(cellY * _gridWidth + cellX);
+    }
+    private void MarkChunkDirty(int chunkIndex)
+    {
         if ((uint)chunkIndex >= (uint)_chunks.Count || _chunkDirty[chunkIndex] != 0)
             return;
         _chunkDirty[chunkIndex] = 1;
         _dirtyChunks.Add(chunkIndex);
-    }
-    private bool TryConsumePhysicsDebrisBudget()
-    {
-        if (_maxPhysicsDebrisPerFrame == 0)
-            return true;
-        int frame = Time.frameCount;
-        if (_physicsDebrisFrame != frame)
-        {
-            _physicsDebrisFrame = frame;
-            _physicsDebrisSpawnedThisFrame = 0;
-        }
-        if (_physicsDebrisSpawnedThisFrame >= _maxPhysicsDebrisPerFrame)
-            return false;
-        _physicsDebrisSpawnedThisFrame++;
-        return true;
     }
     internal bool TryCreatePendingSawPushJob(out SawPushJob job)
     {
@@ -146,7 +139,6 @@ public sealed partial class TextureBlockSpawner
             LocalToWorld = ToFloat4x4(_runtimeParent.localToWorldMatrix),
             Offset = ToFloat3(_offset),
             CellSize = _cellSize,
-            BlockRadius = _cellSize * 0.48f,
             GridBoundsMin = new float2(_offset.x, _offset.y) - _cellSize * 0.98f,
             GridBoundsMax = new float2(
                 _offset.x + (_gridWidth - 1) * _cellSize,

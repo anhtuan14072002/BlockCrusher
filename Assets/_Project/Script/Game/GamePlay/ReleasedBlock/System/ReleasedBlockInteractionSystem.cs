@@ -12,9 +12,9 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
     private EntityQuery _suctionTransitQuery;
     private EntityQuery _solidConstraintQuery;
     private NativeList<ReleasedBlockInteractionRequest> _requests;
-    private NativeReference<int> _suckedCount;
+    private NativeQueue<FixedString64Bytes> _collectedItems;
     private JobHandle _lastInteractionHandle;
-    private bool _hasPendingSuckedCount;
+    private bool _hasPendingCollection;
 
     public void OnCreate(ref SystemState state)
     {
@@ -45,7 +45,7 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
             .WithAllRW<LocalTransform>()
             .Build();
         _requests = new NativeList<ReleasedBlockInteractionRequest>(8, Allocator.Persistent);
-        _suckedCount = new NativeReference<int>(Allocator.Persistent);
+        _collectedItems = new NativeQueue<FixedString64Bytes>(Allocator.Persistent);
     }
 
     public void OnDestroy(ref SystemState state)
@@ -53,8 +53,8 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
         FlushSuckedCount();
         if (_requests.IsCreated)
             _requests.Dispose();
-        if (_suckedCount.IsCreated)
-            _suckedCount.Dispose();
+        if (_collectedItems.IsCreated)
+            _collectedItems.Dispose();
     }
 
     public void OnUpdate(ref SystemState state)
@@ -68,7 +68,6 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
             _requests.ResizeUninitialized(requestCount);
             NativeArray<ReleasedBlockInteractionRequest> requests = _requests.AsArray();
             ReleasedBlockInteractionQueue.CopyToAndClear(requests);
-            _suckedCount.Value = 0;
             bool requiresAllBlocks = false;
             for (int i = 0; i < requests.Length; i++)
             {
@@ -89,12 +88,12 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
             {
                 Requests = requests,
                 CommandBuffer = commandBuffer,
-                SuckedCount = _suckedCount
+                CollectedItems = _collectedItems.AsParallelWriter()
             }.Schedule(requiresAllBlocks ? _query : _suctionTransitQuery, dependency);
 
             dependency = interactionHandle;
             _lastInteractionHandle = interactionHandle;
-            _hasPendingSuckedCount = true;
+            _hasPendingCollection = true;
         }
 
         bool scheduledSawPush = false;
@@ -134,12 +133,11 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
 
     private void FlushSuckedCount()
     {
-        if (!_hasPendingSuckedCount)
+        if (!_hasPendingCollection)
             return;
         _lastInteractionHandle.Complete();
-        _hasPendingSuckedCount = false;
-        int count = _suckedCount.Value;
-        if (count > 0)
-            TextureBlockSpawner.NotifyBlocksSucked(count);
+        _hasPendingCollection = false;
+        while (_collectedItems.TryDequeue(out FixedString64Bytes collectibleId))
+            TextureBlockSpawner.NotifyItemSucked(collectibleId.ToString(), 1);
     }
 }

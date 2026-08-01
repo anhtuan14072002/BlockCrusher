@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 6592025462799624877}
   - component: {fileID: 3596235716128816340}
   - component: {fileID: -2194178821328769875}
+  - component: {fileID: 7914293611175376410}
   m_Layer: 0
   m_Name: Block
   m_TagString: Untagged
@@ -98,8 +99,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ccea9ea98e38942e0b0938c27ed1903e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_MotionType: 0
   m_Smoothing: 0
   m_Mass: 1
@@ -149,8 +150,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b275e5f92732148048d7b77e264ac30e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_ForceUniqueID: 926806493
   m_PrefabInstanceID: 0
   m_ShapeType: 31
@@ -288,3 +289,20 @@ MonoBehaviour:
         Tag07: 0
     m_SerializedVersion: 1
   m_SerializedVersion: 3
+--- !u!114 &7914293611175376410
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 612727279210085569}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6f917cc06a3f46a2b83111edbd577662, type: 3}
+  m_Name: ''
+  m_EditorClassIdentifier: ''
+  _collectibleId: dirt
+  _releasedPrefab: {fileID: 4722558944525060870, guid: d164093ad86b4f219d90985fce3bf899, type: 3}
+  _releasedScale: 0.12
+  _mapColor: {r: 0.373, g: 0.271, b: 0.212, a: 1}
+  _releasedColor: {r: 0.764151, g: 0.6247189, b: 0.54427737, a: 1}

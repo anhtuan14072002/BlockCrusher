@@ -15,7 +15,6 @@ public sealed partial class TextureBlockSpawner
         public float4x4 LocalToWorld;
         public float3 Offset;
         public float CellSize;
-        public float BlockRadius;
         public float2 GridBoundsMin;
         public float2 GridBoundsMax;
         public float DeltaTime;
@@ -38,20 +37,20 @@ public sealed partial class TextureBlockSpawner
             block.SolidConstraintFrames--;
 
             float3 position = transform.Position;
-            float3 resolvedPosition = ResolvePenetration(position);
+            float3 resolvedPosition = ResolvePenetration(position, block.Radius);
             ApplyCorrection(ref velocity, resolvedPosition - position);
             transform.Position = resolvedPosition;
 
             float3 predictedPosition = resolvedPosition + velocity.Linear * DeltaTime;
             predictedPosition.z = resolvedPosition.z;
-            float3 resolvedPrediction = ResolvePenetration(predictedPosition);
+            float3 resolvedPrediction = ResolvePenetration(predictedPosition, block.Radius);
             ApplyCorrection(ref velocity, resolvedPrediction - predictedPosition);
 
             if (block.SolidConstraintFrames == 0)
                 solidConstraint.ValueRW = false;
         }
 
-        private float3 ResolvePenetration(float3 worldPosition)
+        private float3 ResolvePenetration(float3 worldPosition, float blockRadius)
         {
             float3 localPosition = math.transform(WorldToLocal, worldPosition);
             float2 position = localPosition.xy;
@@ -71,7 +70,7 @@ public sealed partial class TextureBlockSpawner
                     for (int x = centerX - 1; x <= centerX + 1; x++)
                     {
                         if ((uint)x >= (uint)GridWidth || CellSolid[y * GridWidth + x] == 0) continue;
-                        position = ResolveCellPenetration(position, x, y);
+                        position = ResolveCellPenetration(position, x, y, blockRadius);
                     }
                 }
 
@@ -84,7 +83,7 @@ public sealed partial class TextureBlockSpawner
             return resolvedWorldPosition;
         }
 
-        private float2 ResolveCellPenetration(float2 position, int cellX, int cellY)
+        private float2 ResolveCellPenetration(float2 position, int cellX, int cellY, float blockRadius)
         {
             float2 cellCenter = Offset.xy + new float2(cellX, cellY) * CellSize;
             float halfCell = CellSize * 0.5f;
@@ -93,12 +92,12 @@ public sealed partial class TextureBlockSpawner
             float2 closest = math.clamp(position, boundsMin, boundsMax);
             float2 delta = position - closest;
             float distanceSq = math.lengthsq(delta);
-            float radiusSq = BlockRadius * BlockRadius;
+            float radiusSq = blockRadius * blockRadius;
             if (distanceSq >= radiusSq)
                 return position;
 
             if (distanceSq > 0.00000001f)
-                return position + delta * (BlockRadius * math.rsqrt(distanceSq) - 1f);
+                return position + delta * (blockRadius * math.rsqrt(distanceSq) - 1f);
 
             float left = position.x - boundsMin.x;
             float right = boundsMax.x - position.x;
@@ -106,13 +105,13 @@ public sealed partial class TextureBlockSpawner
             float up = boundsMax.y - position.y;
             float nearest = math.min(math.min(left, right), math.min(down, up));
             if (nearest == left)
-                position.x = boundsMin.x - BlockRadius;
+                position.x = boundsMin.x - blockRadius;
             else if (nearest == right)
-                position.x = boundsMax.x + BlockRadius;
+                position.x = boundsMax.x + blockRadius;
             else if (nearest == down)
-                position.y = boundsMin.y - BlockRadius;
+                position.y = boundsMin.y - blockRadius;
             else
-                position.y = boundsMax.y + BlockRadius;
+                position.y = boundsMax.y + blockRadius;
             return position;
         }
 

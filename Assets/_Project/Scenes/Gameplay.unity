@@ -5858,6 +5858,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Advanced FPS Counter
       objectReference: {fileID: 0}
+    - target: {fileID: 100000, guid: e84b65f6b68cbca4a9a9c63e390ea836, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 400000, guid: e84b65f6b68cbca4a9a9c63e390ea836, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -7547,7 +7551,6 @@ GameObject:
   m_Component:
   - component: {fileID: 925441448}
   - component: {fileID: 925441449}
-  - component: {fileID: 925441450}
   m_Layer: 0
   m_Name: TextureBlockSpawner
   m_TagString: Untagged
@@ -7564,8 +7567,8 @@ Transform:
   m_GameObject: {fileID: 925441447}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -8, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalPosition: {x: -2.67, y: -16.19, z: 0}
+  m_LocalScale: {x: 0.37, y: 0.37, z: 0.37}
   m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 199028929}
@@ -7583,22 +7586,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 683ab7f92264fc944b6f60e580b98dc8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _texture: {fileID: 2800000, guid: 30bdbcc2c36ec3649ae74df6d6e86e46, type: 3}
+  _levelPrefabs:
+  - {fileID: 1749666366606836664, guid: 52227f16793b5504c8bcffe1e08048e5, type: 3}
+  - {fileID: 1749666366606836664, guid: 3cd71752da4a5b44297d7930c16d8003, type: 3}
+  _startLevel: 1
   _container: {fileID: 925441448}
   _chunkMaterial: {fileID: 2100000, guid: 27e4bb3294908924e9d6a58207d8f342, type: 2}
   _spawnOnAwake: 1
-  _pixelSize: 0.12
-  _sampleStep: 1
-  _alphaThreshold: 0.1
-  _centerTexture: 1
-  _chunkColliderDepth: 0.12
-  _renderVoxelDetailFromStart: 1
-  _detailVoxelScale: 0.8
-  _voxelRandomYRotation: 20
   _chunkSize: 16
   _maxChunkRebuildsPerFrame: 2
   _sawReleaseRadius: 0.5
-  _maxPhysicsDebrisPerFrame: 0
   _releasedBlockDamping: 2.5
   _releasedBlockAngularDamping: 4
   _releasedBlockMass: 0.1
@@ -7606,7 +7603,6 @@ MonoBehaviour:
   _releasedBlockRenderInterval: 1
   _physicsFriction: 0.12
   _physicsRestitution: 0
-  _releasedBlockAuthoring: {fileID: 925441450}
   _releasedBlockWalls:
   - {fileID: 111958054}
   - {fileID: 1520286888}
@@ -7615,26 +7611,9 @@ MonoBehaviour:
   - {fileID: 1354000666}
   - {fileID: 972235227}
   _spawnMetaballWater: 1
-  _waterClusterCount: 5
-  _waterCellsPerClusterMin: 30
-  _waterCellsPerClusterMax: 50
   _waterParticleScale: 1.65
   _metaballParticles: {fileID: 199028931}
   _metaballSourceMaterial: {fileID: 2100000, guid: a144ed6948a6cb94cac20cff18314300, type: 2}
---- !u!114 &925441450
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 925441447}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c9449c34003822d4d87ed1051bdc6d82, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _releasedBlockPrefab: {fileID: 612727279210085569, guid: 3f4ebe89b85f2a147bdba89bc394f76d, type: 3}
-  _scale: 0.12
 --- !u!1 &972235226
 GameObject:
   m_ObjectHideFlags: 0
@@ -8896,7 +8875,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8451396127400000001, guid: 6d52ec2798114e4a8e21a85df5927f93, type: 3}
       propertyPath: m_IsActive
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8451396127400000002, guid: 6d52ec2798114e4a8e21a85df5927f93, type: 3}
       propertyPath: m_LocalScale.x
@@ -13829,8 +13808,8 @@ Transform:
   m_GameObject: {fileID: 1623616260}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -4.4978, y: -20.4616, z: -0.03250122}
-  m_LocalScale: {x: 3.592618, y: 37.82302, z: 1}
+  m_LocalPosition: {x: -4.5445, y: -20.4616, z: -0.03250122}
+  m_LocalScale: {x: 3.4993105, y: 37.82302, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 508487805}
@@ -14126,7 +14105,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8451396127400000001, guid: 6d52ec2798114e4a8e21a85df5927f93, type: 3}
       propertyPath: m_IsActive
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 8451396127400000002, guid: 6d52ec2798114e4a8e21a85df5927f93, type: 3}
       propertyPath: m_LocalScale.x
@@ -14296,8 +14275,8 @@ Transform:
   m_GameObject: {fileID: 1697064007}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 4.441, y: -20.2108, z: -0.03250122}
-  m_LocalScale: {x: 3.5266507, y: 37.3214, z: 1}
+  m_LocalPosition: {x: 4.511, y: -20.2108, z: -0.03250122}
+  m_LocalScale: {x: 3.3868456, y: 37.3214, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 508487805}
@@ -14884,9 +14863,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _target: {fileID: 3000001902}
   _camera: {fileID: 1912903403}
-  _minViewport: {x: 0.28, y: 0.24}
-  _maxViewport: {x: 0.72, y: 0.76}
-  _smoothTime: 0.12
+  _minViewport: {x: 0.28, y: 0.62}
+  _maxViewport: {x: 0.72, y: 0.72}
+  _smoothTime: 0.1
   _focusSmoothTime: 0.22
 --- !u!1 &1915316453
 GameObject:
@@ -15570,7 +15549,6 @@ GameObject:
   m_Component:
   - component: {fileID: 2087331078}
   - component: {fileID: 2087331080}
-  - component: {fileID: 2087331079}
   m_Layer: 0
   m_Name: TextureBlockSpawner (1)
   m_TagString: Untagged
@@ -15594,20 +15572,6 @@ Transform:
   - {fileID: 1607397609}
   m_Father: {fileID: 1680214657}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &2087331079
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2087331077}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c9449c34003822d4d87ed1051bdc6d82, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _releasedBlockPrefab: {fileID: 612727279210085569, guid: 3f4ebe89b85f2a147bdba89bc394f76d, type: 3}
-  _scale: 0.12
 --- !u!114 &2087331080
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -15620,22 +15584,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 683ab7f92264fc944b6f60e580b98dc8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _texture: {fileID: 2800000, guid: 33412f60afeac0b43b4e6fa1b3ba96a8, type: 3}
+  _levelPrefabs:
+  - {fileID: 1749666366606836664, guid: 52227f16793b5504c8bcffe1e08048e5, type: 3}
+  - {fileID: 1749666366606836664, guid: 3cd71752da4a5b44297d7930c16d8003, type: 3}
+  _startLevel: 1
   _container: {fileID: 2087331078}
   _chunkMaterial: {fileID: 2100000, guid: 27e4bb3294908924e9d6a58207d8f342, type: 2}
   _spawnOnAwake: 1
-  _pixelSize: 0.12
-  _sampleStep: 1
-  _alphaThreshold: 0.1
-  _centerTexture: 1
-  _chunkColliderDepth: 0.12
-  _renderVoxelDetailFromStart: 1
-  _detailVoxelScale: 0.94
-  _voxelRandomYRotation: 20
   _chunkSize: 56
   _maxChunkRebuildsPerFrame: 2
   _sawReleaseRadius: 0.5
-  _maxPhysicsDebrisPerFrame: 0
   _releasedBlockDamping: 2.5
   _releasedBlockAngularDamping: 4
   _releasedBlockMass: 0.1
@@ -15643,7 +15601,6 @@ MonoBehaviour:
   _releasedBlockRenderInterval: 1
   _physicsFriction: 0.12
   _physicsRestitution: 0
-  _releasedBlockAuthoring: {fileID: 2087331079}
   _releasedBlockWalls:
   - {fileID: 111958054}
   - {fileID: 1520286888}
@@ -15652,9 +15609,6 @@ MonoBehaviour:
   - {fileID: 1354000666}
   - {fileID: 972235227}
   _spawnMetaballWater: 1
-  _waterClusterCount: 3
-  _waterCellsPerClusterMin: 10
-  _waterCellsPerClusterMax: 20
   _waterParticleScale: 1.65
   _metaballParticles: {fileID: 1607397611}
   _metaballSourceMaterial: {fileID: 2100000, guid: a144ed6948a6cb94cac20cff18314300, type: 2}

@@ -145,7 +145,7 @@ public sealed class MapPainterWindow : EditorWindow
             "Obstacle Prefabs", "Add Obstacle Prefab Slot", PaintType.Obstacle,
             _obstaclePrefabs, _selectedObstaclePrefabs);
         DrawAdditionalPrefabList(
-            "Special Material Prefabs", "Add Special Material Prefab Slot", PaintType.SpecialMaterial,
+            "Water / Special Prefabs", "Add Water / Special Prefab Slot", PaintType.SpecialMaterial,
             _specialMaterialPrefabs, _selectedSpecialMaterialPrefabs);
         EditorGUILayout.EndScrollView();
     }
@@ -302,7 +302,12 @@ public sealed class MapPainterWindow : EditorWindow
         }
 
         GameObject prefab = GetRandomSelectedPrefab();
-        if (prefab == null || (_paintType == PaintType.Block && HasBlockAt(localPosition)))
+        if (prefab == null)
+            return;
+
+        bool isWater = prefab.GetComponentInChildren<LevelWater>(true) != null;
+        if ((isWater && HasComponentAt<LevelWater>(localPosition)) ||
+            (!isWater && _paintType == PaintType.Block && HasBlockAt(localPosition)))
             return;
 
         CreateBlock(prefab, localPosition);
@@ -313,7 +318,8 @@ public sealed class MapPainterWindow : EditorWindow
         GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, _mapRoot);
         Undo.RegisterCreatedObjectUndo(instance, "Paint Map Block");
         instance.transform.localPosition = localPosition;
-        instance.transform.localScale = Vector3.one * _prefabSize;
+        if (instance.GetComponentInChildren<LevelWater>(true) == null)
+            instance.transform.localScale = Vector3.one * _prefabSize;
     }
 
     private void GenerateGrid()
@@ -360,6 +366,24 @@ public sealed class MapPainterWindow : EditorWindow
     private bool HasBlockAt(Vector3 localPosition)
     {
         return FindBlockAt(localPosition) != null;
+    }
+
+    private bool HasComponentAt<T>(Vector3 localPosition) where T : Component
+    {
+        if (_mapRoot == null)
+            return false;
+
+        float tolerance = GetCellStep(_prefabSize, _spacing) * 0.01f;
+        float toleranceSquared = tolerance * tolerance;
+        for (int i = _mapRoot.childCount - 1; i >= 0; i--)
+        {
+            Transform child = _mapRoot.GetChild(i);
+            if ((child.localPosition - localPosition).sqrMagnitude <= toleranceSquared &&
+                child.GetComponentInChildren<T>(true) != null)
+                return true;
+        }
+
+        return false;
     }
 
     private Transform FindBlockAt(Vector3 localPosition)

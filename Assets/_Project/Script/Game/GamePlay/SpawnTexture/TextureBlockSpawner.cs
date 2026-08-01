@@ -9,36 +9,28 @@ using RenderMaterial = UnityEngine.Material;
 public sealed partial class TextureBlockSpawner : MonoBehaviour
 {
     private const int MaxInstancesPerBatch = 1023;
+    private const int ReleasedMeshVariantCount = 4;
     private const float MinimumPhysicsDeltaTime = 0.001f;
     private const float MaxCellTravelPerStep = 0.75f;
 
     private static readonly List<TextureBlockSpawner> ActiveSpawners = new();
+    private static readonly Dictionary<string, int> SuckedItemCounts = new();
     private static readonly int ColorId = Shader.PropertyToID("_Color");
     private static int _nextOwnerId = 1;
 
     [Header("Source")]
-    [SerializeField] private Texture2D _texture;
+    [SerializeField] private GameObject[] _levelPrefabs;
+    [SerializeField, Min(1)] private int _startLevel = 1;
     [SerializeField] private Transform _container;
     [SerializeField] private RenderMaterial _chunkMaterial;
     [SerializeField] private bool _spawnOnAwake = true;
 
-    [Header("Grid")]
-    [SerializeField] private float _pixelSize = 0.12f;
-    [SerializeField, Range(1, 16)] private int _sampleStep = 1;
-    [SerializeField, Range(0f, 1f)] private float _alphaThreshold = 0.1f;
-    [SerializeField] private bool _centerTexture = true;
-
     [Header("Chunk Rendering")]
-    [SerializeField] private float _chunkColliderDepth = 0.25f;
-    [SerializeField] private bool _renderVoxelDetailFromStart = true;
-    [SerializeField, Range(0.75f, 1f)] private float _detailVoxelScale = 0.94f;
-    [SerializeField, Range(0f, 30f)] private float _voxelRandomYRotation = 20f;
     [SerializeField, Range(8, 64)] private int _chunkSize = 24;
     [SerializeField, Range(1, 8)] private int _maxChunkRebuildsPerFrame = 2;
 
     [Header("Released Blocks")]
     [SerializeField] private float _sawReleaseRadius = 0.18f;       
-    [SerializeField, Min(0)] private int _maxPhysicsDebrisPerFrame;
     [SerializeField, Range(0f, 20f)] private float _releasedBlockDamping = 2.5f;
     [SerializeField, Range(0f, 20f)] private float _releasedBlockAngularDamping = 4f;
     [SerializeField, Range(0.01f, 10f)] private float _releasedBlockMass = 0.1f;
@@ -46,7 +38,6 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     [SerializeField, Range(1, 4)] private int _releasedBlockRenderInterval = 2;
     [SerializeField, Range(0f, 1f)] private float _physicsFriction = 0.12f;
     [SerializeField, Range(0f, 1f)] private float _physicsRestitution;
-    [SerializeField] private ReleasedBlockAuthoring _releasedBlockAuthoring;
     [SerializeField] private Transform[] _releasedBlockWalls;
 
     [Header("Metaball Water")]
@@ -64,25 +55,22 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     private readonly List<Entity> _metaballWaterEntities = new(64);
     private readonly List<Entity> _releasedBlockWallEntities = new(4);
     private readonly List<BlobAssetReference<Collider>> _releasedBlockWallColliders = new(4);
+    private readonly List<ReleasedBlockRuntimeType> _releasedBlockTypes = new(4);
 
     private readonly RenderFrameData[] _renderFrames = new RenderFrameData[2];
-    private Matrix4x4[][] _renderBatchMatrices;
-    private Vector4[][] _renderBatchColors;
-    private int[] _renderBatchCounts;
-    private int _renderBatchCount;
 
     private NativeArray<Color32> _cellColors;
+    private NativeArray<Color32> _cellReleasedColors;
     private NativeArray<byte> _cellSolid;
+    private NativeArray<ushort> _cellReleasedTypes;
 
     private World _ecsWorld;
     private EntityManager _entityManager;
     private EntityQuery _releasedBlockQuery;
     private EntityArchetype _releasedBlockArchetype;
-    private BlobAssetReference<Collider> _releasedBlockCollider;
-
-    private Mesh _releasedBlockMesh;
-    private RenderMaterial _releasedBlockMaterial;
     private MaterialPropertyBlock _releasedBlockPropertyBlock;
+    private ParticleSystem _cutParticles;
+    private RenderMaterial _cutParticleMaterial;
 
     private byte[] _chunkDirty;
     private Transform _runtimeParent;
@@ -94,10 +82,8 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     private int _gridHeight;
     private int _chunkColumns;
     private float _cellSize;
-    private float _releasedBlockScale = 1f;
-
-    private int _physicsDebrisFrame = -1;
-    private int _physicsDebrisSpawnedThisFrame;
+    private float _chunkColliderDepth;
+    private int _debrisSpawnSequence;
 
     private ParticleSystem.Particle[] _metaballParticleBuffer;
     private int _spawnedWaterCellCount;
@@ -116,8 +102,35 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     private int _displayRenderFrame = -1;
     private int _scheduledRenderFrame = -1;
 
+    private sealed class ReleasedBlockRuntimeType
+    {
+        public GameObject Prefab;
+        public Mesh Mesh;
+        public RenderMaterial Material;
+        public BlobAssetReference<Collider> Collider;
+        public float Scale;
+        public float Radius;
+        public FixedString64Bytes CollectibleId;
+        public Matrix4x4[][] BatchMatrices;
+        public Vector4[][] BatchColors;
+        public int[] BatchCounts;
+        public int BatchCount;
+        public int RenderCount;
+        public ushort FirstVariantIndex;
+        public byte VariantCount;
+        public bool OwnsMesh;
+    }
+
     public static int SuckedBlockCount { get; private set; }
+    public static IReadOnlyDictionary<string, int> SuckedItems => SuckedItemCounts;
     public static event System.Action<int> BlocksSucked;
+    public static event System.Action<string, int> ItemSucked;
+
+    public int CurrentLevel { get; private set; }
+    public int LevelCount => _levelPrefabs?.Length ?? 0;
+
+    public static int GetSuckedItemCount(string collectibleId) =>
+        SuckedItemCounts.TryGetValue(collectibleId, out int count) ? count : 0;
 
     private void OnEnable()
     {
@@ -136,13 +149,30 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     private void Awake()
     {
         SuckedBlockCount = 0;
+        SuckedItemCounts.Clear();
+        CurrentLevel = Mathf.Clamp(_startLevel, 1, Mathf.Max(1, LevelCount));
         if (_spawnOnAwake)
             Spawn();
     }
 
+    public void LoadLevel(int levelNumber)
+    {
+        if (levelNumber < 1 || levelNumber > LevelCount)
+        {
+            Debug.LogError($"Level {levelNumber} is outside the configured range 1-{LevelCount}.", this);
+            return;
+        }
+
+        CurrentLevel = levelNumber;
+        Spawn();
+    }
+
     private void OnDestroy()
     {
+        DisposeDecorations();
+        DisposeCutParticles();
         DisposeChunks();
+        DisposeCutMask();
         DisposeReleasedBlocks();
         DisposeReleasedBlockWalls();
         DisposeReleasedBlockResources();

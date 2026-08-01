@@ -9,13 +9,23 @@ using RenderMaterial = UnityEngine.Material;
 
 public sealed partial class TextureBlockSpawner
 {
-    private void QueueReleasedBlockSpawn(Vector3 localPosition, Color32 color, Vector3 sawCenter,
+    private void QueueReleasedBlockSpawn(Vector3 localPosition, Color32 color, ushort typeIndex, Vector3 sawCenter,
         Vector3 pressDirection,
         float pressSpeed, float outwardForce, float tangentialForce, float spinDirection, float bladeRadius,
         float sideDamping, float maxVelocity)
     {
-        if (!EnsureReleasedBlockResources() || !EnsureEcsReady())
+        if (!EnsureReleasedBlockResources() || !EnsureEcsReady() || typeIndex >= _releasedBlockTypes.Count)
             return;
+        ReleasedBlockRuntimeType variantGroup = _releasedBlockTypes[typeIndex];
+        int cellX = Mathf.RoundToInt((localPosition.x - _offset.x) / _cellSize);
+        int cellY = Mathf.RoundToInt((localPosition.y - _offset.y) / _cellSize);
+        uint seed = math.hash(new int3(cellX, cellY,
+            _debrisSpawnSequence++ + variantGroup.FirstVariantIndex * 397));
+        int variantOffset = (int)(seed % variantGroup.VariantCount);
+        typeIndex = (ushort)(variantGroup.FirstVariantIndex + variantOffset);
+        float scaleMultiplier = Mathf.Lerp(0.72f, 1.28f, Hash01(seed ^ 0x9e3779b9u));
+        float rotationRadians = Mathf.Lerp(-Mathf.PI, Mathf.PI, Hash01(seed ^ 0x85ebca6bu));
+        float angularSpeed = Mathf.Lerp(-6f, 6f, Hash01(seed ^ 0xc2b2ae35u));
         Vector3 position = _runtimeParent.TransformPoint(localPosition);
         Vector3 outward = position - sawCenter;
         outward.z = 0f;
@@ -35,11 +45,14 @@ public sealed partial class TextureBlockSpawner
         float safeMaxVelocity = GetSafePhysicsVelocity(maxVelocity);
         Vector3 clampedVelocity = Vector3.ClampMagnitude(velocity, safeMaxVelocity);
         clampedVelocity = RedirectVelocityFromSolid(position, clampedVelocity);
-        CreateReleasedBlockEntity(position, color, clampedVelocity, safeMaxVelocity, false, true);
+        CreateReleasedBlockEntity(position, color, typeIndex, clampedVelocity, safeMaxVelocity, false, true,
+            scaleMultiplier, rotationRadians, angularSpeed);
     }
-    private Entity CreateReleasedBlockEntity(Vector3 position, Color32 color, Vector3 velocity,
-        float maxVelocity, bool renderAsMetaball, bool enableSolidConstraint)
+    private Entity CreateReleasedBlockEntity(Vector3 position, Color32 color, ushort typeIndex, Vector3 velocity,
+        float maxVelocity, bool renderAsMetaball, bool enableSolidConstraint, float scaleMultiplier,
+        float rotationRadians, float angularSpeed)
     {
+        ReleasedBlockRuntimeType runtimeType = _releasedBlockTypes[typeIndex];
         if (_releasedBlockEntities.Count >= _maxReleasedPhysicsBlocks)
             TrimReleasedBlockEntityList();
         while (_releasedBlockEntities.Count >= _maxReleasedPhysicsBlocks && _releasedBlockEntities.Count > 0)
@@ -47,17 +60,18 @@ public sealed partial class TextureBlockSpawner
 
         Entity entity = _entityManager.CreateEntity(_releasedBlockArchetype);
         _entityManager.SetComponentData(entity, LocalTransform.FromPositionRotationScale(
-            new float3(position.x, position.y, position.z), quaternion.identity, _releasedBlockScale));
-        _entityManager.SetComponentData(entity, new PhysicsCollider { Value = _releasedBlockCollider });
+            new float3(position.x, position.y, position.z), quaternion.RotateZ(rotationRadians),
+            runtimeType.Scale * scaleMultiplier));
+        _entityManager.SetComponentData(entity, new PhysicsCollider { Value = runtimeType.Collider });
         PhysicsMass physicsMass = PhysicsMass.CreateDynamic(
-            _releasedBlockCollider.Value.MassProperties, _releasedBlockMass);
+            runtimeType.Collider.Value.MassProperties, _releasedBlockMass);
         physicsMass.InverseInertia.x = 0f;
         physicsMass.InverseInertia.y = 0f;
         _entityManager.SetComponentData(entity, physicsMass);
         _entityManager.SetComponentData(entity, new PhysicsVelocity
         {
             Linear = new float3(velocity.x, velocity.y, velocity.z),
-            Angular = float3.zero
+            Angular = new float3(0f, 0f, angularSpeed)
         });
         _entityManager.SetComponentData(entity, new PhysicsDamping
         {
@@ -71,6 +85,9 @@ public sealed partial class TextureBlockSpawner
             Color = ToFloat4(color),
             LockedZ = position.z,
             MaxPlanarSpeed = maxVelocity,
+            Radius = runtimeType.Radius * scaleMultiplier,
+            TypeIndex = typeIndex,
+            CollectibleId = renderAsMetaball ? default : runtimeType.CollectibleId,
             SuctionPathIndex = byte.MaxValue,
             SolidConstraintFrames = enableSolidConstraint ? ReleasedBlockComponent.SolidConstraintDuration : (byte)0,
             RenderAsMetaball = renderAsMetaball ? (byte)1 : (byte)0
@@ -79,6 +96,15 @@ public sealed partial class TextureBlockSpawner
         _entityManager.SetComponentEnabled<SuctionTransit>(entity, false);
         _releasedBlockEntities.Add(entity);
         return entity;
+    }
+    private static float Hash01(uint value)
+    {
+        value ^= value >> 16;
+        value *= 0x7feb352du;
+        value ^= value >> 15;
+        value *= 0x846ca68bu;
+        value ^= value >> 16;
+        return (value & 0x00ffffffu) / 16777215f;
     }
     private float GetSafePhysicsVelocity(float requestedMaxVelocity)
     {

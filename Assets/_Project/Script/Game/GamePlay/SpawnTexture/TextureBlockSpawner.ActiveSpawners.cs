@@ -9,6 +9,13 @@ public sealed partial class TextureBlockSpawner
         SuckedBlockCount += count;
         BlocksSucked?.Invoke(count);
     }
+    internal static void NotifyItemSucked(string collectibleId, int count)
+    {
+        SuckedItemCounts.TryGetValue(collectibleId, out int currentCount);
+        SuckedItemCounts[collectibleId] = currentCount + count;
+        NotifyBlocksSucked(count);
+        ItemSucked?.Invoke(collectibleId, count);
+    }
     internal static int ActiveSpawnerCount => ActiveSpawners.Count;
     internal static TextureBlockSpawner GetActiveSpawner(int index) => ActiveSpawners[index];
     internal static void RemoveActiveSpawnerAt(int index) => ActiveSpawners.RemoveAt(index);

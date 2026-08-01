@@ -47,37 +47,27 @@ public sealed partial class TextureBlockSpawner
         ClearReleasedBlockEntities();
         _releasedBlockEntities.Clear();
         _metaballWaterEntities.Clear();
+        _metaballWaterSizes.Clear();
     }
 
     private void DisposeReleasedBlockResources()
     {
         DisposeRenderFrameResources();
-        if (_releasedBlockCollider.IsCreated)
+        for (int i = 0; i < _releasedBlockTypes.Count; i++)
         {
-            _releasedBlockCollider.Dispose();
-            _releasedBlockCollider = default;
+            ReleasedBlockRuntimeType runtimeType = _releasedBlockTypes[i];
+            if (runtimeType.Collider.IsCreated)
+                runtimeType.Collider.Dispose();
+            if (runtimeType.Material != null)
+                DestroyUnityObject(runtimeType.Material);
+            if (runtimeType.OwnsMesh && runtimeType.Mesh != null)
+                DestroyUnityObject(runtimeType.Mesh);
         }
-        if (_releasedBlockMaterial != null)
-            DestroyUnityObject(_releasedBlockMaterial);
-        _releasedBlockMaterial = null;
-        _releasedBlockMesh = null;
+        _releasedBlockTypes.Clear();
     }
 
     private void EnsureRenderFrameResources()
     {
-        if (_renderBatchMatrices == null)
-        {
-            int batchCapacity = Mathf.CeilToInt(_maxReleasedPhysicsBlocks / (float)MaxInstancesPerBatch);
-            _renderBatchMatrices = new Matrix4x4[batchCapacity][];
-            _renderBatchColors = new Vector4[batchCapacity][];
-            _renderBatchCounts = new int[batchCapacity];
-            for (int i = 0; i < batchCapacity; i++)
-            {
-                _renderBatchMatrices[i] = new Matrix4x4[MaxInstancesPerBatch];
-                _renderBatchColors[i] = new Vector4[MaxInstancesPerBatch];
-            }
-        }
-
         for (int i = 0; i < _renderFrames.Length; i++)
         {
             if (_renderFrames[i] != null)
@@ -99,10 +89,6 @@ public sealed partial class TextureBlockSpawner
             _renderFrames[i] = null;
         }
         _displayRenderFrame = -1;
-        _renderBatchCount = 0;
-        _renderBatchMatrices = null;
-        _renderBatchColors = null;
-        _renderBatchCounts = null;
     }
 
     private void DisposeReleasedBlockWalls()

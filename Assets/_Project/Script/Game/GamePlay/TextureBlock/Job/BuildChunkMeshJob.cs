@@ -25,11 +25,8 @@ internal struct BuildChunkMeshJob : IJob
     public float CellSize;
     public Vector3 Offset;
 
-    public byte UseVoxelDetail;
     public byte ExtrudeMergedQuads;
     public byte MergeAnySolid;
-    public float DetailVoxelScale;
-    public float RandomYRotation;
     public float DetailDepth;
 
     public void Execute()
@@ -50,11 +47,8 @@ internal struct BuildChunkMeshJob : IJob
             ChunkHeight = ChunkHeight,
             CellSize = CellSize,
             Offset = Offset,
-            UseVoxelDetail = UseVoxelDetail,
             ExtrudeMergedQuads = ExtrudeMergedQuads,
             MergeAnySolid = MergeAnySolid,
-            DetailVoxelScale = DetailVoxelScale,
-            RandomYRotation = RandomYRotation,
             DetailDepth = DetailDepth
         }.Execute();
     }

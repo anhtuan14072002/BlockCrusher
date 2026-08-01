@@ -1,3 +1,4 @@
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics;
@@ -11,57 +12,151 @@ public sealed partial class TextureBlockSpawner
 {
     private bool EnsureReleasedBlockResources()
     {
-        if (_releasedBlockCollider.IsCreated && _releasedBlockMesh != null && _releasedBlockMaterial != null)
-        {
-            EnsureRenderFrameResources();
-            return true;
-        }
-        ReleasedBlockAuthoring authoring = ResolveReleasedBlockAuthoring();
-        GameObject prefab = authoring != null ? authoring.ReleasedBlockPrefab : null;
-        if (prefab == null)
+        if (_releasedBlockTypes.Count == 0)
             return false;
+
+        EnsureRenderFrameResources();
+        return true;
+    }
+
+    private int GetOrCreateReleasedBlockType(LevelBlock block)
+    {
+        return GetOrCreateReleasedBlockType(block.ReleasedPrefab, block.ReleasedScale, block.CollectibleId, block);
+    }
+
+    private int GetOrCreateReleasedBlockType(LevelDecoration decoration)
+    {
+        if (!decoration.ReleasesCollectible)
+            return -1;
+
+        return GetOrCreateReleasedBlockType(decoration.ReleasedPrefab, decoration.ReleasedScale,
+            decoration.CollectibleId, decoration);
+    }
+
+    private int GetOrCreateReleasedBlockType(GameObject prefab, float scale, string collectibleName,
+        Component source)
+    {
+        if (prefab == null || scale <= 0f || string.IsNullOrWhiteSpace(collectibleName) ||
+            collectibleName.Length > 60)
+        {
+            Debug.LogError($"'{source.name}' needs a collectible id up to 60 characters, released prefab and positive scale.", source);
+            return -1;
+        }
+        FixedString64Bytes collectibleId = collectibleName;
+
+        for (int i = 0; i < _releasedBlockTypes.Count; i++)
+        {
+            ReleasedBlockRuntimeType existing = _releasedBlockTypes[i];
+            if (existing.Prefab == prefab && Mathf.Approximately(existing.Scale, scale) &&
+                existing.CollectibleId.Equals(collectibleId))
+                return existing.FirstVariantIndex;
+        }
+
         MeshFilter meshFilter = prefab.GetComponentInChildren<MeshFilter>();
         Renderer meshRenderer = prefab.GetComponentInChildren<Renderer>();
         if (meshFilter == null || meshFilter.sharedMesh == null || meshRenderer == null)
-            return false;
-        _releasedBlockMesh = meshFilter.sharedMesh;
-        _releasedBlockMaterial = new RenderMaterial(meshRenderer.sharedMaterial != null
+        {
+            Debug.LogError($"Released prefab '{prefab.name}' needs a mesh filter and renderer.", prefab);
+            return -1;
+        }
+
+        Mesh sourceMesh = meshFilter.sharedMesh;
+        RenderMaterial sourceMaterial = meshRenderer.sharedMaterial != null
             ? meshRenderer.sharedMaterial
-            : _runtimeChunkMaterial)
-        {
-            enableInstancing = true
-        };
+            : _runtimeChunkMaterial;
         _releasedBlockPropertyBlock ??= new MaterialPropertyBlock();
-        _releasedBlockScale = Mathf.Max(0.0001f, authoring.Scale);
-        Vector3 size = Vector3.one;
-        Vector3 center = Vector3.zero;
-        UnityEngine.BoxCollider box = prefab.GetComponentInChildren<UnityEngine.BoxCollider>();
-        if (box != null)
+        int firstVariantIndex = _releasedBlockTypes.Count;
+        int batchCapacity = Mathf.CeilToInt(_maxReleasedPhysicsBlocks / (float)MaxInstancesPerBatch);
+        for (int variant = 0; variant < ReleasedMeshVariantCount; variant++)
         {
-            size = Vector3.Scale(box.size, box.transform.lossyScale);
-            center = Vector3.Scale(box.center, box.transform.lossyScale);
+            Mesh mesh = variant == 0 ? sourceMesh : CreateReleasedVariantMesh(sourceMesh, variant);
+            Bounds bounds = mesh.bounds;
+            float radius = Mathf.Min(bounds.size.x, bounds.size.y) * 0.48f;
+            BlobAssetReference<Collider> collider = Unity.Physics.SphereCollider.Create(new SphereGeometry
+            {
+                Center = bounds.center,
+                Radius = radius
+            }, CollisionFilter.Default, CreatePhysicsMaterial());
+            RenderMaterial material = new RenderMaterial(sourceMaterial) { enableInstancing = true };
+            ReleasedBlockRuntimeType runtimeType = new ReleasedBlockRuntimeType
+            {
+                Prefab = prefab,
+                Mesh = mesh,
+                Material = material,
+                Collider = collider,
+                Scale = scale,
+                Radius = radius * scale,
+                CollectibleId = collectibleId,
+                BatchMatrices = new Matrix4x4[batchCapacity][],
+                BatchColors = new Vector4[batchCapacity][],
+                BatchCounts = new int[batchCapacity],
+                FirstVariantIndex = (ushort)firstVariantIndex,
+                VariantCount = ReleasedMeshVariantCount,
+                OwnsMesh = mesh != sourceMesh
+            };
+            for (int i = 0; i < batchCapacity; i++)
+            {
+                runtimeType.BatchMatrices[i] = new Matrix4x4[MaxInstancesPerBatch];
+                runtimeType.BatchColors[i] = new Vector4[MaxInstancesPerBatch];
+            }
+            _releasedBlockTypes.Add(runtimeType);
         }
-        else
-        {
-            Bounds bounds = _releasedBlockMesh.bounds;
-            size = bounds.size;
-            center = bounds.center;
-        }
-        PhysicsMaterial physicsMaterial = CreatePhysicsMaterial();
-        float radius = Mathf.Min(size.x, size.y) * 0.48f;
-        _releasedBlockCollider = Unity.Physics.SphereCollider.Create(new SphereGeometry
-        {
-            Center = new float3(center.x, center.y, center.z),
-            Radius = radius
-        }, CollisionFilter.Default, physicsMaterial);
+
         EnsureRenderFrameResources();
-        return _releasedBlockCollider.IsCreated;
+        return firstVariantIndex;
     }
-    private ReleasedBlockAuthoring ResolveReleasedBlockAuthoring()
+
+    private static Mesh CreateReleasedVariantMesh(Mesh source, int variant)
     {
-        if (_releasedBlockAuthoring == null)
-            _releasedBlockAuthoring = GetComponent<ReleasedBlockAuthoring>();
-        return _releasedBlockAuthoring;
+        if (!source.isReadable)
+            return source;
+
+        Vector3[] vertices = source.vertices;
+        Bounds bounds = source.bounds;
+        Vector3 center = bounds.center;
+        Vector3 extents = bounds.extents;
+        for (int i = 0; i < vertices.Length; i++)
+        {
+            Vector3 point = vertices[i] - center;
+            float normalizedX = extents.x > 0.0001f ? point.x / extents.x : 0f;
+            float normalizedY = extents.y > 0.0001f ? point.y / extents.y : 0f;
+            switch (variant)
+            {
+                case 1:
+                    point.x = point.x * 1.22f + normalizedY * extents.x * 0.16f;
+                    point.y *= 0.72f;
+                    if (normalizedX > 0.5f && normalizedY > 0.5f)
+                        point.y -= extents.y * 0.24f;
+                    break;
+                case 2:
+                    point.x *= 0.72f;
+                    point.y = point.y * 1.2f - normalizedX * extents.y * 0.14f;
+                    if (normalizedX < -0.5f && normalizedY < -0.5f)
+                        point.x += extents.x * 0.26f;
+                    break;
+                default:
+                    point.x *= 0.98f + normalizedY * 0.18f;
+                    point.y *= 0.92f - normalizedX * 0.14f;
+                    if (normalizedX > 0.5f && normalizedY < -0.5f)
+                    {
+                        point.x -= extents.x * 0.28f;
+                        point.y += extents.y * 0.2f;
+                    }
+                    break;
+            }
+            point.z *= 0.82f + variant * 0.06f;
+            vertices[i] = center + point;
+        }
+
+        Mesh mesh = new Mesh { name = $"{source.name}_Debris{variant}" };
+        mesh.indexFormat = source.indexFormat;
+        mesh.vertices = vertices;
+        mesh.triangles = source.triangles;
+        mesh.uv = source.uv;
+        mesh.colors32 = source.colors32;
+        mesh.RecalculateNormals();
+        mesh.RecalculateBounds();
+        return mesh;
     }
     private bool EnsureEcsReady()
     {

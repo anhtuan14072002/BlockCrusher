@@ -10,7 +10,7 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
 {
     [ReadOnly] public NativeArray<ReleasedBlockInteractionRequest> Requests;
     public EntityCommandBuffer.ParallelWriter CommandBuffer;
-    public NativeReference<int> SuckedCount;
+    public NativeQueue<FixedString64Bytes>.ParallelWriter CollectedItems;
 
     private void Execute([EntityIndexInQuery] int sortKey, Entity entity, ref LocalTransform transform,
         ref PhysicsCollider collider, ref PhysicsVelocity velocity, ref PhysicsGravityFactor gravity,
@@ -94,8 +94,6 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
                     if (pathIndex < lastPathIndex && math.lengthsq(waypointDelta) <=
                         request.WaypointRadius * request.WaypointRadius)
                     {
-                        if (pathIndex == 0)
-                            SuckedCount.Value++;
                         pathIndex++;
                         block.SuctionPathIndex = (byte)pathIndex;
                         target = GetSegmentFollowTarget(position, request.SuctionPath[pathIndex - 1],
@@ -110,6 +108,8 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
                     if (pathIndex == lastPathIndex &&
                         math.lengthsq(suctionDelta) < request.DestroyRadius * request.DestroyRadius)
                     {
+                        if (!block.CollectibleId.IsEmpty)
+                            CollectedItems.Enqueue(block.CollectibleId);
                         simulate.ValueRW = false;
                         CommandBuffer.DestroyEntity(sortKey, entity);
                         return;

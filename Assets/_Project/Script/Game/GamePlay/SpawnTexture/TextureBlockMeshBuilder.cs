@@ -19,11 +19,8 @@ public sealed partial class TextureBlockSpawner
         public int ChunkHeight;
         public float CellSize;
         public Vector3 Offset;
-        public byte UseVoxelDetail;
         public byte ExtrudeMergedQuads;
         public byte MergeAnySolid;
-        public float DetailVoxelScale;
-        public float RandomYRotation;
         public float DetailDepth;
         public void Execute()
         {
@@ -40,12 +37,6 @@ public sealed partial class TextureBlockSpawner
                     if (CellSolid[cellIndex] == 0)
                         continue;
                     Color32 color = CellColors[cellIndex];
-                    if (UseVoxelDetail != 0)
-                    {
-                        Visited[localIndex] = 1;
-                        AddVoxelBox(x, y, color);
-                        continue;
-                    }
                     int rectWidth = 1;
                     while (x + rectWidth < ChunkWidth && CanMerge(x + rectWidth, y, color))
                         rectWidth++;
@@ -101,54 +92,6 @@ public sealed partial class TextureBlockSpawner
             AddVertexData(color);
             AddQuadIndices(vertexIndex);
         }
-        private void AddVoxelBox(int x, int y, Color32 color)
-        {
-            float half = CellSize * DetailVoxelScale * 0.5f;
-            float halfDepth = DetailDepth * 0.5f;
-            float centerX = Offset.x + (StartX + x) * CellSize;
-            float centerY = Offset.y + (StartY + y) * CellSize;
-            float rotationY = GetRotationY(StartX + x, StartY + y);
-            Vector3 frontMin = new Vector3(centerX - half, centerY - half, -halfDepth);
-            Vector3 frontMax = new Vector3(centerX + half, centerY + half, -halfDepth);
-            Vector3 backMin = new Vector3(centerX - half, centerY - half, halfDepth);
-            Vector3 backMax = new Vector3(centerX + half, centerY + half, halfDepth);
-            AddFace(
-                RotateAroundCenter(new Vector3(frontMin.x, frontMin.y, frontMin.z), centerX, rotationY),
-                RotateAroundCenter(new Vector3(frontMin.x, frontMax.y, frontMin.z), centerX, rotationY),
-                RotateAroundCenter(new Vector3(frontMax.x, frontMax.y, frontMin.z), centerX, rotationY),
-                RotateAroundCenter(new Vector3(frontMax.x, frontMin.y, frontMin.z), centerX, rotationY),
-                color);
-            AddFace(
-                RotateAroundCenter(new Vector3(backMax.x, backMin.y, backMax.z), centerX, rotationY),
-                RotateAroundCenter(new Vector3(backMax.x, backMax.y, backMax.z), centerX, rotationY),
-                RotateAroundCenter(new Vector3(backMin.x, backMax.y, backMax.z), centerX, rotationY),
-                RotateAroundCenter(new Vector3(backMin.x, backMin.y, backMax.z), centerX, rotationY),
-                color);
-            AddFace(
-                RotateAroundCenter(new Vector3(frontMin.x, frontMin.y, frontMin.z), centerX, rotationY),
-                RotateAroundCenter(new Vector3(backMin.x, backMin.y, backMin.z), centerX, rotationY),
-                RotateAroundCenter(new Vector3(backMin.x, backMax.y, backMax.z), centerX, rotationY),
-                RotateAroundCenter(new Vector3(frontMin.x, frontMax.y, frontMin.z), centerX, rotationY),
-                color);
-            AddFace(
-                RotateAroundCenter(new Vector3(frontMax.x, frontMin.y, frontMin.z), centerX, rotationY),
-                RotateAroundCenter(new Vector3(frontMax.x, frontMax.y, frontMin.z), centerX, rotationY),
-                RotateAroundCenter(new Vector3(backMax.x, backMax.y, backMax.z), centerX, rotationY),
-                RotateAroundCenter(new Vector3(backMax.x, backMin.y, backMax.z), centerX, rotationY),
-                color);
-            AddFace(
-                RotateAroundCenter(new Vector3(frontMin.x, frontMax.y, frontMin.z), centerX, rotationY),
-                RotateAroundCenter(new Vector3(backMin.x, backMax.y, backMax.z), centerX, rotationY),
-                RotateAroundCenter(new Vector3(backMax.x, backMax.y, backMax.z), centerX, rotationY),
-                RotateAroundCenter(new Vector3(frontMax.x, frontMax.y, frontMin.z), centerX, rotationY),
-                color);
-            AddFace(
-                RotateAroundCenter(new Vector3(frontMin.x, frontMin.y, frontMin.z), centerX, rotationY),
-                RotateAroundCenter(new Vector3(frontMax.x, frontMin.y, frontMin.z), centerX, rotationY),
-                RotateAroundCenter(new Vector3(backMax.x, backMin.y, backMax.z), centerX, rotationY),
-                RotateAroundCenter(new Vector3(backMin.x, backMin.y, backMin.z), centerX, rotationY),
-                color);
-        }
         private void AddMergedBox(int x, int y, int width, int height, Color32 color)
         {
             float minX = Offset.x + (StartX + x) * CellSize - CellSize * 0.5f;
@@ -175,26 +118,6 @@ public sealed partial class TextureBlockSpawner
                 color);
             AddFace(new Vector3(frontMin.x, frontMin.y, frontMin.z), new Vector3(frontMax.x, frontMin.y, frontMin.z),
                 new Vector3(backMax.x, backMin.y, backMax.z), new Vector3(backMin.x, backMin.y, backMin.z), color);
-        }
-        private float GetRotationY(int x, int y)
-        {
-            if (RandomYRotation <= 0f)
-                return 0f;
-            uint hash = (uint)(x * 73856093) ^ (uint)(y * 19349663);
-            float normalized = (hash & 1023u) * (1f / 1023f);
-            return (normalized * 2f - 1f) * RandomYRotation;
-        }
-        private Vector3 RotateAroundCenter(Vector3 point, float centerX, float degrees)
-        {
-            if (degrees == 0f)
-                return point;
-            float radians = degrees * 0.0174532924f;
-            float sin = Mathf.Sin(radians);
-            float cos = Mathf.Cos(radians);
-            float localX = point.x - centerX;
-            float rotatedX = localX * cos + point.z * sin;
-            float rotatedZ = -localX * sin + point.z * cos;
-            return new Vector3(centerX + rotatedX, point.y, rotatedZ);
         }
         private void AddFace(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Color32 color)
         {

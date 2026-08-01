@@ -40,6 +40,7 @@ public sealed partial class TextureBlockSpawner
         {
             Matrices = frame.Matrices,
             Colors = frame.Colors,
+            Types = frame.Types,
             Count = frame.Count,
             OwnerId = _ownerId
         };
@@ -55,34 +56,50 @@ public sealed partial class TextureBlockSpawner
     private void CachePreparedRenderFrame(RenderFrameData frame)
     {
         int count = frame.Count.Value;
-        int sourceIndex = 0;
-        int batchIndex = 0;
-        while (sourceIndex < count)
+        for (int i = 0; i < _releasedBlockTypes.Count; i++)
         {
-            Matrix4x4[] matrices = _renderBatchMatrices[batchIndex];
-            Vector4[] colors = _renderBatchColors[batchIndex];
-            int batchCount = Mathf.Min(matrices.Length, count - sourceIndex);
-            for (int i = 0; i < batchCount; i++)
-            {
-                float4x4 matrix = frame.Matrices[sourceIndex + i];
-                matrices[i] = new Matrix4x4(matrix.c0, matrix.c1, matrix.c2, matrix.c3);
-                colors[i] = frame.Colors[sourceIndex + i];
-            }
-            _renderBatchCounts[batchIndex] = batchCount;
-            sourceIndex += batchCount;
-            batchIndex++;
+            _releasedBlockTypes[i].RenderCount = 0;
+            _releasedBlockTypes[i].BatchCount = 0;
         }
-        _renderBatchCount = batchIndex;
+
+        for (int sourceIndex = 0; sourceIndex < count; sourceIndex++)
+        {
+            ushort typeIndex = frame.Types[sourceIndex];
+            if (typeIndex >= _releasedBlockTypes.Count)
+                continue;
+
+            ReleasedBlockRuntimeType runtimeType = _releasedBlockTypes[typeIndex];
+            int renderIndex = runtimeType.RenderCount++;
+            int batchIndex = renderIndex / MaxInstancesPerBatch;
+            int indexInBatch = renderIndex % MaxInstancesPerBatch;
+            float4x4 matrix = frame.Matrices[sourceIndex];
+            runtimeType.BatchMatrices[batchIndex][indexInBatch] =
+                new Matrix4x4(matrix.c0, matrix.c1, matrix.c2, matrix.c3);
+            runtimeType.BatchColors[batchIndex][indexInBatch] = frame.Colors[sourceIndex];
+        }
+
+        for (int i = 0; i < _releasedBlockTypes.Count; i++)
+        {
+            ReleasedBlockRuntimeType runtimeType = _releasedBlockTypes[i];
+            runtimeType.BatchCount = Mathf.CeilToInt(runtimeType.RenderCount / (float)MaxInstancesPerBatch);
+            for (int batchIndex = 0; batchIndex < runtimeType.BatchCount; batchIndex++)
+                runtimeType.BatchCounts[batchIndex] = Mathf.Min(MaxInstancesPerBatch,
+                    runtimeType.RenderCount - batchIndex * MaxInstancesPerBatch);
+        }
     }
     private void DrawCachedRenderFrame()
     {
-        for (int i = 0; i < _renderBatchCount; i++)
+        for (int typeIndex = 0; typeIndex < _releasedBlockTypes.Count; typeIndex++)
         {
-            Vector4[] colors = _renderBatchColors[i];
-            _releasedBlockPropertyBlock.Clear();
-            _releasedBlockPropertyBlock.SetVectorArray(ColorId, colors);
-            Graphics.DrawMeshInstanced(_releasedBlockMesh, 0, _releasedBlockMaterial, _renderBatchMatrices[i],
-                _renderBatchCounts[i], _releasedBlockPropertyBlock, ShadowCastingMode.Off, false, gameObject.layer);
+            ReleasedBlockRuntimeType runtimeType = _releasedBlockTypes[typeIndex];
+            for (int batchIndex = 0; batchIndex < runtimeType.BatchCount; batchIndex++)
+            {
+                _releasedBlockPropertyBlock.Clear();
+                _releasedBlockPropertyBlock.SetVectorArray(ColorId, runtimeType.BatchColors[batchIndex]);
+                Graphics.DrawMeshInstanced(runtimeType.Mesh, 0, runtimeType.Material,
+                    runtimeType.BatchMatrices[batchIndex], runtimeType.BatchCounts[batchIndex],
+                    _releasedBlockPropertyBlock, ShadowCastingMode.Off, false, gameObject.layer);
+            }
         }
     }
 }

@@ -10,6 +10,7 @@ internal partial struct PrepareRenderFrameJob : IJobEntity
 {
     [WriteOnly] public NativeArray<float4x4> Matrices;
     [WriteOnly] public NativeArray<float4> Colors;
+    [WriteOnly] public NativeArray<ushort> Types;
     public NativeReference<int> Count;
     public int OwnerId;
 
@@ -27,6 +28,7 @@ internal partial struct PrepareRenderFrameJob : IJobEntity
         Matrices[index] = float4x4.TRS(renderPosition, transformData.Rotation,
             new float3(transformData.Scale));
         Colors[index] = block.Color;
+        Types[index] = block.TypeIndex;
         Count.Value = index + 1;
     }
 }
