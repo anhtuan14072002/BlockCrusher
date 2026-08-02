@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-public sealed partial class TextureBlockSpawner
+public sealed partial class LevelMapSpawner
 {
     private readonly List<DecorationRuntime> _levelDecorations = new(256);
     private List<int>[] _decorationChunksByCell;
@@ -24,7 +24,7 @@ public sealed partial class TextureBlockSpawner
     private void CreateDecorations(LevelDecoration[] decorations)
     {
         DisposeDecorations();
-        if (decorations.Length == 0 || _runtimeChunkMaterial == null || _chunks.Count == 0)
+        if (decorations.Length == 0 || _chunks.Count == 0)
             return;
 
         List<int>[] chunkDecorations = new List<int>[_chunks.Count];
@@ -125,7 +125,7 @@ public sealed partial class TextureBlockSpawner
             chunk.DecorationObject.transform.SetParent(_runtimeParent, false);
             chunk.DecorationObject.AddComponent<MeshFilter>().sharedMesh = chunk.DecorationMesh;
             chunk.DecorationRenderer = chunk.DecorationObject.AddComponent<MeshRenderer>();
-            chunk.DecorationRenderer.sharedMaterial = _runtimeChunkMaterial;
+            chunk.DecorationRenderer.sharedMaterial = _chunkMaterial;
             ApplyCutMask(chunk.DecorationRenderer);
             chunk.DecorationRenderer.shadowCastingMode = ShadowCastingMode.Off;
             chunk.DecorationRenderer.receiveShadows = false;
@@ -214,7 +214,7 @@ public sealed partial class TextureBlockSpawner
     }
 
     private void SpawnReleasedDecorationsAtCell(int cellIndex, Vector3 localPosition, Vector3 sawCenter,
-        Vector3 pressDirection, float pressSpeed, float outwardForce, float tangentialForce, float spinDirection,
+        float pressSpeed, float outwardForce, float tangentialForce, float spinDirection,
         float bladeRadius, float sideDamping, float maxVelocity)
     {
         if (_decorationsByAnchorCell == null || (uint)cellIndex >= (uint)_decorationsByAnchorCell.Length)
@@ -228,7 +228,7 @@ public sealed partial class TextureBlockSpawner
         {
             DecorationRuntime decoration = _levelDecorations[decorationIndices[i]];
             QueueReleasedBlockSpawn(localPosition, decoration.ReleasedColor, decoration.ReleasedTypeIndex,
-                sawCenter, pressDirection, pressSpeed, outwardForce, tangentialForce, spinDirection, bladeRadius,
+                sawCenter, pressSpeed, outwardForce, tangentialForce, spinDirection, bladeRadius,
                 sideDamping, maxVelocity);
         }
     }

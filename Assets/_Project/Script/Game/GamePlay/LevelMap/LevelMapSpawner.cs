@@ -6,14 +6,14 @@ using UnityEngine;
 using Collider = Unity.Physics.Collider;
 using RenderMaterial = UnityEngine.Material;
 
-public sealed partial class TextureBlockSpawner : MonoBehaviour
+public sealed partial class LevelMapSpawner : MonoBehaviour
 {
     private const int MaxInstancesPerBatch = 1023;
     private const int ReleasedMeshVariantCount = 4;
     private const float MinimumPhysicsDeltaTime = 0.001f;
     private const float MaxCellTravelPerStep = 0.75f;
 
-    private static readonly List<TextureBlockSpawner> ActiveSpawners = new();
+    private static readonly List<LevelMapSpawner> ActiveSpawners = new();
     private static readonly Dictionary<string, int> SuckedItemCounts = new();
     private static readonly int ColorId = Shader.PropertyToID("_Color");
     private static int _nextOwnerId = 1;
@@ -28,9 +28,11 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     [Header("Chunk Rendering")]
     [SerializeField, Range(8, 64)] private int _chunkSize = 24;
     [SerializeField, Range(1, 8)] private int _maxChunkRebuildsPerFrame = 2;
+    [SerializeField, Range(0f, 0.18f)] private float _terrainCellIrregularity = 0.1f;
 
     [Header("Released Blocks")]
-    [SerializeField] private float _sawReleaseRadius = 0.18f;       
+    [SerializeField] private float _sawReleaseRadius = 0.18f;
+    [SerializeField, Min(0f)] private float _releasedBlockLiftSpeed = 1.5f;
     [SerializeField, Range(0f, 20f)] private float _releasedBlockDamping = 2.5f;
     [SerializeField, Range(0f, 20f)] private float _releasedBlockAngularDamping = 4f;
     [SerializeField, Range(0.01f, 10f)] private float _releasedBlockMass = 0.1f;
@@ -74,7 +76,6 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
 
     private byte[] _chunkDirty;
     private Transform _runtimeParent;
-    private RenderMaterial _runtimeChunkMaterial;
     private Vector3 _offset;
 
     private int _ownerId;
@@ -83,7 +84,6 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
     private int _chunkColumns;
     private float _cellSize;
     private float _chunkColliderDepth;
-    private int _debrisSpawnSequence;
 
     private ParticleSystem.Particle[] _metaballParticleBuffer;
     private int _spawnedWaterCellCount;
@@ -123,14 +123,10 @@ public sealed partial class TextureBlockSpawner : MonoBehaviour
 
     public static int SuckedBlockCount { get; private set; }
     public static IReadOnlyDictionary<string, int> SuckedItems => SuckedItemCounts;
-    public static event System.Action<int> BlocksSucked;
     public static event System.Action<string, int> ItemSucked;
 
     public int CurrentLevel { get; private set; }
     public int LevelCount => _levelPrefabs?.Length ?? 0;
-
-    public static int GetSuckedItemCount(string collectibleId) =>
-        SuckedItemCounts.TryGetValue(collectibleId, out int count) ? count : 0;
 
     private void OnEnable()
     {

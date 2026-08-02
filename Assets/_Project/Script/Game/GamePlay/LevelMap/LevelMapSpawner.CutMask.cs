@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public sealed partial class TextureBlockSpawner
+public sealed partial class LevelMapSpawner
 {
     private static readonly int CutMaskId = Shader.PropertyToID("_CutMask");
     private static readonly int CutGridId = Shader.PropertyToID("_CutGrid");

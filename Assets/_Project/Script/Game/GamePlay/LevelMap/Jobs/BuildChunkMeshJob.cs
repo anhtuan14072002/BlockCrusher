@@ -28,10 +28,11 @@ internal struct BuildChunkMeshJob : IJob
     public byte ExtrudeMergedQuads;
     public byte MergeAnySolid;
     public float DetailDepth;
+    public float CellIrregularity;
 
     public void Execute()
     {
-        new TextureBlockSpawner.TextureBlockMeshBuilder
+        new LevelMapSpawner.LevelMapMeshBuilder
         {
             CellColors = CellColors,
             CellSolid = CellSolid,
@@ -49,7 +50,8 @@ internal struct BuildChunkMeshJob : IJob
             Offset = Offset,
             ExtrudeMergedQuads = ExtrudeMergedQuads,
             MergeAnySolid = MergeAnySolid,
-            DetailDepth = DetailDepth
+            DetailDepth = DetailDepth,
+            CellIrregularity = CellIrregularity
         }.Execute();
     }
 }

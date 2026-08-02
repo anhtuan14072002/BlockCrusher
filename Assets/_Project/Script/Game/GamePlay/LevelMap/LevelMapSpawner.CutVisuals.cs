@@ -1,7 +1,7 @@
 using UnityEngine;
 using RenderMaterial = UnityEngine.Material;
 
-public sealed partial class TextureBlockSpawner
+public sealed partial class LevelMapSpawner
 {
     private void CreateCutParticles()
     {

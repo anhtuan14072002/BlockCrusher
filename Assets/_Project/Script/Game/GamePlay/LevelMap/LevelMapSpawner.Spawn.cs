@@ -2,17 +2,23 @@ using System.Collections.Generic;
 using Unity.Collections;
 using UnityEngine;
 
-public sealed partial class TextureBlockSpawner
+public sealed partial class LevelMapSpawner
 {
     [ContextMenu("Spawn")]
     public void Spawn()
     {
         Clear();
+        if (_chunkMaterial == null)
+        {
+            Debug.LogError("LevelMapSpawner needs a chunk material.", this);
+            return;
+        }
+
         _runtimeParent = _container != null ? _container : transform;
         GameObject levelPrefab = GetCurrentLevelPrefab();
         if (levelPrefab == null)
         {
-            Debug.LogError($"TextureBlockSpawner needs a prefab for level {CurrentLevel}.", this);
+            Debug.LogError($"LevelMapSpawner needs a prefab for level {CurrentLevel}.", this);
             return;
         }
 
@@ -31,7 +37,6 @@ public sealed partial class TextureBlockSpawner
             obstacles[i].transform.SetParent(_runtimeParent, true);
 
         LevelObstacle.MaskSpawnCells(_cellSolid, _runtimeParent, _offset, _gridWidth, _gridHeight, _cellSize);
-        _runtimeChunkMaterial = ResolveChunkMaterial();
         CreateCutMask();
         CreateCutParticles();
         SpawnMetaballWater(waterMarkers);
@@ -151,7 +156,7 @@ public sealed partial class TextureBlockSpawner
     private void ValidateLevelPrefab()
     {
         GameObject levelPrefab = GetCurrentLevelPrefab();
-        Debug.Assert(levelPrefab != null, $"TextureBlockSpawner needs a prefab for level {CurrentLevel}.", this);
+        Debug.Assert(levelPrefab != null, $"LevelMapSpawner needs a prefab for level {CurrentLevel}.", this);
         if (levelPrefab == null)
             return;
 
@@ -203,7 +208,6 @@ public sealed partial class TextureBlockSpawner
     [ContextMenu("Clear")]
     public void Clear()
     {
-        _debrisSpawnSequence = 0;
         ClearMetaballWater();
         DisposeDecorations();
         DisposeCutParticles();

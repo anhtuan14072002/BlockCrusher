@@ -27,12 +27,12 @@ namespace Crusher
 
         private void OnEnable()
         {
-            TextureBlockSpawner.ItemSucked += AddSuckedItem;
+            LevelMapSpawner.ItemSucked += AddSuckedItem;
         }
 
         private void OnDisable()
         {
-            TextureBlockSpawner.ItemSucked -= AddSuckedItem;
+            LevelMapSpawner.ItemSucked -= AddSuckedItem;
         }
 
         private void IncreaseSawContactSpeed()
@@ -83,9 +83,9 @@ namespace Crusher
                 return;
 
             _materialsText.Clear();
-            _materialsText.Append("NGUYEN LIEU: ").Append(TextureBlockSpawner.SuckedBlockCount);
+            _materialsText.Append("NGUYEN LIEU: ").Append(LevelMapSpawner.SuckedBlockCount);
 
-            IReadOnlyDictionary<string, int> items = TextureBlockSpawner.SuckedItems;
+            IReadOnlyDictionary<string, int> items = LevelMapSpawner.SuckedItems;
             if (items.Count == 0)
             {
                 _materialsText.Append("\nChua thu duoc");
@@ -112,6 +112,7 @@ namespace Crusher
                 case "orange_ore": _materialsText.Append("Quang cam"); return;
                 case "blue_ore": _materialsText.Append("Quang xanh"); return;
                 case "purple_ore": _materialsText.Append("Quang tim"); return;
+                case "water": _materialsText.Append("Nuoc"); return;
             }
 
             bool upperNext = true;

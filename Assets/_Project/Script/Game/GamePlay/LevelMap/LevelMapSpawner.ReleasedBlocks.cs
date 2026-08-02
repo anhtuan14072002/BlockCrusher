@@ -3,14 +3,10 @@ using Unity.Mathematics;
 using Unity.Physics;
 using Unity.Transforms;
 using UnityEngine;
-using Collider = Unity.Physics.Collider;
-using PhysicsMaterial = Unity.Physics.Material;
-using RenderMaterial = UnityEngine.Material;
 
-public sealed partial class TextureBlockSpawner
+public sealed partial class LevelMapSpawner
 {
     private void QueueReleasedBlockSpawn(Vector3 localPosition, Color32 color, ushort typeIndex, Vector3 sawCenter,
-        Vector3 pressDirection,
         float pressSpeed, float outwardForce, float tangentialForce, float spinDirection, float bladeRadius,
         float sideDamping, float maxVelocity)
     {
@@ -19,19 +15,15 @@ public sealed partial class TextureBlockSpawner
         ReleasedBlockRuntimeType variantGroup = _releasedBlockTypes[typeIndex];
         int cellX = Mathf.RoundToInt((localPosition.x - _offset.x) / _cellSize);
         int cellY = Mathf.RoundToInt((localPosition.y - _offset.y) / _cellSize);
-        uint seed = math.hash(new int3(cellX, cellY,
-            _debrisSpawnSequence++ + variantGroup.FirstVariantIndex * 397));
-        int variantOffset = (int)(seed % variantGroup.VariantCount);
+        int variantOffset = ((cellX & 1) | ((cellY & 1) << 1)) % variantGroup.VariantCount;
         typeIndex = (ushort)(variantGroup.FirstVariantIndex + variantOffset);
-        float scaleMultiplier = Mathf.Lerp(0.72f, 1.28f, Hash01(seed ^ 0x9e3779b9u));
-        float rotationRadians = Mathf.Lerp(-Mathf.PI, Mathf.PI, Hash01(seed ^ 0x85ebca6bu));
-        float angularSpeed = Mathf.Lerp(-6f, 6f, Hash01(seed ^ 0xc2b2ae35u));
         Vector3 position = _runtimeParent.TransformPoint(localPosition);
         Vector3 outward = position - sawCenter;
         outward.z = 0f;
         float distance = outward.magnitude;
-        if (distance <= 0.0001f)
-            outward = pressDirection.sqrMagnitude > 0.0001f ? pressDirection : Vector3.up;
+        outward.y = Mathf.Max(0f, outward.y);
+        if (outward.sqrMagnitude <= 0.0001f)
+            outward = Vector3.up;
         else
             outward.Normalize();
         float radiusPush = bladeRadius > 0f ? Mathf.Clamp01((bladeRadius - distance) / bladeRadius) : 0f;
@@ -45,12 +37,11 @@ public sealed partial class TextureBlockSpawner
         float safeMaxVelocity = GetSafePhysicsVelocity(maxVelocity);
         Vector3 clampedVelocity = Vector3.ClampMagnitude(velocity, safeMaxVelocity);
         clampedVelocity = RedirectVelocityFromSolid(position, clampedVelocity);
-        CreateReleasedBlockEntity(position, color, typeIndex, clampedVelocity, safeMaxVelocity, false, true,
-            scaleMultiplier, rotationRadians, angularSpeed);
+        clampedVelocity = ApplyReleaseLift(position, clampedVelocity, safeMaxVelocity);
+        CreateReleasedBlockEntity(position, color, typeIndex, clampedVelocity, safeMaxVelocity, false, true);
     }
     private Entity CreateReleasedBlockEntity(Vector3 position, Color32 color, ushort typeIndex, Vector3 velocity,
-        float maxVelocity, bool renderAsMetaball, bool enableSolidConstraint, float scaleMultiplier,
-        float rotationRadians, float angularSpeed)
+        float maxVelocity, bool renderAsMetaball, bool enableSolidConstraint)
     {
         ReleasedBlockRuntimeType runtimeType = _releasedBlockTypes[typeIndex];
         if (_releasedBlockEntities.Count >= _maxReleasedPhysicsBlocks)
@@ -60,8 +51,7 @@ public sealed partial class TextureBlockSpawner
 
         Entity entity = _entityManager.CreateEntity(_releasedBlockArchetype);
         _entityManager.SetComponentData(entity, LocalTransform.FromPositionRotationScale(
-            new float3(position.x, position.y, position.z), quaternion.RotateZ(rotationRadians),
-            runtimeType.Scale * scaleMultiplier));
+            new float3(position.x, position.y, position.z), quaternion.identity, runtimeType.Scale));
         _entityManager.SetComponentData(entity, new PhysicsCollider { Value = runtimeType.Collider });
         PhysicsMass physicsMass = PhysicsMass.CreateDynamic(
             runtimeType.Collider.Value.MassProperties, _releasedBlockMass);
@@ -71,7 +61,7 @@ public sealed partial class TextureBlockSpawner
         _entityManager.SetComponentData(entity, new PhysicsVelocity
         {
             Linear = new float3(velocity.x, velocity.y, velocity.z),
-            Angular = new float3(0f, 0f, angularSpeed)
+            Angular = float3.zero
         });
         _entityManager.SetComponentData(entity, new PhysicsDamping
         {
@@ -85,9 +75,11 @@ public sealed partial class TextureBlockSpawner
             Color = ToFloat4(color),
             LockedZ = position.z,
             MaxPlanarSpeed = maxVelocity,
-            Radius = runtimeType.Radius * scaleMultiplier,
+            Radius = runtimeType.Radius,
             TypeIndex = typeIndex,
-            CollectibleId = renderAsMetaball ? default : runtimeType.CollectibleId,
+            CollectibleId = renderAsMetaball
+                ? new Unity.Collections.FixedString64Bytes("water")
+                : runtimeType.CollectibleId,
             SuctionPathIndex = byte.MaxValue,
             SolidConstraintFrames = enableSolidConstraint ? ReleasedBlockComponent.SolidConstraintDuration : (byte)0,
             RenderAsMetaball = renderAsMetaball ? (byte)1 : (byte)0
@@ -97,20 +89,23 @@ public sealed partial class TextureBlockSpawner
         _releasedBlockEntities.Add(entity);
         return entity;
     }
-    private static float Hash01(uint value)
-    {
-        value ^= value >> 16;
-        value *= 0x7feb352du;
-        value ^= value >> 15;
-        value *= 0x846ca68bu;
-        value ^= value >> 16;
-        return (value & 0x00ffffffu) / 16777215f;
-    }
     private float GetSafePhysicsVelocity(float requestedMaxVelocity)
     {
         float fixedDeltaTime = Mathf.Max(Time.fixedDeltaTime, MinimumPhysicsDeltaTime);
         float maxCellTravelVelocity = _cellSize * MaxCellTravelPerStep / fixedDeltaTime;
         return Mathf.Min(requestedMaxVelocity, maxCellTravelVelocity);
+    }
+    private Vector3 ApplyReleaseLift(Vector3 worldPosition, Vector3 velocity, float maxVelocity)
+    {
+        velocity.y = Mathf.Max(0f, velocity.y);
+        float nearProbeDistance = _cellSize * 0.9f;
+        float farProbeDistance = _cellSize * 1.6f;
+        if (_releasedBlockLiftSpeed > 0f &&
+            !IsSolidAlongDirection(worldPosition, Vector3.up, nearProbeDistance, farProbeDistance))
+        {
+            velocity.y = Mathf.Max(velocity.y, _releasedBlockLiftSpeed);
+        }
+        return Vector3.ClampMagnitude(velocity, maxVelocity);
     }
     private Vector3 RedirectVelocityFromSolid(Vector3 worldPosition, Vector3 velocity)
     {

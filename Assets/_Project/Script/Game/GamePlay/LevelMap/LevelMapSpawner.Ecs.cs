@@ -8,7 +8,7 @@ using Collider = Unity.Physics.Collider;
 using PhysicsMaterial = Unity.Physics.Material;
 using RenderMaterial = UnityEngine.Material;
 
-public sealed partial class TextureBlockSpawner
+public sealed partial class LevelMapSpawner
 {
     private bool EnsureReleasedBlockResources()
     {
@@ -63,13 +63,13 @@ public sealed partial class TextureBlockSpawner
         Mesh sourceMesh = meshFilter.sharedMesh;
         RenderMaterial sourceMaterial = meshRenderer.sharedMaterial != null
             ? meshRenderer.sharedMaterial
-            : _runtimeChunkMaterial;
+            : _chunkMaterial;
         _releasedBlockPropertyBlock ??= new MaterialPropertyBlock();
         int firstVariantIndex = _releasedBlockTypes.Count;
         int batchCapacity = Mathf.CeilToInt(_maxReleasedPhysicsBlocks / (float)MaxInstancesPerBatch);
         for (int variant = 0; variant < ReleasedMeshVariantCount; variant++)
         {
-            Mesh mesh = variant == 0 ? sourceMesh : CreateReleasedVariantMesh(sourceMesh, variant);
+            Mesh mesh = CreateReleasedVariantMesh(sourceMesh, variant);
             Bounds bounds = mesh.bounds;
             float radius = Mathf.Min(bounds.size.x, bounds.size.y) * 0.48f;
             BlobAssetReference<Collider> collider = Unity.Physics.SphereCollider.Create(new SphereGeometry
@@ -106,7 +106,7 @@ public sealed partial class TextureBlockSpawner
         return firstVariantIndex;
     }
 
-    private static Mesh CreateReleasedVariantMesh(Mesh source, int variant)
+    private Mesh CreateReleasedVariantMesh(Mesh source, int variant)
     {
         if (!source.isReadable)
             return source;
@@ -115,36 +115,26 @@ public sealed partial class TextureBlockSpawner
         Bounds bounds = source.bounds;
         Vector3 center = bounds.center;
         Vector3 extents = bounds.extents;
+        int cellX = variant & 1;
+        int cellY = (variant >> 1) & 1;
+        Vector2 bottomLeftOffset = LevelMapMeshBuilder.GetGridCornerOffset(
+            cellX, cellY, _terrainCellIrregularity);
+        Vector2 topLeftOffset = LevelMapMeshBuilder.GetGridCornerOffset(
+            cellX, cellY + 1, _terrainCellIrregularity);
+        Vector2 topRightOffset = LevelMapMeshBuilder.GetGridCornerOffset(
+            cellX + 1, cellY + 1, _terrainCellIrregularity);
+        Vector2 bottomRightOffset = LevelMapMeshBuilder.GetGridCornerOffset(
+            cellX + 1, cellY, _terrainCellIrregularity);
         for (int i = 0; i < vertices.Length; i++)
         {
             Vector3 point = vertices[i] - center;
-            float normalizedX = extents.x > 0.0001f ? point.x / extents.x : 0f;
-            float normalizedY = extents.y > 0.0001f ? point.y / extents.y : 0f;
-            switch (variant)
-            {
-                case 1:
-                    point.x = point.x * 1.22f + normalizedY * extents.x * 0.16f;
-                    point.y *= 0.72f;
-                    if (normalizedX > 0.5f && normalizedY > 0.5f)
-                        point.y -= extents.y * 0.24f;
-                    break;
-                case 2:
-                    point.x *= 0.72f;
-                    point.y = point.y * 1.2f - normalizedX * extents.y * 0.14f;
-                    if (normalizedX < -0.5f && normalizedY < -0.5f)
-                        point.x += extents.x * 0.26f;
-                    break;
-                default:
-                    point.x *= 0.98f + normalizedY * 0.18f;
-                    point.y *= 0.92f - normalizedX * 0.14f;
-                    if (normalizedX > 0.5f && normalizedY < -0.5f)
-                    {
-                        point.x -= extents.x * 0.28f;
-                        point.y += extents.y * 0.2f;
-                    }
-                    break;
-            }
-            point.z *= 0.82f + variant * 0.06f;
+            float u = extents.x > 0.0001f ? Mathf.InverseLerp(-extents.x, extents.x, point.x) : 0.5f;
+            float v = extents.y > 0.0001f ? Mathf.InverseLerp(-extents.y, extents.y, point.y) : 0.5f;
+            Vector2 bottomOffset = Vector2.Lerp(bottomLeftOffset, bottomRightOffset, u);
+            Vector2 topOffset = Vector2.Lerp(topLeftOffset, topRightOffset, u);
+            Vector2 offset = Vector2.Lerp(bottomOffset, topOffset, v);
+            point.x += offset.x * extents.x * 2f;
+            point.y += offset.y * extents.y * 2f;
             vertices[i] = center + point;
         }
 

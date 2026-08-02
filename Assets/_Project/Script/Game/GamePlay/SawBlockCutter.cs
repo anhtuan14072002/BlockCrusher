@@ -33,7 +33,7 @@ public sealed class SawBlockCutter : MonoBehaviour
     private float _lastBlockCutTime = float.NegativeInfinity;
     private bool _hasMovedSinceEnable;
 
-    private readonly Dictionary<Collider, TextureBlockChunk> _chunkCache = new(16);
+    private readonly Dictionary<Collider, LevelMapChunk> _chunkCache = new(16);
     private PhysicsShapeAuthoring _physicsShape;
     private MeshFilter _meshFilter;
     private BlobAssetReference<PhysicsCollider> _obstacleQueryCollider;
@@ -166,7 +166,7 @@ public sealed class SawBlockCutter : MonoBehaviour
 
         float scaleMultiplier = nextScale / currentScale;
         transform.localScale *= scaleMultiplier;
-        TextureBlockSpawner.ScaleSawReleaseRadiusForActiveSpawners(scaleMultiplier);
+        LevelMapSpawner.ScaleSawReleaseRadiusForActiveSpawners(scaleMultiplier);
     }
 
     internal Vector3 ClampObstacleTarget(Vector3 from, Vector3 to)
@@ -222,7 +222,7 @@ public sealed class SawBlockCutter : MonoBehaviour
 
     private void ReleaseAndPush(Collider other, Vector3 contactPoint)
     {
-        TextureBlockChunk chunk = GetChunk(other);
+        LevelMapChunk chunk = GetChunk(other);
         if (chunk != null && chunk.ReleaseAtWorld(contactPoint, _pressDirection, _pressSpeed, _compressionForce,
                 _bladeTangentialForce, _bladeSpinDirection, _bladePushRadius, _sideDampingOnContact, _maxBlockVelocity))
         {
@@ -252,7 +252,7 @@ public sealed class SawBlockCutter : MonoBehaviour
         for (int i = 1; i <= steps; i++)
         {
             Vector3 samplePosition = Vector3.Lerp(from, to, i / (float)steps);
-            releasedAny |= TextureBlockSpawner.ReleaseAtWorldForActiveSpawners(samplePosition, _pressDirection,
+            releasedAny |= LevelMapSpawner.ReleaseAtWorldForActiveSpawners(samplePosition, _pressDirection,
                 _pressSpeed, _compressionForce, _bladeTangentialForce, _bladeSpinDirection, _bladePushRadius,
                 _sideDampingOnContact, _maxBlockVelocity);
         }
@@ -265,12 +265,12 @@ public sealed class SawBlockCutter : MonoBehaviour
         _chunkCache.Remove(other);
     }
 
-    private TextureBlockChunk GetChunk(Collider other)
+    private LevelMapChunk GetChunk(Collider other)
     {
-        if (_chunkCache.TryGetValue(other, out TextureBlockChunk chunk))
+        if (_chunkCache.TryGetValue(other, out LevelMapChunk chunk))
             return chunk;
 
-        chunk = other.GetComponentInParent<TextureBlockChunk>();
+        chunk = other.GetComponentInParent<LevelMapChunk>();
         _chunkCache.Add(other, chunk);
         return chunk;
     }

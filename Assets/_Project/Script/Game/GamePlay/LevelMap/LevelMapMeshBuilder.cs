@@ -1,9 +1,9 @@
 using Unity.Collections;
 using UnityEngine;
 
-public sealed partial class TextureBlockSpawner
+public sealed partial class LevelMapSpawner
 {
-    internal struct TextureBlockMeshBuilder
+    internal struct LevelMapMeshBuilder
     {
         [ReadOnly] public NativeArray<Color32> CellColors;
         [ReadOnly] public NativeArray<byte> CellSolid;
@@ -22,6 +22,7 @@ public sealed partial class TextureBlockSpawner
         public byte ExtrudeMergedQuads;
         public byte MergeAnySolid;
         public float DetailDepth;
+        public float CellIrregularity;
         public void Execute()
         {
             for (int i = 0; i < Visited.Length; i++)
@@ -37,6 +38,12 @@ public sealed partial class TextureBlockSpawner
                     if (CellSolid[cellIndex] == 0)
                         continue;
                     Color32 color = CellColors[cellIndex];
+                    if (CellIrregularity > 0f && ExtrudeMergedQuads == 0)
+                    {
+                        Visited[localIndex] = 1;
+                        AddIrregularQuad(x, y, color);
+                        continue;
+                    }
                     int rectWidth = 1;
                     while (x + rectWidth < ChunkWidth && CanMerge(x + rectWidth, y, color))
                         rectWidth++;
@@ -91,6 +98,39 @@ public sealed partial class TextureBlockSpawner
             Vertices.Add(new Vector3(maxX, minY, 0f));
             AddVertexData(color);
             AddQuadIndices(vertexIndex);
+        }
+        private void AddIrregularQuad(int x, int y, Color32 color)
+        {
+            int cellX = StartX + x;
+            int cellY = StartY + y;
+            float centerX = Offset.x + cellX * CellSize;
+            float centerY = Offset.y + cellY * CellSize;
+            float halfSize = CellSize * 0.5f;
+            Vector2 bottomLeftOffset = GetGridCornerOffset(cellX, cellY, CellIrregularity) * CellSize;
+            Vector2 topLeftOffset = GetGridCornerOffset(cellX, cellY + 1, CellIrregularity) * CellSize;
+            Vector2 topRightOffset = GetGridCornerOffset(cellX + 1, cellY + 1, CellIrregularity) * CellSize;
+            Vector2 bottomRightOffset = GetGridCornerOffset(cellX + 1, cellY, CellIrregularity) * CellSize;
+            int vertexIndex = Vertices.Length;
+            Vertices.Add(new Vector3(centerX - halfSize + bottomLeftOffset.x,
+                centerY - halfSize + bottomLeftOffset.y, 0f));
+            Vertices.Add(new Vector3(centerX - halfSize + topLeftOffset.x,
+                centerY + halfSize + topLeftOffset.y, 0f));
+            Vertices.Add(new Vector3(centerX + halfSize + topRightOffset.x,
+                centerY + halfSize + topRightOffset.y, 0f));
+            Vertices.Add(new Vector3(centerX + halfSize + bottomRightOffset.x,
+                centerY - halfSize + bottomRightOffset.y, 0f));
+            AddVertexData(color);
+            AddQuadIndices(vertexIndex);
+        }
+        internal static Vector2 GetGridCornerOffset(int gridX, int gridY, float amount)
+        {
+            switch ((gridX & 1) | ((gridY & 1) << 1))
+            {
+                case 0: return new Vector2(-amount, -amount * 0.45f);
+                case 1: return new Vector2(amount * 0.65f, amount * 0.9f);
+                case 2: return new Vector2(-amount * 0.5f, amount * 0.75f);
+                default: return new Vector2(amount * 0.85f, -amount * 0.65f);
+            }
         }
         private void AddMergedBox(int x, int y, int width, int height, Color32 color)
         {

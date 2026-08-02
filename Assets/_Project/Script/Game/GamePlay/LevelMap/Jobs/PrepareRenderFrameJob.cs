@@ -48,12 +48,12 @@ public partial struct ReleasedBlockRenderPreparationSystem : ISystem
     public void OnUpdate(ref SystemState state)
     {
         JobHandle dependency = state.Dependency;
-        for (int i = TextureBlockSpawner.ActiveSpawnerCount - 1; i >= 0; i--)
+        for (int i = LevelMapSpawner.ActiveSpawnerCount - 1; i >= 0; i--)
         {
-            TextureBlockSpawner spawner = TextureBlockSpawner.GetActiveSpawner(i);
+            LevelMapSpawner spawner = LevelMapSpawner.GetActiveSpawner(i);
             if (spawner == null)
             {
-                TextureBlockSpawner.RemoveActiveSpawnerAt(i);
+                LevelMapSpawner.RemoveActiveSpawnerAt(i);
                 continue;
             }
             if (!spawner.TryCreateRenderPreparationJob(out PrepareRenderFrameJob job))

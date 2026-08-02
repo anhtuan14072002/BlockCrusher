@@ -8,13 +8,11 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using Collider = Unity.Physics.Collider;
 using PhysicsMaterial = Unity.Physics.Material;
-using RenderMaterial = UnityEngine.Material;
 
-public sealed partial class TextureBlockSpawner
+public sealed partial class LevelMapSpawner
 {
     private void CreateChunks()
     {
-        RenderMaterial material = _runtimeChunkMaterial;
         _chunkColumns = Mathf.CeilToInt(_gridWidth / (float)_chunkSize);
         int chunkRows = Mathf.CeilToInt(_gridHeight / (float)_chunkSize);
         int chunkCount = _chunkColumns * chunkRows;
@@ -27,15 +25,15 @@ public sealed partial class TextureBlockSpawner
                 int startY = chunkY * _chunkSize;
                 int width = Mathf.Min(_chunkSize, _gridWidth - startX);
                 int height = Mathf.Min(_chunkSize, _gridHeight - startY);
-                GameObject chunkObject = new GameObject("TextureChunk_" + chunkX + "_" + chunkY);
+                GameObject chunkObject = new GameObject("LevelChunk_" + chunkX + "_" + chunkY);
                 chunkObject.transform.SetParent(_runtimeParent, false);
                 MeshFilter meshFilter = chunkObject.AddComponent<MeshFilter>();
                 MeshRenderer meshRenderer = chunkObject.AddComponent<MeshRenderer>();
-                TextureBlockChunk chunk = chunkObject.AddComponent<TextureBlockChunk>();
-                Mesh mesh = new Mesh { name = "TextureChunk_Mesh_" + chunkX + "_" + chunkY };
+                LevelMapChunk chunk = chunkObject.AddComponent<LevelMapChunk>();
+                Mesh mesh = new Mesh { name = "LevelChunk_Mesh_" + chunkX + "_" + chunkY };
                 mesh.MarkDynamic();
                 meshFilter.sharedMesh = mesh;
-                meshRenderer.sharedMaterial = material;
+                meshRenderer.sharedMaterial = _chunkMaterial;
                 ApplyCutMask(meshRenderer);
                 chunk.Initialize(this);
                 _chunks.Add(CreateChunkRuntime(mesh, meshRenderer, startX, startY, width, height));
@@ -110,7 +108,8 @@ public sealed partial class TextureBlockSpawner
                 Offset = _offset,
                 ExtrudeMergedQuads = 0,
                 MergeAnySolid = 0,
-                DetailDepth = _chunkColliderDepth
+                DetailDepth = _chunkColliderDepth,
+                CellIrregularity = _terrainCellIrregularity
             };
             _scheduledChunkHandles.Add(meshJob.Schedule());
             BuildChunkMeshJob colliderJob = new BuildChunkMeshJob
@@ -131,7 +130,8 @@ public sealed partial class TextureBlockSpawner
                 Offset = _offset,
                 ExtrudeMergedQuads = 1,
                 MergeAnySolid = 1,
-                DetailDepth = _chunkColliderDepth
+                DetailDepth = _chunkColliderDepth,
+                CellIrregularity = 0f
             };
             _scheduledChunkHandles.Add(colliderJob.Schedule());
         }
@@ -253,18 +253,6 @@ public sealed partial class TextureBlockSpawner
                 DestroyUnityObject(chunk.Mesh);
         }
         _chunks.Clear();
-    }
-    private RenderMaterial ResolveChunkMaterial()
-    {
-        if (_chunkMaterial != null)
-            return _chunkMaterial;
-        Shader voxelShader = Shader.Find("BlockCrusher/VoxelExactColor");
-        if (voxelShader != null)
-            return new RenderMaterial(voxelShader);
-        Shader shader = Shader.Find("Sprites/Default");
-        if (shader != null)
-            return new RenderMaterial(shader);
-        return null;
     }
     private Vector3 GetCellLocalPosition(int x, int y)
     {

@@ -4,7 +4,7 @@ using Unity.Mathematics;
 using Unity.Transforms;
 using UnityEngine;
 
-public sealed partial class TextureBlockSpawner
+public sealed partial class LevelMapSpawner
 {
     private readonly List<Vector3> _metaballWaterSizes = new(64);
 
@@ -74,7 +74,7 @@ public sealed partial class TextureBlockSpawner
         for (int i = 0; i < waterPositions.Count; i++)
         {
             Entity entity = CreateReleasedBlockEntity(waterPositions[i], new Color32(255, 255, 255, 255), 0,
-                Vector3.zero, maxVelocity, true, false, 1f, 0f, 0f);
+                Vector3.zero, maxVelocity, true, false);
             _metaballWaterEntities.Add(entity);
             _metaballWaterSizes.Add(waterSizes[i]);
         }

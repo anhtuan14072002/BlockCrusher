@@ -28,7 +28,7 @@ public sealed class ConveyorCrane : MonoBehaviour
     private void FixedUpdate()
     {
         if (_conveyorCollider != null)
-            TextureBlockSpawner.ApplyConveyorForActiveSpawners(
+            LevelMapSpawner.ApplyConveyorForActiveSpawners(
                 _conveyorCollider.bounds, _direction, _speed, _acceleration, Time.fixedDeltaTime); 
     }
 

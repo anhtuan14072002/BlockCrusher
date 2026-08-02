@@ -33,7 +33,7 @@ namespace Crusher
             if (_craneController != null)
                 _craneController.AppendSuctionTubePath(ref suctionPath);
 
-            TextureBlockSpawner.ApplySuctionForActiveSpawners(
+            LevelMapSpawner.ApplySuctionForActiveSpawners(
                 refTransform.position, refTransform.rotation, _suctionBoxSize,
                 _suctionForce, _suctionAcceleration, _maxBlockVelocity, _arrivalDamping, _tubeExitRadius,
                 _pathWaypointRadius, _pathLookAhead, _tubeRenderDepth, suctionPath, Time.fixedDeltaTime,

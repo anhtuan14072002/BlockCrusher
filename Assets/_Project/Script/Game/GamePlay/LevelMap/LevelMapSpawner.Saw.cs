@@ -1,7 +1,7 @@
 using Unity.Mathematics;
 using UnityEngine;
 
-public sealed partial class TextureBlockSpawner
+public sealed partial class LevelMapSpawner
 {
     public bool ReleaseAtWorld(Vector3 worldPoint, Vector3 pressDirection, float pressSpeed, float outwardForce,
         float tangentialForce, float spinDirection, float bladeRadius, float sideDamping, float maxVelocity)
@@ -37,43 +37,15 @@ public sealed partial class TextureBlockSpawner
                 _cellSolid[cellIndex] = 0;
                 Vector3 releasedWorldPosition = _runtimeParent.TransformPoint(cellLocal);
                 EmitCutParticles(releasedWorldPosition, surfaceColor, releasedWorldPosition - worldPoint);
-                QueueReleasedBlockSpawn(cellLocal, releasedColor, typeIndex, worldPoint, pressDirection, pressSpeed,
+                QueueReleasedBlockSpawn(cellLocal, releasedColor, typeIndex, worldPoint, pressSpeed,
                     outwardForce, tangentialForce, spinDirection, bladeRadius, sideDamping, maxVelocity);
-                SpawnReleasedDecorationsAtCell(cellIndex, cellLocal, worldPoint, pressDirection, pressSpeed,
+                SpawnReleasedDecorationsAtCell(cellIndex, cellLocal, worldPoint, pressSpeed,
                     outwardForce, tangentialForce, spinDirection, bladeRadius, sideDamping, maxVelocity);
                 MarkCellChunkDirty(x, y);
                 releasedAny = true;
             }
         }
         return releasedAny;
-    }
-    public bool HasSolidAtWorld(Vector3 worldPoint, float radius)
-    {
-        if (!_cellSolid.IsCreated || _runtimeParent == null)
-            return false;
-        Vector3 localPoint = _runtimeParent.InverseTransformPoint(worldPoint);
-        float radiusSqr = radius * radius;
-        int centerX = Mathf.RoundToInt((localPoint.x - _offset.x) / _cellSize);
-        int centerY = Mathf.RoundToInt((localPoint.y - _offset.y) / _cellSize);
-        int radiusCells = Mathf.Max(1, Mathf.CeilToInt(radius / _cellSize));
-        int minX = Mathf.Max(0, centerX - radiusCells);
-        int maxX = Mathf.Min(_gridWidth - 1, centerX + radiusCells);
-        int minY = Mathf.Max(0, centerY - radiusCells);
-        int maxY = Mathf.Min(_gridHeight - 1, centerY + radiusCells);
-        for (int y = minY; y <= maxY; y++)
-        {
-            for (int x = minX; x <= maxX; x++)
-            {
-                int cellIndex = y * _gridWidth + x;
-                if (_cellSolid[cellIndex] == 0)
-                    continue;
-                Vector3 cellLocal = GetCellLocalPosition(x, y);
-                Vector3 delta = cellLocal - localPoint;
-                if (delta.x * delta.x + delta.y * delta.y <= radiusSqr)
-                    return true;
-            }
-        }
-        return false;
     }
     private void MarkCellChunkDirty(int cellX, int cellY)
     {

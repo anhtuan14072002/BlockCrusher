@@ -5,7 +5,7 @@ using Unity.Mathematics;
 using Unity.Physics;
 using Unity.Transforms;
 
-public sealed partial class TextureBlockSpawner
+public sealed partial class LevelMapSpawner
 {
     [BurstCompile(FloatMode = FloatMode.Fast, FloatPrecision = FloatPrecision.Low)]
     internal partial struct SawPushJob : IJobEntity
@@ -46,12 +46,15 @@ public sealed partial class TextureBlockSpawner
             float2 outward = distance > 0.0001f
                 ? delta / distance
                 : math.normalizesafe(PressDirection.xy, new float2(0f, 1f));
+            outward.y = math.max(0f, outward.y);
+            outward = math.normalizesafe(outward, new float2(0f, 1f));
             float radiusPush = 1f - math.saturate(distance / BladeRadius);
             float spinSign = SpinDirection >= 0f ? 1f : -1f;
             float2 tangent = new float2(-outward.y, outward.x) * spinSign;
             float speedScale = 1f + math.min(PressSpeed, 4f) * 0.1f;
             float2 impulse = outward * (OutwardForce * 0.08f * speedScale * radiusPush) +
                              tangent * (TangentialForce * 0.22f * speedScale * radiusPush);
+            impulse.y = math.max(0f, impulse.y);
             float3 linear = new float3(velocity.Linear.xy + impulse, 0f);
             linear = ClampMagnitude(linear, MaxVelocity);
             velocity.Linear = RedirectVelocityFromSolid(position, linear);

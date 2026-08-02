@@ -21,6 +21,6 @@ public sealed class CraneClear : MonoBehaviour
     private void FixedUpdate()
     {
         if (_clearCollider != null)
-            TextureBlockSpawner.ClearReleasedBlocksForActiveSpawners(_clearCollider.bounds);
+            LevelMapSpawner.ClearReleasedBlocksForActiveSpawners(_clearCollider.bounds);
     }
 }

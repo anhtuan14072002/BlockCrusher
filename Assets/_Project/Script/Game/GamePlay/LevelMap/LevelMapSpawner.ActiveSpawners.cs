@@ -2,22 +2,17 @@ using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 
-public sealed partial class TextureBlockSpawner
+public sealed partial class LevelMapSpawner
 {
-    internal static void NotifyBlocksSucked(int count)
-    {
-        SuckedBlockCount += count;
-        BlocksSucked?.Invoke(count);
-    }
     internal static void NotifyItemSucked(string collectibleId, int count)
     {
         SuckedItemCounts.TryGetValue(collectibleId, out int currentCount);
         SuckedItemCounts[collectibleId] = currentCount + count;
-        NotifyBlocksSucked(count);
+        SuckedBlockCount += count;
         ItemSucked?.Invoke(collectibleId, count);
     }
     internal static int ActiveSpawnerCount => ActiveSpawners.Count;
-    internal static TextureBlockSpawner GetActiveSpawner(int index) => ActiveSpawners[index];
+    internal static LevelMapSpawner GetActiveSpawner(int index) => ActiveSpawners[index];
     internal static void RemoveActiveSpawnerAt(int index) => ActiveSpawners.RemoveAt(index);
     public static bool ReleaseAtWorldForActiveSpawners(Vector3 worldPoint, Vector3 pressDirection, float pressSpeed,
         float outwardForce, float tangentialForce, float spinDirection, float bladeRadius, float sideDamping,
@@ -26,7 +21,7 @@ public sealed partial class TextureBlockSpawner
         bool releasedAny = false;
         for (int i = ActiveSpawners.Count - 1; i >= 0; i--)
         {
-            TextureBlockSpawner spawner = ActiveSpawners[i];
+            LevelMapSpawner spawner = ActiveSpawners[i];
             if (spawner == null)
             {
                 ActiveSpawners.RemoveAt(i);
@@ -36,21 +31,6 @@ public sealed partial class TextureBlockSpawner
                 spinDirection, bladeRadius, sideDamping, maxVelocity);
         }
         return releasedAny;
-    }
-    public static bool HasSolidAtWorldForActiveSpawners(Vector3 worldPoint, float radius)
-    {
-        for (int i = ActiveSpawners.Count - 1; i >= 0; i--)
-        {
-            TextureBlockSpawner spawner = ActiveSpawners[i];
-            if (spawner == null)
-            {
-                ActiveSpawners.RemoveAt(i);
-                continue;
-            }
-            if (spawner.HasSolidAtWorld(worldPoint, radius))
-                return true;
-        }
-        return false;
     }
     public static void ApplyConveyorForActiveSpawners(Bounds bounds, Vector3 direction, float speed, float acceleration,
         float deltaTime)

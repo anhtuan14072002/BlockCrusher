@@ -3,7 +3,7 @@ using Unity.Physics;
 using UnityEngine;
 using PhysicsMaterial = Unity.Physics.Material;
 
-public sealed partial class TextureBlockSpawner
+public sealed partial class LevelMapSpawner
 {
     private PhysicsMaterial CreatePhysicsMaterial()
     {

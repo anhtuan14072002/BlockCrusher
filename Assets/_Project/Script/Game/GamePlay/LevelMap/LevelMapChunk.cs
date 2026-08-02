@@ -1,10 +1,10 @@
 using UnityEngine;
 
-public sealed class TextureBlockChunk : MonoBehaviour
+public sealed class LevelMapChunk : MonoBehaviour
 {
-    private TextureBlockSpawner _spawner;
+    private LevelMapSpawner _spawner;
 
-    public void Initialize(TextureBlockSpawner spawner)
+    public void Initialize(LevelMapSpawner spawner)
     {
         _spawner = spawner;
     }

@@ -97,15 +97,15 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
         }
 
         bool scheduledSawPush = false;
-        for (int i = TextureBlockSpawner.ActiveSpawnerCount - 1; i >= 0; i--)
+        for (int i = LevelMapSpawner.ActiveSpawnerCount - 1; i >= 0; i--)
         {
-            TextureBlockSpawner spawner = TextureBlockSpawner.GetActiveSpawner(i);
+            LevelMapSpawner spawner = LevelMapSpawner.GetActiveSpawner(i);
             if (spawner == null)
             {
-                TextureBlockSpawner.RemoveActiveSpawnerAt(i);
+                LevelMapSpawner.RemoveActiveSpawnerAt(i);
                 continue;
             }
-            if (spawner.TryCreatePendingSawPushJob(out TextureBlockSpawner.SawPushJob sawPushJob))
+            if (spawner.TryCreatePendingSawPushJob(out LevelMapSpawner.SawPushJob sawPushJob))
             {
                 dependency = sawPushJob.ScheduleParallel(_query, dependency);
                 scheduledSawPush = true;
@@ -118,12 +118,12 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
             return;
         }
 
-        for (int i = TextureBlockSpawner.ActiveSpawnerCount - 1; i >= 0; i--)
+        for (int i = LevelMapSpawner.ActiveSpawnerCount - 1; i >= 0; i--)
         {
-            TextureBlockSpawner spawner = TextureBlockSpawner.GetActiveSpawner(i);
+            LevelMapSpawner spawner = LevelMapSpawner.GetActiveSpawner(i);
             if (spawner != null &&
                 spawner.TryCreateSolidConstraintJob(
-                    out TextureBlockSpawner.ReleasedBlockSolidConstraintJob solidConstraintJob))
+                    out LevelMapSpawner.ReleasedBlockSolidConstraintJob solidConstraintJob))
             {
                 dependency = solidConstraintJob.ScheduleParallel(_solidConstraintQuery, dependency);
             }
@@ -138,6 +138,6 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
         _lastInteractionHandle.Complete();
         _hasPendingCollection = false;
         while (_collectedItems.TryDequeue(out FixedString64Bytes collectibleId))
-            TextureBlockSpawner.NotifyItemSucked(collectibleId.ToString(), 1);
+            LevelMapSpawner.NotifyItemSucked(collectibleId.ToString(), 1);
     }
 }

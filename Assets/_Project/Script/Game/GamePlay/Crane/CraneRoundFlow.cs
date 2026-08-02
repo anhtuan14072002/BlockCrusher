@@ -13,7 +13,7 @@ namespace Crusher
         [SerializeField] private GameObject _playGame;
         [SerializeField] private Button _playButton;
         [SerializeField] private Button _btnBack;
-        [SerializeField] private TextureBlockSpawner _blockSpawner;
+        [SerializeField] private LevelMapSpawner _blockSpawner;
         [SerializeField] private CameraEdgeFollow _cameraFollow;
 
         private void Awake()
