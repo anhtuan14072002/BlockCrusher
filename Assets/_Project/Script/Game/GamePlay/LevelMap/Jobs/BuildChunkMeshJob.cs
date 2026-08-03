@@ -8,6 +8,11 @@ internal struct BuildChunkMeshJob : IJob
 {
     [ReadOnly] public NativeArray<Color32> CellColors;
     [ReadOnly] public NativeArray<byte> CellSolid;
+    [ReadOnly] public NativeArray<ushort> CellReleasedTypes;
+    [ReadOnly] public NativeArray<Vector3> AuthoredMeshVertices;
+    [ReadOnly] public NativeArray<Vector2> AuthoredMeshUvs;
+    [ReadOnly] public NativeArray<int> AuthoredMeshIndices;
+    [ReadOnly] public NativeArray<LevelMapSpawner.AuthoredMeshRange> AuthoredMeshRanges;
 
     public NativeArray<byte> Visited;
     public NativeList<Vector3> Vertices;
@@ -27,8 +32,8 @@ internal struct BuildChunkMeshJob : IJob
 
     public byte ExtrudeMergedQuads;
     public byte MergeAnySolid;
+    public byte UseAuthoredMeshes;
     public float DetailDepth;
-    public float CellIrregularity;
 
     public void Execute()
     {
@@ -36,6 +41,11 @@ internal struct BuildChunkMeshJob : IJob
         {
             CellColors = CellColors,
             CellSolid = CellSolid,
+            CellReleasedTypes = CellReleasedTypes,
+            AuthoredMeshVertices = AuthoredMeshVertices,
+            AuthoredMeshUvs = AuthoredMeshUvs,
+            AuthoredMeshIndices = AuthoredMeshIndices,
+            AuthoredMeshRanges = AuthoredMeshRanges,
             Visited = Visited,
             Vertices = Vertices,
             Colors = Colors,
@@ -50,8 +60,8 @@ internal struct BuildChunkMeshJob : IJob
             Offset = Offset,
             ExtrudeMergedQuads = ExtrudeMergedQuads,
             MergeAnySolid = MergeAnySolid,
-            DetailDepth = DetailDepth,
-            CellIrregularity = CellIrregularity
+            UseAuthoredMeshes = UseAuthoredMeshes,
+            DetailDepth = DetailDepth
         }.Execute();
     }
 }

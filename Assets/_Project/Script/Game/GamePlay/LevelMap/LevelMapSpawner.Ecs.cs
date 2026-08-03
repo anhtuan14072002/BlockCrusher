@@ -19,9 +19,94 @@ public sealed partial class LevelMapSpawner
         return true;
     }
 
+    private void BuildAuthoredMeshLibrary()
+    {
+        DisposeAuthoredMeshLibrary();
+        int vertexCount = 0;
+        int indexCount = 0;
+        for (int i = 0; i < _releasedBlockTypes.Count; i++)
+        {
+            Mesh mesh = _releasedBlockTypes[i].Mesh;
+            vertexCount += mesh.vertexCount;
+            Vector3[] vertices = mesh.vertices;
+            int[] indices = mesh.triangles;
+            float frontZ = mesh.bounds.min.z;
+            for (int index = 0; index < indices.Length; index += 3)
+            {
+                if (Mathf.Abs(vertices[indices[index]].z - frontZ) < 0.0001f &&
+                    Mathf.Abs(vertices[indices[index + 1]].z - frontZ) < 0.0001f &&
+                    Mathf.Abs(vertices[indices[index + 2]].z - frontZ) < 0.0001f)
+                    indexCount += 3;
+            }
+        }
+
+        _authoredMeshVertices = new NativeArray<Vector3>(vertexCount, Allocator.Persistent);
+        _authoredMeshUvs = new NativeArray<Vector2>(vertexCount, Allocator.Persistent);
+        _authoredMeshIndices = new NativeArray<int>(indexCount, Allocator.Persistent);
+        _authoredMeshRanges = new NativeArray<AuthoredMeshRange>(_releasedBlockTypes.Count, Allocator.Persistent);
+
+        int vertexStart = 0;
+        int indexStart = 0;
+        for (int i = 0; i < _releasedBlockTypes.Count; i++)
+        {
+            Mesh mesh = _releasedBlockTypes[i].Mesh;
+            Vector3[] vertices = mesh.vertices;
+            Vector2[] uvs = mesh.uv;
+            int[] indices = mesh.triangles;
+            float frontZ = mesh.bounds.min.z;
+            int frontIndexCount = 0;
+            for (int index = 0; index < indices.Length; index += 3)
+            {
+                if (Mathf.Abs(vertices[indices[index]].z - frontZ) < 0.0001f &&
+                    Mathf.Abs(vertices[indices[index + 1]].z - frontZ) < 0.0001f &&
+                    Mathf.Abs(vertices[indices[index + 2]].z - frontZ) < 0.0001f)
+                    frontIndexCount += 3;
+            }
+            _authoredMeshRanges[i] = new AuthoredMeshRange
+            {
+                VertexStart = vertexStart,
+                VertexCount = vertices.Length,
+                IndexStart = indexStart,
+                IndexCount = frontIndexCount
+            };
+            for (int vertex = 0; vertex < vertices.Length; vertex++)
+            {
+                _authoredMeshVertices[vertexStart + vertex] = vertices[vertex];
+                _authoredMeshUvs[vertexStart + vertex] = uvs.Length == vertices.Length ? uvs[vertex] : Vector2.zero;
+            }
+            int writeIndex = indexStart;
+            for (int index = 0; index < indices.Length; index += 3)
+            {
+                if (Mathf.Abs(vertices[indices[index]].z - frontZ) >= 0.0001f ||
+                    Mathf.Abs(vertices[indices[index + 1]].z - frontZ) >= 0.0001f ||
+                    Mathf.Abs(vertices[indices[index + 2]].z - frontZ) >= 0.0001f)
+                    continue;
+                _authoredMeshIndices[writeIndex++] = indices[index];
+                _authoredMeshIndices[writeIndex++] = indices[index + 1];
+                _authoredMeshIndices[writeIndex++] = indices[index + 2];
+            }
+            vertexStart += vertices.Length;
+            indexStart += frontIndexCount;
+        }
+    }
+
+    private void DisposeAuthoredMeshLibrary()
+    {
+        if (_authoredMeshVertices.IsCreated)
+            _authoredMeshVertices.Dispose();
+        if (_authoredMeshUvs.IsCreated)
+            _authoredMeshUvs.Dispose();
+        if (_authoredMeshIndices.IsCreated)
+            _authoredMeshIndices.Dispose();
+        if (_authoredMeshRanges.IsCreated)
+            _authoredMeshRanges.Dispose();
+    }
+
     private int GetOrCreateReleasedBlockType(LevelBlock block)
     {
-        return GetOrCreateReleasedBlockType(block.ReleasedPrefab, block.ReleasedScale, block.CollectibleId, block);
+        MeshFilter meshFilter = block.GetComponent<MeshFilter>();
+        return GetOrCreateReleasedBlockType(block.ReleasedPrefab, block.ReleasedScale, block.CollectibleId, block,
+            meshFilter != null ? meshFilter.sharedMesh : null);
     }
 
     private int GetOrCreateReleasedBlockType(LevelDecoration decoration)
@@ -34,7 +119,7 @@ public sealed partial class LevelMapSpawner
     }
 
     private int GetOrCreateReleasedBlockType(GameObject prefab, float scale, string collectibleName,
-        Component source)
+        Component source, Mesh authoredMesh = null)
     {
         if (prefab == null || scale <= 0f || string.IsNullOrWhiteSpace(collectibleName) ||
             collectibleName.Length > 60)
@@ -44,109 +129,58 @@ public sealed partial class LevelMapSpawner
         }
         FixedString64Bytes collectibleId = collectibleName;
 
-        for (int i = 0; i < _releasedBlockTypes.Count; i++)
-        {
-            ReleasedBlockRuntimeType existing = _releasedBlockTypes[i];
-            if (existing.Prefab == prefab && Mathf.Approximately(existing.Scale, scale) &&
-                existing.CollectibleId.Equals(collectibleId))
-                return existing.FirstVariantIndex;
-        }
-
         MeshFilter meshFilter = prefab.GetComponentInChildren<MeshFilter>();
         Renderer meshRenderer = prefab.GetComponentInChildren<Renderer>();
-        if (meshFilter == null || meshFilter.sharedMesh == null || meshRenderer == null)
+        Mesh sourceMesh = authoredMesh != null ? authoredMesh : meshFilter != null ? meshFilter.sharedMesh : null;
+        if (sourceMesh == null || meshRenderer == null)
         {
             Debug.LogError($"Released prefab '{prefab.name}' needs a mesh filter and renderer.", prefab);
             return -1;
         }
 
-        Mesh sourceMesh = meshFilter.sharedMesh;
+        for (int i = 0; i < _releasedBlockTypes.Count; i++)
+        {
+            ReleasedBlockRuntimeType existing = _releasedBlockTypes[i];
+            if (existing.Prefab == prefab && existing.Mesh == sourceMesh && Mathf.Approximately(existing.Scale, scale) &&
+                existing.CollectibleId.Equals(collectibleId))
+                return i;
+        }
+
         RenderMaterial sourceMaterial = meshRenderer.sharedMaterial != null
             ? meshRenderer.sharedMaterial
             : _chunkMaterial;
         _releasedBlockPropertyBlock ??= new MaterialPropertyBlock();
-        int firstVariantIndex = _releasedBlockTypes.Count;
         int batchCapacity = Mathf.CeilToInt(_maxReleasedPhysicsBlocks / (float)MaxInstancesPerBatch);
-        for (int variant = 0; variant < ReleasedMeshVariantCount; variant++)
+        Bounds bounds = sourceMesh.bounds;
+        float radius = Mathf.Min(bounds.size.x, bounds.size.y) * 0.48f;
+        BlobAssetReference<Collider> collider = Unity.Physics.SphereCollider.Create(new SphereGeometry
         {
-            Mesh mesh = CreateReleasedVariantMesh(sourceMesh, variant);
-            Bounds bounds = mesh.bounds;
-            float radius = Mathf.Min(bounds.size.x, bounds.size.y) * 0.48f;
-            BlobAssetReference<Collider> collider = Unity.Physics.SphereCollider.Create(new SphereGeometry
-            {
-                Center = bounds.center,
-                Radius = radius
-            }, CollisionFilter.Default, CreatePhysicsMaterial());
-            RenderMaterial material = new RenderMaterial(sourceMaterial) { enableInstancing = true };
-            ReleasedBlockRuntimeType runtimeType = new ReleasedBlockRuntimeType
-            {
-                Prefab = prefab,
-                Mesh = mesh,
-                Material = material,
-                Collider = collider,
-                Scale = scale,
-                Radius = radius * scale,
-                CollectibleId = collectibleId,
-                BatchMatrices = new Matrix4x4[batchCapacity][],
-                BatchColors = new Vector4[batchCapacity][],
-                BatchCounts = new int[batchCapacity],
-                FirstVariantIndex = (ushort)firstVariantIndex,
-                VariantCount = ReleasedMeshVariantCount,
-                OwnsMesh = mesh != sourceMesh
-            };
-            for (int i = 0; i < batchCapacity; i++)
-            {
-                runtimeType.BatchMatrices[i] = new Matrix4x4[MaxInstancesPerBatch];
-                runtimeType.BatchColors[i] = new Vector4[MaxInstancesPerBatch];
-            }
-            _releasedBlockTypes.Add(runtimeType);
+            Center = bounds.center,
+            Radius = radius
+        }, CollisionFilter.Default, CreatePhysicsMaterial());
+        RenderMaterial material = new RenderMaterial(sourceMaterial) { enableInstancing = true };
+        ReleasedBlockRuntimeType runtimeType = new ReleasedBlockRuntimeType
+        {
+            Prefab = prefab,
+            Mesh = sourceMesh,
+            Material = material,
+            Collider = collider,
+            Scale = scale,
+            Radius = radius * scale,
+            CollectibleId = collectibleId,
+            BatchMatrices = new Matrix4x4[batchCapacity][],
+            BatchColors = new Vector4[batchCapacity][],
+            BatchCounts = new int[batchCapacity]
+        };
+        for (int i = 0; i < batchCapacity; i++)
+        {
+            runtimeType.BatchMatrices[i] = new Matrix4x4[MaxInstancesPerBatch];
+            runtimeType.BatchColors[i] = new Vector4[MaxInstancesPerBatch];
         }
+        _releasedBlockTypes.Add(runtimeType);
 
         EnsureRenderFrameResources();
-        return firstVariantIndex;
-    }
-
-    private Mesh CreateReleasedVariantMesh(Mesh source, int variant)
-    {
-        if (!source.isReadable)
-            return source;
-
-        Vector3[] vertices = source.vertices;
-        Bounds bounds = source.bounds;
-        Vector3 center = bounds.center;
-        Vector3 extents = bounds.extents;
-        int cellX = variant & 1;
-        int cellY = (variant >> 1) & 1;
-        Vector2 bottomLeftOffset = LevelMapMeshBuilder.GetGridCornerOffset(
-            cellX, cellY, _terrainCellIrregularity);
-        Vector2 topLeftOffset = LevelMapMeshBuilder.GetGridCornerOffset(
-            cellX, cellY + 1, _terrainCellIrregularity);
-        Vector2 topRightOffset = LevelMapMeshBuilder.GetGridCornerOffset(
-            cellX + 1, cellY + 1, _terrainCellIrregularity);
-        Vector2 bottomRightOffset = LevelMapMeshBuilder.GetGridCornerOffset(
-            cellX + 1, cellY, _terrainCellIrregularity);
-        for (int i = 0; i < vertices.Length; i++)
-        {
-            Vector3 point = vertices[i] - center;
-            float u = extents.x > 0.0001f ? Mathf.InverseLerp(-extents.x, extents.x, point.x) : 0.5f;
-            float v = extents.y > 0.0001f ? Mathf.InverseLerp(-extents.y, extents.y, point.y) : 0.5f;
-            Vector2 bottomOffset = Vector2.Lerp(bottomLeftOffset, bottomRightOffset, u);
-            Vector2 topOffset = Vector2.Lerp(topLeftOffset, topRightOffset, u);
-            Vector2 offset = Vector2.Lerp(bottomOffset, topOffset, v);
-            point.x += offset.x * extents.x * 2f;
-            point.y += offset.y * extents.y * 2f;
-            vertices[i] = center + point;
-        }
-
-        Mesh mesh = new Mesh { name = $"{source.name}_Debris{variant}" };
-        mesh.indexFormat = source.indexFormat;
-        mesh.vertices = vertices;
-        mesh.triangles = source.triangles;
-        mesh.uv = source.uv;
-        mesh.colors32 = source.colors32;
-        mesh.RecalculateNormals();
-        mesh.RecalculateBounds();
-        return mesh;
+        return _releasedBlockTypes.Count - 1;
     }
     private bool EnsureEcsReady()
     {

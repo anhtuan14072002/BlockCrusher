@@ -12,13 +12,17 @@ public sealed class MapPainterWindow : EditorWindow
     {
         Block,
         Obstacle,
-        SpecialMaterial
+        SpecialMaterial,
+        Overlay
     }
 
     private const float DefaultPrefabSize = 1f;
+    private const float OverlayLocalZ = -0.31f;
     private const string LevelFolder = "Assets/_Project/Resources/Level";
     private const string LevelSettingsFolder = "Assets/_Project/Editor/MapPainterData";
     private static readonly string[] EditModeLabels = { "None", "Edit" };
+    private static readonly int ColorPropertyId = Shader.PropertyToID("_Color");
+    private static readonly int UseVertexColorPropertyId = Shader.PropertyToID("_UseVertexColor");
 
     [SerializeField] private List<GameObject> _prefabs = new();
     [SerializeField] private List<bool> _selectedPrefabs = new();
@@ -26,6 +30,9 @@ public sealed class MapPainterWindow : EditorWindow
     [SerializeField] private List<bool> _selectedObstaclePrefabs = new();
     [SerializeField] private List<GameObject> _specialMaterialPrefabs = new();
     [SerializeField] private List<bool> _selectedSpecialMaterialPrefabs = new();
+    [SerializeField] private List<GameObject> _overlayPrefabs = new();
+    [SerializeField] private List<bool> _selectedOverlayPrefabs = new();
+    [SerializeField] private float _overlayScaleMultiplier = 1f;
     [SerializeField] private List<GameObject> _gridPrefabs = new();
     [SerializeField] private Transform _mapRoot;
     [FormerlySerializedAs("_gridSize")]
@@ -39,6 +46,7 @@ public sealed class MapPainterWindow : EditorWindow
     [SerializeField] private PaintType _paintType;
 
     private readonly System.Random _random = new();
+    private MaterialPropertyBlock _previewProperties;
     private Vector2 _scrollPosition;
     private Vector2Int _lastPaintedCell = new(int.MinValue, int.MinValue);
     private int _undoGroup = -1;
@@ -49,8 +57,33 @@ public sealed class MapPainterWindow : EditorWindow
         GetWindow<MapPainterWindow>("Map Painter");
     }
 
+    [InitializeOnLoadMethod]
+    private static void InitializePrefabPreview()
+    {
+        PrefabStage.prefabStageOpened -= OnPrefabStageOpened;
+        PrefabStage.prefabStageOpened += OnPrefabStageOpened;
+        EditorApplication.delayCall += ApplyCurrentPrefabPreview;
+    }
+
+    private static void OnPrefabStageOpened(PrefabStage prefabStage)
+    {
+        EditorApplication.delayCall += () =>
+        {
+            if (prefabStage == PrefabStageUtility.GetCurrentPrefabStage())
+                ApplyPreviewColors(prefabStage.prefabContentsRoot.transform);
+        };
+    }
+
+    private static void ApplyCurrentPrefabPreview()
+    {
+        PrefabStage prefabStage = PrefabStageUtility.GetCurrentPrefabStage();
+        if (prefabStage != null)
+            ApplyPreviewColors(prefabStage.prefabContentsRoot.transform);
+    }
+
     private void OnEnable()
     {
+        _previewProperties = new MaterialPropertyBlock();
         EnsureSelectionCount();
         BindCurrentPrefabRoot();
         SceneView.duringSceneGui += OnSceneGUI;
@@ -147,6 +180,11 @@ public sealed class MapPainterWindow : EditorWindow
         DrawAdditionalPrefabList(
             "Water / Special Prefabs", "Add Water / Special Prefab Slot", PaintType.SpecialMaterial,
             _specialMaterialPrefabs, _selectedSpecialMaterialPrefabs);
+        DrawAdditionalPrefabList(
+            "Overlay Block Prefabs (Z = -0.31)", "Add Overlay Block Prefab Slot", PaintType.Overlay,
+            _overlayPrefabs, _selectedOverlayPrefabs);
+        _overlayScaleMultiplier = Mathf.Max(
+            0.01f, EditorGUILayout.FloatField("Overlay Scale Multiplier", _overlayScaleMultiplier));
         EditorGUILayout.EndScrollView();
     }
 
@@ -221,10 +259,18 @@ public sealed class MapPainterWindow : EditorWindow
                     GenerateGrid();
             }
         }
+
+        using (new EditorGUI.DisabledScope(_mapRoot == null || CountValidPrefabs(_gridPrefabs) < 2))
+        {
+            if (GUILayout.Button("Randomize Existing Grid"))
+                RandomizeExistingGrid();
+        }
     }
 
     private void OnSceneGUI(SceneView sceneView)
     {
+        ApplySelectedPreviewColor();
+
         if (!_paintEnabled || _mapRoot == null || EditorApplication.isPlayingOrWillChangePlaymode)
             return;
 
@@ -236,7 +282,7 @@ public sealed class MapPainterWindow : EditorWindow
             return;
 
         bool erase = IsEraseInput(current.button, current.shift);
-        DrawPreview(localPosition, erase);
+        DrawPreview(GetPaintLocalPosition(localPosition, _paintType), erase);
 
         if (current.type == EventType.Layout)
             HandleUtility.AddDefaultControl(GUIUtility.GetControlID(FocusType.Passive));
@@ -295,6 +341,7 @@ public sealed class MapPainterWindow : EditorWindow
             return;
 
         _lastPaintedCell = cell;
+        localPosition = GetPaintLocalPosition(localPosition, _paintType);
         if (erase)
         {
             EraseAt(localPosition);
@@ -305,21 +352,34 @@ public sealed class MapPainterWindow : EditorWindow
         if (prefab == null)
             return;
 
+        if (_paintType == PaintType.Block && _gridPrefabs.Contains(prefab))
+            prefab = GetGridPrefabForCell(cell.x, cell.y);
+
         bool isWater = prefab.GetComponentInChildren<LevelWater>(true) != null;
-        if ((isWater && HasComponentAt<LevelWater>(localPosition)) ||
+        if ((_paintType == PaintType.Overlay && FindBlockAt(localPosition) != null) ||
+            (isWater && HasComponentAt<LevelWater>(localPosition)) ||
             (!isWater && _paintType == PaintType.Block && HasBlockAt(localPosition)))
             return;
 
-        CreateBlock(prefab, localPosition);
+        GameObject instance = CreateBlock(prefab, localPosition, _paintType != PaintType.Overlay);
+        if (_paintType == PaintType.Overlay)
+        {
+            instance.transform.localScale *= _overlayScaleMultiplier;
+            Vector3 eulerAngles = instance.transform.localEulerAngles;
+            eulerAngles.z = GetRandomZAngle(_random);
+            instance.transform.localEulerAngles = eulerAngles;
+        }
     }
 
-    private void CreateBlock(GameObject prefab, Vector3 localPosition)
+    private GameObject CreateBlock(GameObject prefab, Vector3 localPosition, bool applyPrefabSize = true)
     {
         GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, _mapRoot);
         Undo.RegisterCreatedObjectUndo(instance, "Paint Map Block");
         instance.transform.localPosition = localPosition;
-        if (instance.GetComponentInChildren<LevelWater>(true) == null)
+        if (applyPrefabSize)
             instance.transform.localScale = Vector3.one * _prefabSize;
+        ApplyPreviewColor(instance);
+        return instance;
     }
 
     private void GenerateGrid()
@@ -349,11 +409,50 @@ public sealed class MapPainterWindow : EditorWindow
                 if (!occupiedCells.Add(cell))
                     continue;
 
-                CreateBlock(GetRandomPrefab(_gridPrefabs), GetGridLocalPosition(x, y, cellStep));
+                CreateBlock(GetGridPrefabForCell(x, y), GetGridLocalPosition(x, y, cellStep));
             }
         }
         EndStroke();
         SceneView.RepaintAll();
+    }
+
+    private void RandomizeExistingGrid()
+    {
+        GameObject template = GetFirstValidPrefab(_gridPrefabs);
+        LevelBlock templateBlock = template != null ? template.GetComponent<LevelBlock>() : null;
+        if (templateBlock == null)
+        {
+            EditorUtility.DisplayDialog("Map Painter", "Grid Prefabs need LevelBlock components.", "OK");
+            return;
+        }
+
+        BeginStroke("Randomize Map Grid");
+        Undo.RegisterFullObjectHierarchyUndo(_mapRoot.gameObject, "Randomize Map Grid");
+        float cellStep = GetCellStep(_prefabSize, _spacing);
+        int replacedCount = 0;
+        for (int i = 0; i < _mapRoot.childCount; i++)
+        {
+            GameObject instance = _mapRoot.GetChild(i).gameObject;
+            LevelBlock block = instance.GetComponent<LevelBlock>();
+            if (block == null || block.CollectibleId != templateBlock.CollectibleId)
+                continue;
+
+            Vector3 position = instance.transform.localPosition;
+            int cellX = Mathf.RoundToInt(position.x / cellStep);
+            int cellY = Mathf.RoundToInt(position.y / cellStep);
+            GameObject prefab = GetGridPrefabForCell(cellX, cellY);
+            if (prefab == null)
+                continue;
+
+            PrefabUtility.ReplacePrefabAssetOfPrefabInstance(
+                instance, prefab, InteractionMode.AutomatedAction);
+            ApplyPreviewColor(instance);
+            replacedCount++;
+        }
+        EndStroke();
+        EditorUtility.SetDirty(_mapRoot.gameObject);
+        SceneView.RepaintAll();
+        Debug.Log($"Randomized {replacedCount} grid blocks.", _mapRoot);
     }
 
     private void EraseAt(Vector3 localPosition)
@@ -422,6 +521,7 @@ public sealed class MapPainterWindow : EditorWindow
             PaintType.Obstacle => GetRandomSelectedPrefab(_obstaclePrefabs, _selectedObstaclePrefabs),
             PaintType.SpecialMaterial => GetRandomSelectedPrefab(
                 _specialMaterialPrefabs, _selectedSpecialMaterialPrefabs),
+            PaintType.Overlay => GetRandomSelectedPrefab(_overlayPrefabs, _selectedOverlayPrefabs),
             _ => GetRandomSelectedPrefab(_prefabs, _selectedPrefabs)
         };
     }
@@ -479,6 +579,31 @@ public sealed class MapPainterWindow : EditorWindow
         return count;
     }
 
+    private static GameObject GetFirstValidPrefab(List<GameObject> prefabs)
+    {
+        for (int i = 0; i < prefabs.Count; i++)
+        {
+            if (prefabs[i] != null)
+                return prefabs[i];
+        }
+
+        return null;
+    }
+
+    private GameObject GetGridPrefabForCell(int x, int y)
+    {
+        if (_gridPrefabs.Count == 12)
+            return _gridPrefabs[PositiveModulo(y, 4) * 3 + PositiveModulo(x, 3)];
+
+        return GetRandomPrefab(_gridPrefabs);
+    }
+
+    private static int PositiveModulo(int value, int modulus)
+    {
+        int result = value % modulus;
+        return result < 0 ? result + modulus : result;
+    }
+
     private static float GetCellStep(float prefabSize, float spacing)
     {
         return prefabSize + spacing;
@@ -494,11 +619,25 @@ public sealed class MapPainterWindow : EditorWindow
         return new Vector3(x * cellStep, y * cellStep, 0f);
     }
 
+    private static Vector3 GetPaintLocalPosition(Vector3 localPosition, PaintType paintType)
+    {
+        if (paintType == PaintType.Overlay)
+            localPosition.z = OverlayLocalZ;
+
+        return localPosition;
+    }
+
+    private static float GetRandomZAngle(System.Random random)
+    {
+        return (float)(random.NextDouble() * 360d);
+    }
+
     private void EnsureSelectionCount()
     {
         EnsureSelectionCount(_prefabs, _selectedPrefabs);
         EnsureSelectionCount(_obstaclePrefabs, _selectedObstaclePrefabs);
         EnsureSelectionCount(_specialMaterialPrefabs, _selectedSpecialMaterialPrefabs);
+        EnsureSelectionCount(_overlayPrefabs, _selectedOverlayPrefabs);
     }
 
     private static void EnsureSelectionCount(List<GameObject> prefabs, List<bool> selectedPrefabs)
@@ -549,13 +688,16 @@ public sealed class MapPainterWindow : EditorWindow
         PrefabStage prefabStage = PrefabStageUtility.GetCurrentPrefabStage();
         if (prefabStage != null && _mapRoot != null && prefabStage.prefabContentsRoot == _mapRoot.gameObject)
         {
+            int removedDuplicates = RemoveDuplicateLevelBlocks(_mapRoot);
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(
                 prefabStage.prefabContentsRoot, prefabStage.assetPath, out bool success);
             if (success && prefab != null)
             {
                 prefabStage.ClearDirtiness();
                 SaveLevelSettings(Path.GetFileNameWithoutExtension(prefabStage.assetPath));
-                Debug.Log($"Saved level prefab: {prefabStage.assetPath}", prefab);
+                Debug.Log(
+                    $"Saved level prefab: {prefabStage.assetPath}. Removed {removedDuplicates} duplicate blocks.",
+                    prefab);
             }
             return;
         }
@@ -599,6 +741,7 @@ public sealed class MapPainterWindow : EditorWindow
     {
         Undo.RecordObject(_mapRoot.gameObject, "Name Level Root");
         _mapRoot.name = levelName;
+        int removedDuplicates = RemoveDuplicateLevelBlocks(_mapRoot);
         GameObject prefab = PrefabUtility.SaveAsPrefabAssetAndConnect(
             _mapRoot.gameObject, assetPath, InteractionMode.UserAction, out bool success);
         if (!success || prefab == null)
@@ -608,10 +751,59 @@ public sealed class MapPainterWindow : EditorWindow
         SaveLevelSettings(levelName);
         Selection.activeObject = prefab;
         EditorGUIUtility.PingObject(prefab);
-        Debug.Log($"Saved level prefab: {assetPath}", prefab);
+        Debug.Log($"Saved level prefab: {assetPath}. Removed {removedDuplicates} duplicate blocks.", prefab);
 
         if (openAfterSave && AssetDatabase.OpenAsset(prefab))
             EditorApplication.delayCall += BindCurrentPrefabRoot;
+    }
+
+    private static int RemoveDuplicateLevelBlocks(Transform root)
+    {
+        List<LevelBlock> duplicates = new();
+        CollectDuplicateLevelBlocks(root, duplicates);
+        for (int i = 0; i < duplicates.Count; i++)
+            Undo.DestroyObjectImmediate(duplicates[i].gameObject);
+
+        return duplicates.Count;
+    }
+
+    private static void CollectDuplicateLevelBlocks(Transform root, List<LevelBlock> duplicates)
+    {
+        LevelBlock[] blocks = root.GetComponentsInChildren<LevelBlock>(true);
+        if (blocks.Length < 2)
+            return;
+
+        float cellSize = root.InverseTransformVector(
+            blocks[0].transform.TransformVector(Vector3.right * blocks[0].CellSize)).magnitude;
+        if (cellSize <= 0.0001f)
+            return;
+
+        Vector2 min = new(float.MaxValue, float.MaxValue);
+        for (int i = 0; i < blocks.Length; i++)
+        {
+            Vector3 position = root.InverseTransformPoint(blocks[i].transform.position);
+            min.x = Mathf.Min(min.x, position.x);
+            min.y = Mathf.Min(min.y, position.y);
+        }
+
+        LevelWater[] waterMarkers = root.GetComponentsInChildren<LevelWater>(true);
+        for (int i = 0; i < waterMarkers.Length; i++)
+        {
+            Vector3 position = root.InverseTransformPoint(waterMarkers[i].transform.position);
+            min.x = Mathf.Min(min.x, position.x);
+            min.y = Mathf.Min(min.y, position.y);
+        }
+
+        HashSet<Vector2Int> occupiedCells = new(blocks.Length);
+        for (int i = 0; i < blocks.Length; i++)
+        {
+            Vector3 position = root.InverseTransformPoint(blocks[i].transform.position);
+            Vector2Int cell = new(
+                Mathf.RoundToInt((position.x - min.x) / cellSize),
+                Mathf.RoundToInt((position.y - min.y) / cellSize));
+            if (!occupiedCells.Add(cell))
+                duplicates.Add(blocks[i]);
+        }
     }
 
     private void BindCurrentPrefabRoot()
@@ -621,8 +813,105 @@ public sealed class MapPainterWindow : EditorWindow
             return;
 
         _mapRoot = prefabStage.prefabContentsRoot.transform;
+        ApplyPreviewColors(_mapRoot);
         Selection.activeTransform = _mapRoot;
         Repaint();
+    }
+
+    private static void ApplyPreviewColors(Transform root)
+    {
+        PrefabStage prefabStage = PrefabStageUtility.GetCurrentPrefabStage();
+        bool preserveCleanStage = prefabStage != null &&
+                                  prefabStage.prefabContentsRoot.transform == root &&
+                                  !prefabStage.scene.isDirty;
+
+        MaterialPropertyBlock properties = new();
+        LevelBlock[] blocks = root.GetComponentsInChildren<LevelBlock>(true);
+        for (int i = 0; i < blocks.Length; i++)
+            ApplyPreviewColor(blocks[i], properties);
+
+        LevelDecoration[] decorations = root.GetComponentsInChildren<LevelDecoration>(true);
+        for (int i = 0; i < decorations.Length; i++)
+            ApplyPreviewColor(decorations[i], properties);
+
+        if (preserveCleanStage)
+            prefabStage.ClearDirtiness();
+
+        SceneView.RepaintAll();
+    }
+
+    private void ApplySelectedPreviewColor()
+    {
+        GameObject selected = Selection.activeGameObject;
+        if (selected == null || _mapRoot == null || selected.transform == _mapRoot ||
+            !selected.transform.IsChildOf(_mapRoot))
+            return;
+
+        PrefabStage prefabStage = PrefabStageUtility.GetCurrentPrefabStage();
+        bool preserveCleanStage = prefabStage != null && !prefabStage.scene.isDirty;
+        LevelBlock block = selected.GetComponentInParent<LevelBlock>();
+        if (block != null)
+            ApplyPreviewColor(block);
+
+        LevelDecoration decoration = selected.GetComponentInParent<LevelDecoration>();
+        if (decoration != null)
+            ApplyPreviewColor(decoration);
+
+        if (preserveCleanStage)
+            prefabStage.ClearDirtiness();
+    }
+
+    private void ApplyPreviewColor(GameObject instance)
+    {
+        LevelBlock block = instance.GetComponentInChildren<LevelBlock>(true);
+        if (block != null)
+            ApplyPreviewColor(block);
+
+        LevelDecoration decoration = instance.GetComponentInChildren<LevelDecoration>(true);
+        if (decoration != null)
+            ApplyPreviewColor(decoration);
+    }
+
+    private void ApplyPreviewColor(LevelBlock block)
+    {
+        ApplyPreviewColor(block, _previewProperties);
+    }
+
+    private void ApplyPreviewColor(LevelDecoration decoration)
+    {
+        ApplyPreviewColor(decoration, _previewProperties);
+    }
+
+    private static void ApplyPreviewColor(LevelBlock block, MaterialPropertyBlock properties)
+    {
+        ApplyPreviewColor(block.GetComponent<MeshRenderer>(), block.MapColor, false, properties);
+    }
+
+    private static void ApplyPreviewColor(LevelDecoration decoration, MaterialPropertyBlock properties)
+    {
+        MeshFilter meshFilter = decoration.GetComponent<MeshFilter>();
+        Mesh mesh = meshFilter != null ? meshFilter.sharedMesh : null;
+        bool useVertexColor = mesh != null && mesh.colors32.Length == mesh.vertexCount;
+        ApplyPreviewColor(decoration.GetComponent<MeshRenderer>(), decoration.Tint, useVertexColor, properties);
+    }
+
+    private void ApplyPreviewColor(MeshRenderer renderer, Color color, bool useVertexColor)
+    {
+        ApplyPreviewColor(renderer, color, useVertexColor, _previewProperties);
+    }
+
+    private static void ApplyPreviewColor(
+        MeshRenderer renderer, Color color, bool useVertexColor, MaterialPropertyBlock properties)
+    {
+        if (renderer == null || renderer.sharedMaterial == null ||
+            !renderer.sharedMaterial.HasProperty(ColorPropertyId))
+            return;
+
+        properties.Clear();
+        renderer.GetPropertyBlock(properties);
+        properties.SetColor(ColorPropertyId, color);
+        properties.SetFloat(UseVertexColorPropertyId, useVertexColor ? 1f : 0f);
+        renderer.SetPropertyBlock(properties);
     }
 
     private static string BuildLevelName(string value)
@@ -671,6 +960,11 @@ public sealed class MapPainterWindow : EditorWindow
         settings.SpecialMaterialPrefabs.AddRange(_specialMaterialPrefabs);
         settings.SelectedSpecialMaterialPrefabs.Clear();
         settings.SelectedSpecialMaterialPrefabs.AddRange(_selectedSpecialMaterialPrefabs);
+        settings.OverlayPrefabs.Clear();
+        settings.OverlayPrefabs.AddRange(_overlayPrefabs);
+        settings.SelectedOverlayPrefabs.Clear();
+        settings.SelectedOverlayPrefabs.AddRange(_selectedOverlayPrefabs);
+        settings.OverlayScaleMultiplier = _overlayScaleMultiplier;
         settings.GridPrefabs.Clear();
         settings.GridPrefabs.AddRange(_gridPrefabs);
         settings.PaintType = (int)_paintType;
@@ -701,6 +995,11 @@ public sealed class MapPainterWindow : EditorWindow
         _specialMaterialPrefabs.AddRange(settings.SpecialMaterialPrefabs);
         _selectedSpecialMaterialPrefabs.Clear();
         _selectedSpecialMaterialPrefabs.AddRange(settings.SelectedSpecialMaterialPrefabs);
+        _overlayPrefabs.Clear();
+        _overlayPrefabs.AddRange(settings.OverlayPrefabs);
+        _selectedOverlayPrefabs.Clear();
+        _selectedOverlayPrefabs.AddRange(settings.SelectedOverlayPrefabs);
+        _overlayScaleMultiplier = Mathf.Max(0.01f, settings.OverlayScaleMultiplier);
         _gridPrefabs.Clear();
         _gridPrefabs.AddRange(settings.GridPrefabs);
         _paintType = (PaintType)settings.PaintType;
@@ -721,6 +1020,8 @@ public sealed class MapPainterWindow : EditorWindow
         _selectedObstaclePrefabs.Clear();
         _specialMaterialPrefabs.Clear();
         _selectedSpecialMaterialPrefabs.Clear();
+        _overlayPrefabs.Clear();
+        _selectedOverlayPrefabs.Clear();
         _gridPrefabs.Clear();
 
         Transform[] children = levelPrefab.GetComponentsInChildren<Transform>(true);
@@ -773,7 +1074,7 @@ public sealed class MapPainterWindow : EditorWindow
     [MenuItem("Tools/Map Painter Self Check")]
     private static void RunSelfCheck()
     {
-        float prefabSize = DefaultPrefabSize;
+        const float prefabSize = 1.2f;
         Vector2Int cell = new(
             Mathf.RoundToInt(1.79f / prefabSize),
             Mathf.RoundToInt(-1.81f / prefabSize));
@@ -790,6 +1091,47 @@ public sealed class MapPainterWindow : EditorWindow
             "Map Painter erase input failed.");
         Debug.Assert(GetGridLocalPosition(2, 3, prefabSize) == new Vector3(2.4f, 3.6f, 0f),
             "Map Painter grid generation position failed.");
+        Debug.Assert(GetPaintLocalPosition(Vector3.zero, PaintType.Overlay).z == OverlayLocalZ,
+            "Map Painter overlay depth failed.");
+        System.Random rotationRandom = new(1234);
+        Debug.Assert(!Mathf.Approximately(
+                GetRandomZAngle(rotationRandom), GetRandomZAngle(rotationRandom)),
+            "Map Painter overlay random rotation failed.");
+        Debug.Assert(PositiveModulo(-1, 3) == 2 && PositiveModulo(4, 3) == 1,
+            "Map Painter mosaic indexing failed.");
+
+        GameObject duplicateRoot = new("MapPainterDuplicateSelfCheck");
+        Material previewMaterial = null;
+        try
+        {
+            GameObject first = new("First");
+            first.transform.SetParent(duplicateRoot.transform, false);
+            first.AddComponent<LevelBlock>();
+            GameObject duplicate = new("Duplicate");
+            duplicate.transform.SetParent(duplicateRoot.transform, false);
+            duplicate.AddComponent<LevelBlock>();
+            List<LevelBlock> duplicateBlocks = new();
+            CollectDuplicateLevelBlocks(duplicateRoot.transform, duplicateBlocks);
+            Debug.Assert(duplicateBlocks.Count == 1 && duplicateBlocks[0].gameObject == duplicate,
+                "Map Painter duplicate block detection failed.");
+
+            MeshRenderer renderer = first.GetComponent<MeshRenderer>();
+            previewMaterial = new Material(Shader.Find("BlockCrusher/VoxelExactColor"));
+            renderer.sharedMaterial = previewMaterial;
+            Color32 expectedColor = new(31, 79, 127, 255);
+            MaterialPropertyBlock properties = new();
+            ApplyPreviewColor(renderer, expectedColor, false, properties);
+            renderer.GetPropertyBlock(properties);
+            Debug.Assert(properties.GetColor(ColorPropertyId) == (Color)expectedColor &&
+                         properties.GetFloat(UseVertexColorPropertyId) == 0f,
+                "Map Painter preview color failed.");
+        }
+        finally
+        {
+            DestroyImmediate(previewMaterial);
+            DestroyImmediate(duplicateRoot);
+        }
+
         Debug.Log("Map Painter self check passed.");
     }
 }

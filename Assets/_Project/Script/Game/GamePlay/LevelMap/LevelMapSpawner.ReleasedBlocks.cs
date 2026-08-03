@@ -12,11 +12,6 @@ public sealed partial class LevelMapSpawner
     {
         if (!EnsureReleasedBlockResources() || !EnsureEcsReady() || typeIndex >= _releasedBlockTypes.Count)
             return;
-        ReleasedBlockRuntimeType variantGroup = _releasedBlockTypes[typeIndex];
-        int cellX = Mathf.RoundToInt((localPosition.x - _offset.x) / _cellSize);
-        int cellY = Mathf.RoundToInt((localPosition.y - _offset.y) / _cellSize);
-        int variantOffset = ((cellX & 1) | ((cellY & 1) << 1)) % variantGroup.VariantCount;
-        typeIndex = (ushort)(variantGroup.FirstVariantIndex + variantOffset);
         Vector3 position = _runtimeParent.TransformPoint(localPosition);
         Vector3 outward = position - sawCenter;
         outward.z = 0f;
@@ -68,7 +63,7 @@ public sealed partial class LevelMapSpawner
             Linear = _releasedBlockDamping,
             Angular = _releasedBlockAngularDamping
         });
-        _entityManager.SetComponentData(entity, new PhysicsGravityFactor { Value = 1f });
+        _entityManager.SetComponentData(entity, new PhysicsGravityFactor { Value = renderAsMetaball ? 0f : 1f });
         _entityManager.SetComponentData(entity, new ReleasedBlockComponent
         {
             OwnerId = _ownerId,

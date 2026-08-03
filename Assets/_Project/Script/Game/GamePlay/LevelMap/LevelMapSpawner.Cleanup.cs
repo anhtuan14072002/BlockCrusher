@@ -60,8 +60,6 @@ public sealed partial class LevelMapSpawner
                 runtimeType.Collider.Dispose();
             if (runtimeType.Material != null)
                 DestroyUnityObject(runtimeType.Material);
-            if (runtimeType.OwnsMesh && runtimeType.Mesh != null)
-                DestroyUnityObject(runtimeType.Mesh);
         }
         _releasedBlockTypes.Clear();
     }

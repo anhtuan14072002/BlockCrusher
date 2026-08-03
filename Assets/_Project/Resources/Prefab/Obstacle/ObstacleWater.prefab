@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 2369960756628777062}
   - component: {fileID: 6483122681091440470}
   m_Layer: 0
-  m_Name: Water
+  m_Name: ObstacleWater
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

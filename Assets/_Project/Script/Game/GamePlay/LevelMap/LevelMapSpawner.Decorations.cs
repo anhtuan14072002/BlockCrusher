@@ -123,10 +123,10 @@ public sealed partial class LevelMapSpawner
             chunk.DecorationMesh.MarkDynamic();
             chunk.DecorationObject = new GameObject(chunk.DecorationMesh.name);
             chunk.DecorationObject.transform.SetParent(_runtimeParent, false);
+            chunk.DecorationObject.transform.localPosition = Vector3.back * _chunkColliderDepth;
             chunk.DecorationObject.AddComponent<MeshFilter>().sharedMesh = chunk.DecorationMesh;
             chunk.DecorationRenderer = chunk.DecorationObject.AddComponent<MeshRenderer>();
             chunk.DecorationRenderer.sharedMaterial = _chunkMaterial;
-            ApplyCutMask(chunk.DecorationRenderer);
             chunk.DecorationRenderer.shadowCastingMode = ShadowCastingMode.Off;
             chunk.DecorationRenderer.receiveShadows = false;
             ApplyChunkDecorations(ref chunk);

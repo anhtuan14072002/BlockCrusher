@@ -34,7 +34,6 @@ public sealed partial class LevelMapSpawner
                 mesh.MarkDynamic();
                 meshFilter.sharedMesh = mesh;
                 meshRenderer.sharedMaterial = _chunkMaterial;
-                ApplyCutMask(meshRenderer);
                 chunk.Initialize(this);
                 _chunks.Add(CreateChunkRuntime(mesh, meshRenderer, startX, startY, width, height));
             }
@@ -48,8 +47,16 @@ public sealed partial class LevelMapSpawner
         int height)
     {
         int maxCells = width * height;
-        int vertexCapacity = maxCells * 4;
-        int indexCapacity = maxCells * 6;
+        int maxVerticesPerBlock = 4;
+        int maxIndicesPerBlock = 6;
+        for (int i = 0; i < _authoredMeshRanges.Length; i++)
+        {
+            AuthoredMeshRange range = _authoredMeshRanges[i];
+            maxVerticesPerBlock = Mathf.Max(maxVerticesPerBlock, range.VertexCount);
+            maxIndicesPerBlock = Mathf.Max(maxIndicesPerBlock, range.IndexCount);
+        }
+        int vertexCapacity = maxCells * maxVerticesPerBlock;
+        int indexCapacity = maxCells * maxIndicesPerBlock;
         return new ChunkRuntime
         {
             Mesh = mesh,
@@ -74,7 +81,6 @@ public sealed partial class LevelMapSpawner
     {
         if (_scheduledChunkRebuilds.Count == 0)
             return;
-        UpdateCutMask();
         _scheduledChunkHandles.Clear();
         for (int i = 0; i < _scheduledChunkRebuilds.Count; i++)
         {
@@ -94,6 +100,11 @@ public sealed partial class LevelMapSpawner
             {
                 CellColors = _cellColors,
                 CellSolid = _cellSolid,
+                CellReleasedTypes = _cellReleasedTypes,
+                AuthoredMeshVertices = _authoredMeshVertices,
+                AuthoredMeshUvs = _authoredMeshUvs,
+                AuthoredMeshIndices = _authoredMeshIndices,
+                AuthoredMeshRanges = _authoredMeshRanges,
                 Visited = chunk.Visited,
                 Vertices = chunk.Vertices,
                 Colors = chunk.Colors,
@@ -108,14 +119,19 @@ public sealed partial class LevelMapSpawner
                 Offset = _offset,
                 ExtrudeMergedQuads = 0,
                 MergeAnySolid = 0,
-                DetailDepth = _chunkColliderDepth,
-                CellIrregularity = _terrainCellIrregularity
+                UseAuthoredMeshes = 1,
+                DetailDepth = _chunkColliderDepth
             };
             _scheduledChunkHandles.Add(meshJob.Schedule());
             BuildChunkMeshJob colliderJob = new BuildChunkMeshJob
             {
                 CellColors = _cellColors,
                 CellSolid = _cellSolid,
+                CellReleasedTypes = _cellReleasedTypes,
+                AuthoredMeshVertices = _authoredMeshVertices,
+                AuthoredMeshUvs = _authoredMeshUvs,
+                AuthoredMeshIndices = _authoredMeshIndices,
+                AuthoredMeshRanges = _authoredMeshRanges,
                 Visited = chunk.ColliderVisited,
                 Vertices = chunk.ColliderVertices,
                 Colors = chunk.ColliderColors,
@@ -130,8 +146,8 @@ public sealed partial class LevelMapSpawner
                 Offset = _offset,
                 ExtrudeMergedQuads = 1,
                 MergeAnySolid = 1,
-                DetailDepth = _chunkColliderDepth,
-                CellIrregularity = 0f
+                UseAuthoredMeshes = 0,
+                DetailDepth = _chunkColliderDepth
             };
             _scheduledChunkHandles.Add(colliderJob.Schedule());
         }

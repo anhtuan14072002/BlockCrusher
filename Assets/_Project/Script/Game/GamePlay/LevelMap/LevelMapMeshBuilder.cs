@@ -7,6 +7,11 @@ public sealed partial class LevelMapSpawner
     {
         [ReadOnly] public NativeArray<Color32> CellColors;
         [ReadOnly] public NativeArray<byte> CellSolid;
+        [ReadOnly] public NativeArray<ushort> CellReleasedTypes;
+        [ReadOnly] public NativeArray<Vector3> AuthoredMeshVertices;
+        [ReadOnly] public NativeArray<Vector2> AuthoredMeshUvs;
+        [ReadOnly] public NativeArray<int> AuthoredMeshIndices;
+        [ReadOnly] public NativeArray<AuthoredMeshRange> AuthoredMeshRanges;
         public NativeArray<byte> Visited;
         public NativeList<Vector3> Vertices;
         public NativeList<Color32> Colors;
@@ -21,8 +26,8 @@ public sealed partial class LevelMapSpawner
         public Vector3 Offset;
         public byte ExtrudeMergedQuads;
         public byte MergeAnySolid;
+        public byte UseAuthoredMeshes;
         public float DetailDepth;
-        public float CellIrregularity;
         public void Execute()
         {
             for (int i = 0; i < Visited.Length; i++)
@@ -38,10 +43,10 @@ public sealed partial class LevelMapSpawner
                     if (CellSolid[cellIndex] == 0)
                         continue;
                     Color32 color = CellColors[cellIndex];
-                    if (CellIrregularity > 0f && ExtrudeMergedQuads == 0)
+                    if (UseAuthoredMeshes != 0)
                     {
                         Visited[localIndex] = 1;
-                        AddIrregularQuad(x, y, color);
+                        AddAuthoredBlock(x, y, color, CellReleasedTypes[cellIndex]);
                         continue;
                     }
                     int rectWidth = 1;
@@ -85,6 +90,24 @@ public sealed partial class LevelMapSpawner
                 return true;
             return other.r == color.r && other.g == color.g && other.b == color.b && other.a == color.a;
         }
+        private void AddAuthoredBlock(int x, int y, Color32 color, ushort typeIndex)
+        {
+            AuthoredMeshRange range = AuthoredMeshRanges[typeIndex];
+            Vector3 center = new Vector3(
+                Offset.x + (StartX + x) * CellSize,
+                Offset.y + (StartY + y) * CellSize,
+                0f);
+            int vertexIndex = Vertices.Length;
+            for (int i = 0; i < range.VertexCount; i++)
+            {
+                int sourceIndex = range.VertexStart + i;
+                Vertices.Add(center + AuthoredMeshVertices[sourceIndex] * CellSize);
+                Colors.Add(color);
+                Uvs.Add(AuthoredMeshUvs[sourceIndex]);
+            }
+            for (int i = 0; i < range.IndexCount; i++)
+                Indices.Add(vertexIndex + AuthoredMeshIndices[range.IndexStart + i]);
+        }
         private void AddQuad(int x, int y, int width, int height, Color32 color)
         {
             float minX = Offset.x + (StartX + x) * CellSize - CellSize * 0.5f;
@@ -98,39 +121,6 @@ public sealed partial class LevelMapSpawner
             Vertices.Add(new Vector3(maxX, minY, 0f));
             AddVertexData(color);
             AddQuadIndices(vertexIndex);
-        }
-        private void AddIrregularQuad(int x, int y, Color32 color)
-        {
-            int cellX = StartX + x;
-            int cellY = StartY + y;
-            float centerX = Offset.x + cellX * CellSize;
-            float centerY = Offset.y + cellY * CellSize;
-            float halfSize = CellSize * 0.5f;
-            Vector2 bottomLeftOffset = GetGridCornerOffset(cellX, cellY, CellIrregularity) * CellSize;
-            Vector2 topLeftOffset = GetGridCornerOffset(cellX, cellY + 1, CellIrregularity) * CellSize;
-            Vector2 topRightOffset = GetGridCornerOffset(cellX + 1, cellY + 1, CellIrregularity) * CellSize;
-            Vector2 bottomRightOffset = GetGridCornerOffset(cellX + 1, cellY, CellIrregularity) * CellSize;
-            int vertexIndex = Vertices.Length;
-            Vertices.Add(new Vector3(centerX - halfSize + bottomLeftOffset.x,
-                centerY - halfSize + bottomLeftOffset.y, 0f));
-            Vertices.Add(new Vector3(centerX - halfSize + topLeftOffset.x,
-                centerY + halfSize + topLeftOffset.y, 0f));
-            Vertices.Add(new Vector3(centerX + halfSize + topRightOffset.x,
-                centerY + halfSize + topRightOffset.y, 0f));
-            Vertices.Add(new Vector3(centerX + halfSize + bottomRightOffset.x,
-                centerY - halfSize + bottomRightOffset.y, 0f));
-            AddVertexData(color);
-            AddQuadIndices(vertexIndex);
-        }
-        internal static Vector2 GetGridCornerOffset(int gridX, int gridY, float amount)
-        {
-            switch ((gridX & 1) | ((gridY & 1) << 1))
-            {
-                case 0: return new Vector2(-amount, -amount * 0.45f);
-                case 1: return new Vector2(amount * 0.65f, amount * 0.9f);
-                case 2: return new Vector2(-amount * 0.5f, amount * 0.75f);
-                default: return new Vector2(amount * 0.85f, -amount * 0.65f);
-            }
         }
         private void AddMergedBox(int x, int y, int width, int height, Color32 color)
         {

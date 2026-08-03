@@ -13,19 +13,47 @@ MonoBehaviour:
   m_Name: level_1
   m_EditorClassIdentifier: 
   PaintPrefabs:
-  - {fileID: 612727279210085569, guid: 3f4ebe89b85f2a147bdba89bc394f76d, type: 3}
   - {fileID: 8451396127400000001, guid: 6d52ec2798114e4a8e21a85df5927f93, type: 3}
-  SelectedPaintPrefabs: 0100
+  - {fileID: 4377372095242228172, guid: 7680c44a0b0efb94abc960730dd89eb4, type: 3}
+  - {fileID: 2373744388869953939, guid: 07666b8eaeb141445874ed7592c1d861, type: 3}
+  - {fileID: 7312955918299356777, guid: 1879908a1b3f0284c95a22cf10170c9e, type: 3}
+  - {fileID: 1880420211551099131, guid: 7dc9532162384484d8fa77bde92a99e1, type: 3}
+  - {fileID: 162046238135951508, guid: de24d188bdbfca249b381dc166773011, type: 3}
+  - {fileID: 6179986367876549492, guid: b67434dc78caa7f44a642ffdf00f241d, type: 3}
+  - {fileID: 6157010812642190867, guid: 1b1ed2c1c99167c4dace3f0d6a953522, type: 3}
+  - {fileID: 8072481563294250013, guid: e8c8d6f82a80fc64ca6433a71e40c6c9, type: 3}
+  - {fileID: 4785190232492298934, guid: 32980f88ab4c0bc4e9e626b9ccdb285e, type: 3}
+  - {fileID: 7611344850084336024, guid: ee6e8159cd8c65b45920c4d698462f1e, type: 3}
+  - {fileID: 2778442941689689010, guid: 1d88be3e590650c4590616f554cd815a, type: 3}
+  - {fileID: 7919354158814669986, guid: 5e5c8630121f71449b978357ac3c27c1, type: 3}
+  SelectedPaintPrefabs: 00010101010101010101010101
   ObstaclePrefabs:
-  - {fileID: 612727279210085569, guid: bd46ddcbff8273e44b60bfd9dbcf1ffe, type: 3}
+  - {fileID: 8376879246523045691, guid: e30aecd447ff50b48a39312a0d681aec, type: 3}
   SelectedObstaclePrefabs: 00
   SpecialMaterialPrefabs:
   - {fileID: 3567369757448790777, guid: fa9e079026d6ea74c8991501d7bd3e2a, type: 3}
   SelectedSpecialMaterialPrefabs: 01
+  OverlayPrefabs:
+  - {fileID: 5886897174249047021, guid: c2af108b90fc0704784f0b3e10c14d33, type: 3}
+  - {fileID: 6185358022084267644, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+  - {fileID: 4970482013353890756, guid: a8e8b324213dc4c49b9e9ccbd88833cb, type: 3}
+  SelectedOverlayPrefabs: 010101
+  OverlayScaleMultiplier: 1
   GridPrefabs:
-  - {fileID: 612727279210085569, guid: 3f4ebe89b85f2a147bdba89bc394f76d, type: 3}
+  - {fileID: 4377372095242228172, guid: 7680c44a0b0efb94abc960730dd89eb4, type: 3}
+  - {fileID: 2373744388869953939, guid: 07666b8eaeb141445874ed7592c1d861, type: 3}
+  - {fileID: 7312955918299356777, guid: 1879908a1b3f0284c95a22cf10170c9e, type: 3}
+  - {fileID: 1880420211551099131, guid: 7dc9532162384484d8fa77bde92a99e1, type: 3}
+  - {fileID: 162046238135951508, guid: de24d188bdbfca249b381dc166773011, type: 3}
+  - {fileID: 6179986367876549492, guid: b67434dc78caa7f44a642ffdf00f241d, type: 3}
+  - {fileID: 6157010812642190867, guid: 1b1ed2c1c99167c4dace3f0d6a953522, type: 3}
+  - {fileID: 8072481563294250013, guid: e8c8d6f82a80fc64ca6433a71e40c6c9, type: 3}
+  - {fileID: 4785190232492298934, guid: 32980f88ab4c0bc4e9e626b9ccdb285e, type: 3}
+  - {fileID: 7611344850084336024, guid: ee6e8159cd8c65b45920c4d698462f1e, type: 3}
+  - {fileID: 2778442941689689010, guid: 1d88be3e590650c4590616f554cd815a, type: 3}
+  - {fileID: 7919354158814669986, guid: 5e5c8630121f71449b978357ac3c27c1, type: 3}
   PaintType: 2
-  PrefabSize: 0.5
+  PrefabSize: 0.3
   Spacing: 0
   GridWidth: 30
   GridHeight: 70

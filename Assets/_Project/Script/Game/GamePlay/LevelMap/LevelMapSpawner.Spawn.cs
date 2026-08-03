@@ -37,7 +37,6 @@ public sealed partial class LevelMapSpawner
             obstacles[i].transform.SetParent(_runtimeParent, true);
 
         LevelObstacle.MaskSpawnCells(_cellSolid, _runtimeParent, _offset, _gridWidth, _gridHeight, _cellSize);
-        CreateCutMask();
         CreateCutParticles();
         SpawnMetaballWater(waterMarkers);
         CreateChunks();
@@ -68,14 +67,16 @@ public sealed partial class LevelMapSpawner
             return false;
         }
 
-        Vector3 blockSize = GetBlockSizeInSpace(firstRenderer, _runtimeParent);
-        _cellSize = blockSize.x;
-        if (_cellSize <= 0.0001f || Mathf.Abs(blockSize.y - _cellSize) > _cellSize * 0.01f)
+        LevelBlock firstBlock = firstRenderer.GetComponent<LevelBlock>();
+        Vector2 cellSize = GetCellSizeInSpace(firstBlock, _runtimeParent);
+        _cellSize = cellSize.x;
+        if (_cellSize <= 0.0001f || Mathf.Abs(cellSize.y - _cellSize) > _cellSize * 0.01f)
         {
             Debug.LogError("Level prefab blocks must use a non-zero square cell size.", level);
             return false;
         }
 
+        Vector3 blockSize = GetBlockSizeInSpace(firstRenderer, _runtimeParent);
         _chunkColliderDepth = blockSize.z;
         _offset = new Vector3(min.x, min.y, 0f);
         _gridWidth = Mathf.RoundToInt((max.x - min.x) / _cellSize) + 1;
@@ -113,7 +114,7 @@ public sealed partial class LevelMapSpawner
             int cell = y * _gridWidth + x;
             if (_cellSolid[cell] != 0)
             {
-                Debug.LogError($"Level prefab has duplicate blocks at cell ({x}, {y}).", renderer);
+                    Debug.LogError($"Level prefab has duplicate blocks at cell ({x}, {y}).", renderer);
                 DisposeCells();
                 return false;
             }
@@ -124,6 +125,7 @@ public sealed partial class LevelMapSpawner
             _cellReleasedColors[cell] = block.ReleasedColor;
         }
 
+        BuildAuthoredMeshLibrary();
         return true;
     }
 
@@ -152,6 +154,18 @@ public sealed partial class LevelMapSpawner
         return new Vector3(x, y, z);
     }
 
+    private static Vector2 GetCellSizeInSpace(LevelBlock block, Transform space)
+    {
+        if (block == null)
+            return Vector2.zero;
+
+        float x = space.InverseTransformVector(
+            block.transform.TransformVector(Vector3.right * block.CellSize)).magnitude;
+        float y = space.InverseTransformVector(
+            block.transform.TransformVector(Vector3.up * block.CellSize)).magnitude;
+        return new Vector2(x, y);
+    }
+
     [ContextMenu("Validate Level Prefab")]
     private void ValidateLevelPrefab()
     {
@@ -167,7 +181,7 @@ public sealed partial class LevelMapSpawner
         if (firstBlock == null)
             return;
 
-        float cellSize = GetBlockSizeInSpace(firstBlock, levelPrefab.transform).x;
+        float cellSize = GetCellSizeInSpace(blocks[0], levelPrefab.transform).x;
         Debug.Assert(cellSize > 0.0001f, "Level prefab block size is invalid.", firstBlock);
         if (cellSize <= 0.0001f)
             return;
@@ -181,6 +195,7 @@ public sealed partial class LevelMapSpawner
             Debug.Assert(!string.IsNullOrWhiteSpace(block.CollectibleId),
                 $"Level block '{block.name}' needs a collectible id.", block);
             Debug.Assert(block.ReleasedScale > 0f, $"Level block '{block.name}' needs a positive released scale.", block);
+            Debug.Assert(block.CellSize > 0f, $"Level block '{block.name}' needs a positive cell size.", block);
 
             Vector3 localPosition = levelPrefab.transform.InverseTransformPoint(block.transform.position);
             Vector2Int cell = new Vector2Int(
@@ -213,7 +228,6 @@ public sealed partial class LevelMapSpawner
         DisposeCutParticles();
         DisposeCells();
         DisposeChunks();
-        DisposeCutMask();
         _chunks.Clear();
         _dirtyChunks.Clear();
         _scheduledChunkRebuilds.Clear();
@@ -234,6 +248,7 @@ public sealed partial class LevelMapSpawner
 
     private void DisposeCells()
     {
+        DisposeAuthoredMeshLibrary();
         if (_cellColors.IsCreated)
             _cellColors.Dispose();
         if (_cellReleasedColors.IsCreated)

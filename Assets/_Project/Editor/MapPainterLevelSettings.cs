@@ -10,6 +10,9 @@ public sealed class MapPainterLevelSettings : ScriptableObject
     public List<bool> SelectedObstaclePrefabs = new();
     public List<GameObject> SpecialMaterialPrefabs = new();
     public List<bool> SelectedSpecialMaterialPrefabs = new();
+    public List<GameObject> OverlayPrefabs = new();
+    public List<bool> SelectedOverlayPrefabs = new();
+    public float OverlayScaleMultiplier = 1f;
     public List<GameObject> GridPrefabs = new();
     public int PaintType;
     [FormerlySerializedAs("GridSize")]

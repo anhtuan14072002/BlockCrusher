@@ -9,7 +9,6 @@ using RenderMaterial = UnityEngine.Material;
 public sealed partial class LevelMapSpawner : MonoBehaviour
 {
     private const int MaxInstancesPerBatch = 1023;
-    private const int ReleasedMeshVariantCount = 4;
     private const float MinimumPhysicsDeltaTime = 0.001f;
     private const float MaxCellTravelPerStep = 0.75f;
 
@@ -28,7 +27,6 @@ public sealed partial class LevelMapSpawner : MonoBehaviour
     [Header("Chunk Rendering")]
     [SerializeField, Range(8, 64)] private int _chunkSize = 24;
     [SerializeField, Range(1, 8)] private int _maxChunkRebuildsPerFrame = 2;
-    [SerializeField, Range(0f, 0.18f)] private float _terrainCellIrregularity = 0.1f;
 
     [Header("Released Blocks")]
     [SerializeField] private float _sawReleaseRadius = 0.18f;
@@ -65,6 +63,10 @@ public sealed partial class LevelMapSpawner : MonoBehaviour
     private NativeArray<Color32> _cellReleasedColors;
     private NativeArray<byte> _cellSolid;
     private NativeArray<ushort> _cellReleasedTypes;
+    private NativeArray<Vector3> _authoredMeshVertices;
+    private NativeArray<Vector2> _authoredMeshUvs;
+    private NativeArray<int> _authoredMeshIndices;
+    private NativeArray<AuthoredMeshRange> _authoredMeshRanges;
 
     private World _ecsWorld;
     private EntityManager _entityManager;
@@ -102,6 +104,14 @@ public sealed partial class LevelMapSpawner : MonoBehaviour
     private int _displayRenderFrame = -1;
     private int _scheduledRenderFrame = -1;
 
+    internal struct AuthoredMeshRange
+    {
+        public int VertexStart;
+        public int VertexCount;
+        public int IndexStart;
+        public int IndexCount;
+    }
+
     private sealed class ReleasedBlockRuntimeType
     {
         public GameObject Prefab;
@@ -116,9 +126,6 @@ public sealed partial class LevelMapSpawner : MonoBehaviour
         public int[] BatchCounts;
         public int BatchCount;
         public int RenderCount;
-        public ushort FirstVariantIndex;
-        public byte VariantCount;
-        public bool OwnsMesh;
     }
 
     public static int SuckedBlockCount { get; private set; }
@@ -168,7 +175,6 @@ public sealed partial class LevelMapSpawner : MonoBehaviour
         DisposeDecorations();
         DisposeCutParticles();
         DisposeChunks();
-        DisposeCutMask();
         DisposeReleasedBlocks();
         DisposeReleasedBlockWalls();
         DisposeReleasedBlockResources();
