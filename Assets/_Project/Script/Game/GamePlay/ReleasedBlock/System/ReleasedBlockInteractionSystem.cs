@@ -122,7 +122,7 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
         {
             LevelMapSpawner spawner = LevelMapSpawner.GetActiveSpawner(i);
             if (spawner != null &&
-                spawner.TryCreateSolidConstraintJob(
+                spawner.TryCreateSolidConstraintJob(false,
                     out LevelMapSpawner.ReleasedBlockSolidConstraintJob solidConstraintJob))
             {
                 dependency = solidConstraintJob.ScheduleParallel(_solidConstraintQuery, dependency);

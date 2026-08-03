@@ -172,7 +172,7 @@ public sealed partial class LevelMapSpawner
         float radius = Mathf.Min(bounds.size.x, bounds.size.y) * 0.48f;
         BlobAssetReference<Collider> collider = Unity.Physics.SphereCollider.Create(new SphereGeometry
         {
-            Center = bounds.center,
+            Center = new float3(bounds.center.x, bounds.center.y, 0f),
             Radius = radius
         }, CollisionFilter.Default, CreatePhysicsMaterial());
         RenderMaterial material = new RenderMaterial(sourceMaterial) { enableInstancing = true };
@@ -232,14 +232,14 @@ public sealed partial class LevelMapSpawner
         if (query.IsEmptyIgnoreFilter)
         {
             PhysicsStep step = PhysicsStep.Default;
-            step.CollisionTolerance = Mathf.Max(step.CollisionTolerance, _cellSize * 0.1f);
+            step.CollisionTolerance = Mathf.Max(step.CollisionTolerance, GetWorldCellSize() * 0.1f);
             _entityManager.CreateSingleton(step, "Gameplay Physics Step");
         }
         else
         {
             Entity stepEntity = query.GetSingletonEntity();
             PhysicsStep step = _entityManager.GetComponentData<PhysicsStep>(stepEntity);
-            float collisionTolerance = Mathf.Max(step.CollisionTolerance, _cellSize * 0.1f);
+            float collisionTolerance = Mathf.Max(step.CollisionTolerance, GetWorldCellSize() * 0.1f);
             if (!Mathf.Approximately(step.CollisionTolerance, collisionTolerance))
             {
                 step.CollisionTolerance = collisionTolerance;

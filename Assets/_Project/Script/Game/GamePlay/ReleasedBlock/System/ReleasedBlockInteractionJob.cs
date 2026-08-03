@@ -35,7 +35,6 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
                 case ReleasedBlockInteractionType.Conveyor:
                     if (IsInsideBounds(position, request.BoundsMin, request.BoundsMax))
                     {
-                        block.SolidConstraintFrames = ReleasedBlockComponent.SolidConstraintDuration;
                         CommandBuffer.SetComponentEnabled<ReleasedBlockSolidConstraint>(sortKey, entity, true);
                         float currentSpeed = math.dot(velocity.Linear, request.Direction);
                         float targetSpeed = MoveTowards(currentSpeed, request.Speed,
@@ -69,7 +68,6 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
                     {
                         collider.Value = default;
                         block.LockedZ -= request.RenderDepth;
-                        block.SolidConstraintFrames = 0;
                         CommandBuffer.SetComponentEnabled<ReleasedBlockSolidConstraint>(sortKey, entity, false);
                         suctionTransit.ValueRW = true;
                     }
@@ -132,6 +130,9 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
                     break;
             }
         }
+
+        if (block.SuctionPathIndex == byte.MaxValue)
+            velocity.Linear = ClampMagnitude(velocity.Linear, block.MaxPlanarSpeed);
     }
 
     private static float3 GetSegmentFollowTarget(float3 position, float3 segmentStart, float3 segmentEnd,

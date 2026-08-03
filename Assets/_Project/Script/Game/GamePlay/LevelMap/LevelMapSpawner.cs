@@ -11,6 +11,7 @@ public sealed partial class LevelMapSpawner : MonoBehaviour
     private const int MaxInstancesPerBatch = 1023;
     private const float MinimumPhysicsDeltaTime = 0.001f;
     private const float MaxCellTravelPerStep = 0.75f;
+    private const float MaxRadiusTravelPerStep = 0.75f;
 
     private static readonly List<LevelMapSpawner> ActiveSpawners = new();
     private static readonly Dictionary<string, int> SuckedItemCounts = new();
@@ -61,6 +62,7 @@ public sealed partial class LevelMapSpawner : MonoBehaviour
     private NativeArray<Color32> _cellColors;
     private NativeArray<Color32> _cellReleasedColors;
     private NativeArray<byte> _cellSolid;
+    private byte[] _cellSolidSnapshot;
     private NativeArray<ushort> _cellReleasedTypes;
     private NativeArray<Vector3> _authoredMeshVertices;
     private NativeArray<Vector2> _authoredMeshUvs;
@@ -171,6 +173,7 @@ public sealed partial class LevelMapSpawner : MonoBehaviour
 
     private void OnDestroy()
     {
+        CompleteReleasedBlockJobs();
         DisposeDecorations();
         DisposeCutParticles();
         DisposeChunks();

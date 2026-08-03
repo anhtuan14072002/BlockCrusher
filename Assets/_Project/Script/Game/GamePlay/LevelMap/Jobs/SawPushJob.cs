@@ -22,6 +22,7 @@ public sealed partial class LevelMapSpawner
         public float BladeRadius;
         public float MaxVelocity;
         public float CellSize;
+        public float WorldCellSize;
         public int GridWidth;
         public int GridHeight;
         public int OwnerId;
@@ -40,7 +41,6 @@ public sealed partial class LevelMapSpawner
             if (distanceSq > radiusSq)
                 return;
 
-            block.SolidConstraintFrames = ReleasedBlockComponent.SolidConstraintDuration;
             solidConstraint.ValueRW = true;
             float distance = math.sqrt(distanceSq);
             float2 outward = distance > 0.0001f
@@ -56,7 +56,7 @@ public sealed partial class LevelMapSpawner
                              tangent * (TangentialForce * 0.22f * speedScale * radiusPush);
             impulse.y = math.max(0f, impulse.y);
             float3 linear = new float3(velocity.Linear.xy + impulse, 0f);
-            linear = ClampMagnitude(linear, MaxVelocity);
+            linear = ClampMagnitude(linear, math.min(MaxVelocity, block.MaxPlanarSpeed));
             velocity.Linear = RedirectVelocityFromSolid(position, linear);
         }
 
@@ -67,8 +67,8 @@ public sealed partial class LevelMapSpawner
             if (speed <= 0.0001f)
                 return velocity;
             float3 direction = velocity / speed;
-            float nearProbeDistance = CellSize * 0.9f;
-            float farProbeDistance = CellSize * 1.6f;
+            float nearProbeDistance = WorldCellSize * 0.9f;
+            float farProbeDistance = WorldCellSize * 1.6f;
             if (!IsSolidAlongDirection(worldPosition, direction, nearProbeDistance, farProbeDistance))
                 return velocity;
 
@@ -106,7 +106,7 @@ public sealed partial class LevelMapSpawner
         private bool IsSolidAlongDirection(float3 worldPosition, float3 direction,
             float nearProbeDistance, float farProbeDistance)
         {
-            float3 lateralOffset = new float3(-direction.y, direction.x, 0f) * (CellSize * 0.45f);
+            float3 lateralOffset = new float3(-direction.y, direction.x, 0f) * (WorldCellSize * 0.45f);
             float3 nearPoint = worldPosition + direction * nearProbeDistance;
             float3 farPoint = worldPosition + direction * farProbeDistance;
             return IsSolidAtWorldCell(nearPoint) ||

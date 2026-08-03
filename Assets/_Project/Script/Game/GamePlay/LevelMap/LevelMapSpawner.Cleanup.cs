@@ -4,6 +4,12 @@ using UnityEngine;
 
 public sealed partial class LevelMapSpawner
 {
+    private void CompleteReleasedBlockJobs()
+    {
+        if (_ecsWorld != null && _ecsWorld.IsCreated)
+            _entityManager.CompleteAllTrackedJobs();
+    }
+
     private void TrimReleasedBlockEntityList()
     {
         if (!EnsureEcsReady())

@@ -7702,27 +7702,66 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 972235226}
   m_Mesh: {fileID: 4300000, guid: 02712e757d952854d9ac6a89581b5bf7, type: 2}
---- !u!65 &972235232
-BoxCollider:
+--- !u!114 &972235232
+MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 972235226}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 1
-  m_ProvidesContacts: 0
   m_Enabled: 1
-  serializedVersion: 3
-  m_Size: {x: 0.30753192, y: 0.24428058, z: 0.24428046}
-  m_Center: {x: 0.09212619, y: -0.000000014901163, z: 0}
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b275e5f92732148048d7b77e264ac30e, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  m_ForceUniqueID: 0
+  m_PrefabInstanceID: 0
+  m_ShapeType: 0
+  m_PrimitiveCenter: {x: 0.09212619, y: -0.000000014901163, z: 0}
+  m_PrimitiveSize: {x: 0.30753192, y: 0.24428058, z: 0.24428046}
+  m_PrimitiveOrientation:
+    Value: {x: 0, y: 0, z: 0}
+    RotationOrder: 4
+  m_Capsule:
+    Height: 0.30753192
+    Radius: 0.12214029
+    Axis: 0
+  m_Cylinder:
+    Height: 0.30753192
+    Radius: 0.12214029
+    Axis: 0
+  m_CylinderSideCount: 20
+  m_SphereRadius: 0.15376596
+  m_MinimumSkinnedVertexWeight: 0.1
+  m_ConvexHullGenerationParameters:
+    m_SimplificationTolerance: 0.003663884
+    m_BevelRadius: 0
+    m_MinimumAngle: 2.5000002
+  m_CustomMesh: {fileID: 0}
+  m_ForceUnique: 0
+  m_Material:
+    m_SupportsTemplate: 1
+    m_Template: {fileID: 0}
+    m_CollisionResponse:
+      m_Override: 0
+      m_Value: 0
+    m_DetailedStaticMeshCollision:
+      m_Override: 0
+      m_Value: {Value: 0}
+    m_Friction:
+      m_Override: 0
+      m_Value: {Value: 0.5, CombineMode: 0}
+    m_Restitution:
+      m_Override: 0
+      m_Value: {Value: 0, CombineMode: 2}
+    m_BelongsToCategories:
+      m_Override: 0
+    m_CollidesWithCategories:
+      m_Override: 0
+    m_CustomMaterialTags:
+      m_Override: 0
+    m_SerializedVersion: 1
+  m_SerializedVersion: 3
 --- !u!114 &972235233
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7737,6 +7776,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _suctionPoint: {fileID: 1915316454}
   _suctionBoxSize: {x: 0.8, y: 1.35, z: 1}
+  _physicsShape: {fileID: 972235232}
   _suctionForce: 50
   _suctionAcceleration: 32
   _maxBlockVelocity: 8
@@ -7745,6 +7785,7 @@ MonoBehaviour:
   _pathWaypointRadius: 0.35
   _pathLookAhead: 0.25
   _tubeRenderDepth: 0.35
+  _rotationSpeedDegrees: 540
 --- !u!1 &988305463
 GameObject:
   m_ObjectHideFlags: 0

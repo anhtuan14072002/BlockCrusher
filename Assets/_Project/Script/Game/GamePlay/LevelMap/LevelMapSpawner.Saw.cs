@@ -17,6 +17,15 @@ public sealed partial class LevelMapSpawner
         Matrix4x4 cutWorldToLocal = cutLocalToWorld.inverse;
         Vector3 boundsMin = cutLocalBounds.min;
         Vector3 boundsMax = cutLocalBounds.max;
+        float halfCell = _cellSize * 0.5f;
+        Vector3 cellAxisX = cutWorldToLocal.MultiplyVector(_runtimeParent.TransformVector(Vector3.right * halfCell));
+        Vector3 cellAxisY = cutWorldToLocal.MultiplyVector(_runtimeParent.TransformVector(Vector3.up * halfCell));
+        Vector3 cellCutExtents = new(
+            Mathf.Abs(cellAxisX.x) + Mathf.Abs(cellAxisY.x),
+            Mathf.Abs(cellAxisX.y) + Mathf.Abs(cellAxisY.y),
+            0f);
+        Vector3 overlapMin = boundsMin - cellCutExtents;
+        Vector3 overlapMax = boundsMax + cellCutExtents;
         Vector3 min = new(float.PositiveInfinity, float.PositiveInfinity);
         Vector3 max = new(float.NegativeInfinity, float.NegativeInfinity);
         for (int i = 0; i < 4; i++)
@@ -45,10 +54,12 @@ public sealed partial class LevelMapSpawner
 
                 Vector3 cellLocal = GetCellLocalPosition(x, y);
                 Vector3 cutLocal = cutWorldToLocal.MultiplyPoint3x4(_runtimeParent.TransformPoint(cellLocal));
-                if (cutLocal.x < boundsMin.x || cutLocal.x > boundsMax.x ||
-                    cutLocal.y < boundsMin.y || cutLocal.y > boundsMax.y)
+                if (cutLocal.x < overlapMin.x || cutLocal.x > overlapMax.x ||
+                    cutLocal.y < overlapMin.y || cutLocal.y > overlapMax.y)
                     continue;
 
+                if (!releasedAny)
+                    CompleteReleasedBlockJobs();
                 ReleaseCell(cellIndex, x, y, cellLocal, sawCenter, pressSpeed, outwardForce, tangentialForce,
                     spinDirection, bladeRadius, sideDamping, maxVelocity);
                 releasedAny = true;
@@ -65,6 +76,8 @@ public sealed partial class LevelMapSpawner
         Color32 releasedColor = _cellReleasedColors[cellIndex];
         ushort typeIndex = _cellReleasedTypes[cellIndex];
         _cellSolid[cellIndex] = 0;
+        if (_cellSolidSnapshot != null && (uint)cellIndex < (uint)_cellSolidSnapshot.Length)
+            _cellSolidSnapshot[cellIndex] = 0;
         Vector3 releasedWorldPosition = _runtimeParent.TransformPoint(cellLocal);
         EmitCutParticles(releasedWorldPosition, surfaceColor, releasedWorldPosition - sawCenter);
         QueueReleasedBlockSpawn(cellLocal, releasedColor, typeIndex, sawCenter, pressSpeed, outwardForce,
@@ -100,8 +113,9 @@ public sealed partial class LevelMapSpawner
             return false;
 
         float4x4 worldToLocal = ToFloat4x4(_runtimeParent.worldToLocalMatrix);
+        float worldCellSize = GetWorldCellSize();
         float safeMaxVelocity = math.min(_pendingSawMaxVelocity,
-            _cellSize * MaxCellTravelPerStep / math.max(Time.fixedDeltaTime, MinimumPhysicsDeltaTime));
+            worldCellSize * MaxCellTravelPerStep / math.max(Time.fixedDeltaTime, MinimumPhysicsDeltaTime));
 
         job = new SawPushJob
         {
@@ -117,6 +131,7 @@ public sealed partial class LevelMapSpawner
             BladeRadius = _pendingSawRadius,
             MaxVelocity = safeMaxVelocity,
             CellSize = _cellSize,
+            WorldCellSize = worldCellSize,
             GridWidth = _gridWidth,
             GridHeight = _gridHeight,
             OwnerId = _ownerId
@@ -124,7 +139,7 @@ public sealed partial class LevelMapSpawner
 
         return true;
     }
-    internal bool TryCreateSolidConstraintJob(out ReleasedBlockSolidConstraintJob job)
+    internal bool TryCreateSolidConstraintJob(bool resolveAfterPhysics, out ReleasedBlockSolidConstraintJob job)
     {
         job = default;
         if (!_cellSolid.IsCreated || _runtimeParent == null)
@@ -142,6 +157,8 @@ public sealed partial class LevelMapSpawner
                 _offset.x + (_gridWidth - 1) * _cellSize,
                 _offset.y + (_gridHeight - 1) * _cellSize) + _cellSize * 0.98f,
             DeltaTime = Mathf.Max(Time.fixedDeltaTime, MinimumPhysicsDeltaTime),
+            LocalRadiusScale = GetMaxLocalUnitsPerWorldUnit(),
+            ResolveAfterPhysics = resolveAfterPhysics ? (byte)1 : (byte)0,
             GridWidth = _gridWidth,
             GridHeight = _gridHeight,
             OwnerId = _ownerId

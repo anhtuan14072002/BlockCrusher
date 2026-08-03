@@ -47,6 +47,7 @@ public sealed partial class LevelMapSpawner
         LevelObstacle.MaskSpawnCells(_cellSolid, _runtimeParent, _offset, _gridWidth, _gridHeight, _cellSize);
         CreateCutParticles();
         SpawnMetaballWater(waterMarkers);
+        _cellSolidSnapshot = _cellSolid.ToArray();
         CreateChunks();
         CreateDecorations(decorations);
         level.SetActive(false);
@@ -241,6 +242,7 @@ public sealed partial class LevelMapSpawner
     [ContextMenu("Clear")]
     public void Clear()
     {
+        CompleteReleasedBlockJobs();
         ClearMetaballWater();
         DisposeDecorations();
         DisposeCutParticles();
@@ -273,6 +275,7 @@ public sealed partial class LevelMapSpawner
             _cellReleasedColors.Dispose();
         if (_cellSolid.IsCreated)
             _cellSolid.Dispose();
+        _cellSolidSnapshot = null;
         if (_cellReleasedTypes.IsCreated)
             _cellReleasedTypes.Dispose();
     }

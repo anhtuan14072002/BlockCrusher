@@ -36,7 +36,7 @@ public sealed partial class LevelMapSpawner
             velocity = Vector3.ClampMagnitude(velocity, maxVelocity);
             float angularVelocity = ((float)random.NextDouble() * 2f - 1f) * 10f;
             CreateReleasedBlockEntity(position, obstacle.ReleasedColor, obstacle.GetReleasedTypeIndex(i),
-                velocity, maxVelocity, false, true, angularVelocity, false);
+                velocity, maxVelocity, false, true, angularVelocity, true);
         }
     }
 
@@ -74,6 +74,10 @@ public sealed partial class LevelMapSpawner
         bool usesGravity = true)
     {
         ReleasedBlockRuntimeType runtimeType = _releasedBlockTypes[typeIndex];
+        if (!renderAsMetaball)
+            position = ProjectToReleasedBlockPlane(position);
+        maxVelocity = GetSafePhysicsVelocity(maxVelocity, runtimeType.Radius);
+        velocity = Vector3.ClampMagnitude(velocity, maxVelocity);
         if (_releasedBlockEntities.Count >= _maxReleasedPhysicsBlocks)
             TrimReleasedBlockEntityList();
         while (_releasedBlockEntities.Count >= _maxReleasedPhysicsBlocks && _releasedBlockEntities.Count > 0)
@@ -106,12 +110,12 @@ public sealed partial class LevelMapSpawner
             LockedZ = position.z,
             MaxPlanarSpeed = maxVelocity,
             Radius = runtimeType.Radius,
+            PhysicsStepStartPosition = new float3(position.x, position.y, position.z),
             TypeIndex = typeIndex,
             CollectibleId = renderAsMetaball
                 ? new Unity.Collections.FixedString64Bytes("water")
                 : runtimeType.CollectibleId,
             SuctionPathIndex = byte.MaxValue,
-            SolidConstraintFrames = enableSolidConstraint ? ReleasedBlockComponent.SolidConstraintDuration : (byte)0,
             RenderAsMetaball = renderAsMetaball ? (byte)1 : (byte)0,
             UsesGravity = renderAsMetaball || !usesGravity ? (byte)0 : (byte)1
         });
@@ -120,17 +124,33 @@ public sealed partial class LevelMapSpawner
         _releasedBlockEntities.Add(entity);
         return entity;
     }
+    private Vector3 ProjectToReleasedBlockPlane(Vector3 worldPosition)
+    {
+        if (_runtimeParent == null)
+            return worldPosition;
+
+        Vector3 localPosition = _runtimeParent.InverseTransformPoint(worldPosition);
+        localPosition.z = 0f;
+        return _runtimeParent.TransformPoint(localPosition);
+    }
     private float GetSafePhysicsVelocity(float requestedMaxVelocity)
     {
         float fixedDeltaTime = Mathf.Max(Time.fixedDeltaTime, MinimumPhysicsDeltaTime);
-        float maxCellTravelVelocity = _cellSize * MaxCellTravelPerStep / fixedDeltaTime;
+        float maxCellTravelVelocity = GetWorldCellSize() * MaxCellTravelPerStep / fixedDeltaTime;
         return Mathf.Min(requestedMaxVelocity, maxCellTravelVelocity);
+    }
+    private static float GetSafePhysicsVelocity(float requestedMaxVelocity, float worldRadius)
+    {
+        float fixedDeltaTime = Mathf.Max(Time.fixedDeltaTime, MinimumPhysicsDeltaTime);
+        float maxRadiusTravelVelocity = worldRadius * MaxRadiusTravelPerStep / fixedDeltaTime;
+        return Mathf.Min(requestedMaxVelocity, maxRadiusTravelVelocity);
     }
     private Vector3 ApplyReleaseLift(Vector3 worldPosition, Vector3 velocity, float maxVelocity)
     {
         velocity.y = Mathf.Max(0f, velocity.y);
-        float nearProbeDistance = _cellSize * 0.9f;
-        float farProbeDistance = _cellSize * 1.6f;
+        float worldCellSize = GetWorldCellSize();
+        float nearProbeDistance = worldCellSize * 0.9f;
+        float farProbeDistance = worldCellSize * 1.6f;
         if (_releasedBlockLiftSpeed > 0f &&
             !IsSolidAlongDirection(worldPosition, Vector3.up, nearProbeDistance, farProbeDistance))
         {
@@ -145,8 +165,9 @@ public sealed partial class LevelMapSpawner
         if (speed <= 0.0001f)
             return velocity;
         Vector3 direction = velocity / speed;
-        float nearProbeDistance = _cellSize * 0.9f;
-        float farProbeDistance = _cellSize * 1.6f;
+        float worldCellSize = GetWorldCellSize();
+        float nearProbeDistance = worldCellSize * 0.9f;
+        float farProbeDistance = worldCellSize * 1.6f;
         if (!IsSolidAlongDirection(worldPosition, direction, nearProbeDistance, farProbeDistance))
             return velocity;
         Vector3 tangent = new Vector3(-direction.y, direction.x, 0f);
@@ -182,7 +203,7 @@ public sealed partial class LevelMapSpawner
     private bool IsSolidAlongDirection(Vector3 worldPosition, Vector3 direction,
         float nearProbeDistance, float farProbeDistance)
     {
-        Vector3 lateralOffset = new Vector3(-direction.y, direction.x, 0f) * (_cellSize * 0.45f);
+        Vector3 lateralOffset = new Vector3(-direction.y, direction.x, 0f) * (GetWorldCellSize() * 0.45f);
         Vector3 nearPoint = worldPosition + direction * nearProbeDistance;
         Vector3 farPoint = worldPosition + direction * farProbeDistance;
         return IsSolidAtWorldCell(nearPoint) ||

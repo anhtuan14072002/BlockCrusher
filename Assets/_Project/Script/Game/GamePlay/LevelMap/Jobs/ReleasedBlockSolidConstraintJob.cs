@@ -18,6 +18,8 @@ public sealed partial class LevelMapSpawner
         public float2 GridBoundsMin;
         public float2 GridBoundsMax;
         public float DeltaTime;
+        public float LocalRadiusScale;
+        public byte ResolveAfterPhysics;
         public int GridWidth;
         public int GridHeight;
         public int OwnerId;
@@ -27,30 +29,89 @@ public sealed partial class LevelMapSpawner
         {
             if (block.OwnerId != OwnerId)
                 return;
-            if (block.SuctionPathIndex != byte.MaxValue || block.SolidConstraintFrames == 0)
+            if (block.SuctionPathIndex != byte.MaxValue)
             {
-                block.SolidConstraintFrames = 0;
                 solidConstraint.ValueRW = false;
                 return;
             }
 
-            block.SolidConstraintFrames--;
-
             float3 position = transform.Position;
-            float3 resolvedPosition = ResolvePenetration(position, block.Radius);
+            float localRadius = block.Radius * LocalRadiusScale;
+
+            if (ResolveAfterPhysics != 0)
+            {
+                transform.Position = ResolveSweptMotion(
+                    block.PhysicsStepStartPosition, position, localRadius, ref velocity);
+                block.PhysicsStepStartPosition = transform.Position;
+                DisableOutsideGrid(transform.Position, localRadius, ref solidConstraint);
+                return;
+            }
+
+            float3 localPosition = math.transform(WorldToLocal, position);
+            float2 constraintMargin = new float2(localRadius + CellSize);
+            if (math.any((localPosition.xy < GridBoundsMin - constraintMargin) |
+                         (localPosition.xy > GridBoundsMax + constraintMargin)))
+            {
+                solidConstraint.ValueRW = false;
+                return;
+            }
+
+            float3 resolvedPosition = ResolvePenetration(position, localRadius);
             ApplyCorrection(ref velocity, resolvedPosition - position);
             transform.Position = resolvedPosition;
+            block.PhysicsStepStartPosition = resolvedPosition;
 
             float3 predictedPosition = resolvedPosition + velocity.Linear * DeltaTime;
             predictedPosition.z = resolvedPosition.z;
-            float3 resolvedPrediction = ResolvePenetration(predictedPosition, block.Radius);
+            float3 resolvedPrediction = ResolvePenetration(predictedPosition, localRadius);
             ApplyCorrection(ref velocity, resolvedPrediction - predictedPosition);
+        }
 
-            if (block.SolidConstraintFrames == 0)
+        private float3 ResolveSweptMotion(float3 startWorld, float3 endWorld, float localBlockRadius,
+            ref PhysicsVelocity velocity)
+        {
+            float3 resolvedStart = ResolvePenetration(startWorld, localBlockRadius);
+            ApplyCorrection(ref velocity, resolvedStart - startWorld);
+            startWorld = resolvedStart;
+
+            float3 startLocal = math.transform(WorldToLocal, startWorld);
+            float3 endLocal = math.transform(WorldToLocal, endWorld);
+            float localDistance = math.distance(startLocal.xy, endLocal.xy);
+            int requiredSteps = (int)math.ceil(localDistance / math.max(CellSize * 0.2f, 0.0001f));
+            if (requiredSteps <= 0)
+                return ResolvePenetration(endWorld, localBlockRadius);
+
+            if (requiredSteps > 128)
+            {
+                velocity.Linear.xy = float2.zero;
+                return startWorld;
+            }
+
+            for (int step = 1; step <= requiredSteps; step++)
+            {
+                float3 sampleWorld = math.lerp(startWorld, endWorld, step / (float)requiredSteps);
+                float3 resolvedSample = ResolvePenetration(sampleWorld, localBlockRadius);
+                float3 correction = resolvedSample - sampleWorld;
+                if (math.lengthsq(correction.xy) <= 0.00000001f)
+                    continue;
+
+                ApplyCorrection(ref velocity, correction);
+                return resolvedSample;
+            }
+
+            return endWorld;
+        }
+
+        private void DisableOutsideGrid(float3 worldPosition, float localBlockRadius,
+            ref EnabledRefRW<ReleasedBlockSolidConstraint> solidConstraint)
+        {
+            float2 localPosition = math.transform(WorldToLocal, worldPosition).xy;
+            float2 margin = new float2(localBlockRadius + CellSize);
+            if (math.any((localPosition < GridBoundsMin - margin) | (localPosition > GridBoundsMax + margin)))
                 solidConstraint.ValueRW = false;
         }
 
-        private float3 ResolvePenetration(float3 worldPosition, float blockRadius)
+        private float3 ResolvePenetration(float3 worldPosition, float localBlockRadius)
         {
             float3 localPosition = math.transform(WorldToLocal, worldPosition);
             float2 position = localPosition.xy;
@@ -63,14 +124,15 @@ public sealed partial class LevelMapSpawner
                 int centerX = (int)math.round((position.x - Offset.x) / CellSize);
                 int centerY = (int)math.round((position.y - Offset.y) / CellSize);
 
-                for (int y = centerY - 1; y <= centerY + 1; y++)
+                int searchRadius = (int)math.ceil(localBlockRadius / CellSize + 0.5f);
+                for (int y = centerY - searchRadius; y <= centerY + searchRadius; y++)
                 {
                     if ((uint)y >= (uint)GridHeight) continue;
 
-                    for (int x = centerX - 1; x <= centerX + 1; x++)
+                    for (int x = centerX - searchRadius; x <= centerX + searchRadius; x++)
                     {
                         if ((uint)x >= (uint)GridWidth || CellSolid[y * GridWidth + x] == 0) continue;
-                        position = ResolveCellPenetration(position, x, y, blockRadius);
+                        position = ResolveCellPenetration(position, x, y, localBlockRadius);
                     }
                 }
 

@@ -13,7 +13,7 @@ namespace Crusher
             for (int iteration = 0; iteration < 2; iteration++)
             {
                 _sawTarget = SolveJointPositions(targetPosition);
-                if (ApplySolvedJoints(out Vector3 contactNormal))
+                if (ApplySolvedJoints(previousSawPosition, out Vector3 contactNormal))
                     return;
 
                 Vector3 movement = _sawTarget - previousSawPosition;
@@ -78,7 +78,7 @@ namespace Crusher
             return _solvePositions[segmentCount];
         }
 
-        private bool ApplySolvedJoints(out Vector3 contactNormal)
+        private bool ApplySolvedJoints(Vector3 previousSawPosition, out Vector3 contactNormal)
         {
             if (LevelObstacle.TryGetJointChainContact(
                     _solvePositions, _activeJointCount, _jointCollisionRadius, out contactNormal))
@@ -102,9 +102,33 @@ namespace Crusher
             Vector3 sawDirection = _solvePositions[_activeJointCount] - _solvePositions[_activeJointCount - 1];
             _saw.position = _solvePositions[_activeJointCount];
             if (_useSawInputRotation && _lastSawMoveDirection.sqrMagnitude > 0.0001f)
-                _saw.rotation = GetSegmentRotation(_lastSawMoveDirection) * _sawInputRotationOffset;
+            {
+                Quaternion targetRotation;
+                if (_isSuctionMode && _suctionDevice != null)
+                {
+                    targetRotation = _suctionDevice.GetMovementRotation(_saw, _lastSawMoveDirection);
+                    targetRotation = _suctionDevice.ClampToolRotation(_saw, targetRotation);
+                }
+                else
+                {
+                    targetRotation = GetSegmentRotation(_lastSawMoveDirection) * _sawInputRotationOffset;
+                }
+                _saw.rotation = targetRotation;
+            }
             else if (sawDirection.sqrMagnitude > 0.0001f)
-                _saw.rotation = GetSegmentRotation(sawDirection) * _sawRotationOffset;
+            {
+                Quaternion targetRotation;
+                if (_isSuctionMode && _suctionDevice != null)
+                {
+                    targetRotation = _suctionDevice.GetMovementRotation(_saw, sawDirection);
+                    targetRotation = _suctionDevice.ClampToolRotation(_saw, targetRotation);
+                }
+                else
+                {
+                    targetRotation = GetSegmentRotation(sawDirection) * _sawRotationOffset;
+                }
+                _saw.rotation = targetRotation;
+            }
 
             contactNormal = Vector3.zero;
             return true;
@@ -157,7 +181,7 @@ namespace Crusher
             }
             
             _solvePositions[segmentCount] = sawPosition;
-            ApplySolvedJoints(out _);
+            ApplySolvedJoints(sawPosition, out _);
         }
 
         private static float GetCoilAngleStep(float currentRadius, float nextRadius, float segmentLength)

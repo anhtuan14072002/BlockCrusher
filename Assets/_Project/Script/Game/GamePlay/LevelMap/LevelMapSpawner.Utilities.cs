@@ -5,6 +5,26 @@ using PhysicsMaterial = Unity.Physics.Material;
 
 public sealed partial class LevelMapSpawner
 {
+    private float GetWorldCellSize()
+    {
+        if (_runtimeParent == null || _cellSize <= 0f)
+            return _cellSize;
+
+        float worldX = _runtimeParent.TransformVector(Vector3.right * _cellSize).magnitude;
+        float worldY = _runtimeParent.TransformVector(Vector3.up * _cellSize).magnitude;
+        return Mathf.Min(worldX, worldY);
+    }
+
+    private float GetMaxLocalUnitsPerWorldUnit()
+    {
+        if (_runtimeParent == null)
+            return 1f;
+
+        float localPerWorldX = _runtimeParent.InverseTransformVector(Vector3.right).magnitude;
+        float localPerWorldY = _runtimeParent.InverseTransformVector(Vector3.up).magnitude;
+        return Mathf.Max(localPerWorldX, localPerWorldY);
+    }
+
     private PhysicsMaterial CreatePhysicsMaterial()
     {
         PhysicsMaterial material = PhysicsMaterial.Default;

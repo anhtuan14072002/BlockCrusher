@@ -6,7 +6,7 @@ public sealed partial class LevelMapSpawner
 {
     private readonly List<DecorationRuntime> _levelDecorations = new(256);
     private List<int>[] _decorationChunksByCell;
-    private List<int>[] _decorationsByAnchorCell;
+    private List<int>[] _decorationsByCell;
 
     private sealed class DecorationRuntime
     {
@@ -21,6 +21,13 @@ public sealed partial class LevelMapSpawner
         public ushort ReleasedTypeIndex;
     }
 
+    private struct DecorationVertex
+    {
+        public Vector3 Position;
+        public Vector2 Uv;
+        public Color32 Color;
+    }
+
     private void CreateDecorations(LevelDecoration[] decorations)
     {
         DisposeDecorations();
@@ -29,7 +36,7 @@ public sealed partial class LevelMapSpawner
 
         List<int>[] chunkDecorations = new List<int>[_chunks.Count];
         _decorationChunksByCell = new List<int>[_cellSolid.Length];
-        _decorationsByAnchorCell = new List<int>[_cellSolid.Length];
+        _decorationsByCell = new List<int>[_cellSolid.Length];
         Matrix4x4 worldToGrid = _runtimeParent.worldToLocalMatrix;
         for (int i = 0; i < decorations.Length; i++)
         {
@@ -57,31 +64,20 @@ public sealed partial class LevelMapSpawner
 
             int chunkIndex = cellY / _chunkSize * _chunkColumns + cellX / _chunkSize;
             Matrix4x4 matrix = worldToGrid * decoration.transform.localToWorldMatrix;
-            Vector3[] vertices = sourceMesh.vertices;
-            int[] triangles = sourceMesh.triangles;
-            int[] triangleCells = new int[triangles.Length / 3];
-            HashSet<int> coveredCells = new HashSet<int>();
-            for (int triangle = 0; triangle < triangleCells.Length; triangle++)
-            {
-                int index = triangle * 3;
-                Vector3 center = (matrix.MultiplyPoint3x4(vertices[triangles[index]]) +
-                                  matrix.MultiplyPoint3x4(vertices[triangles[index + 1]]) +
-                                  matrix.MultiplyPoint3x4(vertices[triangles[index + 2]])) / 3f;
-                int triangleCell = FindNearestDecorationCell(center,
-                    Mathf.RoundToInt((center.x - _offset.x) / _cellSize),
-                    Mathf.RoundToInt((center.y - _offset.y) / _cellSize));
-                triangleCells[triangle] = triangleCell >= 0 ? triangleCell : cellIndex;
-                coveredCells.Add(triangleCells[triangle]);
-            }
+            BuildSegmentedDecorationGeometry(sourceMesh, matrix, cellIndex,
+                out Vector3[] vertices, out Vector2[] uvs, out Color32[] colors,
+                out int[] triangles, out int[] triangleCells, out HashSet<int> coveredCells);
+            if (triangles.Length == 0)
+                continue;
 
             int releasedTypeIndex = GetOrCreateReleasedBlockType(decoration);
             DecorationRuntime runtime = new DecorationRuntime
             {
                 Vertices = vertices,
-                Uvs = sourceMesh.uv,
-                Colors = sourceMesh.colors32,
+                Uvs = uvs,
+                Colors = colors,
                 Triangles = triangles,
-                Matrix = matrix,
+                Matrix = Matrix4x4.identity,
                 Tint = decoration.Tint,
                 ReleasedColor = decoration.ReleasedColor,
                 TriangleCells = triangleCells,
@@ -97,12 +93,11 @@ public sealed partial class LevelMapSpawner
                 _decorationChunksByCell[coveredCell] ??= new List<int>(1);
                 if (!_decorationChunksByCell[coveredCell].Contains(chunkIndex))
                     _decorationChunksByCell[coveredCell].Add(chunkIndex);
-            }
+                if (runtime.ReleasedTypeIndex == ushort.MaxValue)
+                    continue;
 
-            if (runtime.ReleasedTypeIndex != ushort.MaxValue)
-            {
-                _decorationsByAnchorCell[cellIndex] ??= new List<int>(1);
-                _decorationsByAnchorCell[cellIndex].Add(decorationIndex);
+                _decorationsByCell[coveredCell] ??= new List<int>(1);
+                _decorationsByCell[coveredCell].Add(decorationIndex);
             }
         }
 
@@ -132,6 +127,115 @@ public sealed partial class LevelMapSpawner
             ApplyChunkDecorations(ref chunk);
             _chunks[chunkIndex] = chunk;
         }
+    }
+
+    private void BuildSegmentedDecorationGeometry(Mesh sourceMesh, Matrix4x4 matrix, int fallbackCell,
+        out Vector3[] segmentedVertices, out Vector2[] segmentedUvs, out Color32[] segmentedColors,
+        out int[] segmentedTriangles, out int[] triangleCells, out HashSet<int> coveredCells)
+    {
+        Vector3[] sourceVertices = sourceMesh.vertices;
+        Vector2[] sourceUvs = sourceMesh.uv;
+        Color32[] sourceColors = sourceMesh.colors32;
+        int[] sourceTriangles = sourceMesh.triangles;
+        bool hasUvs = sourceUvs.Length == sourceVertices.Length;
+        bool hasColors = sourceColors.Length == sourceVertices.Length;
+        List<Vector3> vertices = new List<Vector3>(sourceTriangles.Length * 4);
+        List<Vector2> uvs = new List<Vector2>(sourceTriangles.Length * 4);
+        List<Color32> colors = new List<Color32>(sourceTriangles.Length * 4);
+        List<int> triangles = new List<int>(sourceTriangles.Length * 4);
+        List<int> cells = new List<int>(sourceTriangles.Length);
+        HashSet<int> covered = new HashSet<int>();
+        float targetEdgeLength = Mathf.Max(_cellSize * 0.45f, 0.0001f);
+
+        for (int triangle = 0; triangle < sourceTriangles.Length; triangle += 3)
+        {
+            DecorationVertex a = CreateVertex(sourceTriangles[triangle]);
+            DecorationVertex b = CreateVertex(sourceTriangles[triangle + 1]);
+            DecorationVertex c = CreateVertex(sourceTriangles[triangle + 2]);
+            float maxEdgeLength = Mathf.Max(
+                Vector2.Distance(a.Position, b.Position),
+                Mathf.Max(Vector2.Distance(b.Position, c.Position),
+                    Vector2.Distance(c.Position, a.Position)));
+            int subdivisions = Mathf.Clamp(Mathf.CeilToInt(maxEdgeLength / targetEdgeLength), 1, 12);
+            for (int row = 0; row < subdivisions; row++)
+            {
+                for (int column = 0; column < subdivisions - row; column++)
+                {
+                    float inverseSubdivision = 1f / subdivisions;
+                    DecorationVertex lowerLeft = InterpolateTriangle(
+                        a, b, c, row * inverseSubdivision, column * inverseSubdivision);
+                    DecorationVertex lowerRight = InterpolateTriangle(
+                        a, b, c, (row + 1) * inverseSubdivision, column * inverseSubdivision);
+                    DecorationVertex upperLeft = InterpolateTriangle(
+                        a, b, c, row * inverseSubdivision, (column + 1) * inverseSubdivision);
+                    AddSegment(lowerLeft, lowerRight, upperLeft);
+
+                    if (row + column >= subdivisions - 1)
+                        continue;
+                    DecorationVertex upperRight = InterpolateTriangle(
+                        a, b, c, (row + 1) * inverseSubdivision, (column + 1) * inverseSubdivision);
+                    AddSegment(lowerRight, upperRight, upperLeft);
+                }
+            }
+        }
+
+        segmentedVertices = vertices.ToArray();
+        segmentedUvs = uvs.ToArray();
+        segmentedColors = colors.ToArray();
+        segmentedTriangles = triangles.ToArray();
+        triangleCells = cells.ToArray();
+        coveredCells = covered;
+        return;
+
+        DecorationVertex CreateVertex(int sourceIndex)
+        {
+            return new DecorationVertex
+            {
+                Position = matrix.MultiplyPoint3x4(sourceVertices[sourceIndex]),
+                Uv = hasUvs ? sourceUvs[sourceIndex] : Vector2.zero,
+                Color = hasColors ? sourceColors[sourceIndex] : new Color32(255, 255, 255, 255)
+            };
+        }
+
+        void AddSegment(DecorationVertex first, DecorationVertex second, DecorationVertex third)
+        {
+            Vector3 center = (first.Position + second.Position + third.Position) / 3f;
+            int centerX = Mathf.RoundToInt((center.x - _offset.x) / _cellSize);
+            int centerY = Mathf.RoundToInt((center.y - _offset.y) / _cellSize);
+            int cell = FindNearestDecorationCell(center, centerX, centerY);
+            if (cell < 0)
+                cell = fallbackCell;
+
+            AddVertex(first);
+            AddVertex(second);
+            AddVertex(third);
+            int vertexStart = vertices.Count - 3;
+            triangles.Add(vertexStart);
+            triangles.Add(vertexStart + 1);
+            triangles.Add(vertexStart + 2);
+            cells.Add(cell);
+            covered.Add(cell);
+        }
+
+        void AddVertex(DecorationVertex vertex)
+        {
+            vertices.Add(vertex.Position);
+            uvs.Add(vertex.Uv);
+            colors.Add(vertex.Color);
+        }
+    }
+
+    private static DecorationVertex InterpolateTriangle(
+        DecorationVertex a, DecorationVertex b, DecorationVertex c, float bWeight, float cWeight)
+    {
+        float aWeight = 1f - bWeight - cWeight;
+        Color color = (Color)a.Color * aWeight + (Color)b.Color * bWeight + (Color)c.Color * cWeight;
+        return new DecorationVertex
+        {
+            Position = a.Position * aWeight + b.Position * bWeight + c.Position * cWeight,
+            Uv = a.Uv * aWeight + b.Uv * bWeight + c.Uv * cWeight,
+            Color = color
+        };
     }
 
     private int FindNearestDecorationCell(Vector3 localPosition, int centerX, int centerY)
@@ -217,10 +321,10 @@ public sealed partial class LevelMapSpawner
         float pressSpeed, float outwardForce, float tangentialForce, float spinDirection,
         float bladeRadius, float sideDamping, float maxVelocity)
     {
-        if (_decorationsByAnchorCell == null || (uint)cellIndex >= (uint)_decorationsByAnchorCell.Length)
+        if (_decorationsByCell == null || (uint)cellIndex >= (uint)_decorationsByCell.Length)
             return;
 
-        List<int> decorationIndices = _decorationsByAnchorCell[cellIndex];
+        List<int> decorationIndices = _decorationsByCell[cellIndex];
         if (decorationIndices == null)
             return;
 
@@ -281,6 +385,6 @@ public sealed partial class LevelMapSpawner
         }
         _levelDecorations.Clear();
         _decorationChunksByCell = null;
-        _decorationsByAnchorCell = null;
+        _decorationsByCell = null;
     }
 }

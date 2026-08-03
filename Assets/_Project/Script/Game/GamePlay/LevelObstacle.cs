@@ -187,12 +187,25 @@ public sealed class LevelObstacle : MonoBehaviour
             sawCollider, ToFloat3(from), ToFloat3(to), ToQuaternion(sawRotation));
         closestHit = default;
         float closestFraction = 1f;
+        return TryCastObstacle(input, ref closestHit, ref closestFraction, false);
+    }
+
+    internal static bool TryCastTool(ColliderCastInput input,
+        ref ColliderCastHit closestHit, ref float closestFraction)
+    {
+        return TryCastObstacle(input, ref closestHit, ref closestFraction, true);
+    }
+
+    private static bool TryCastObstacle(ColliderCastInput input,
+        ref ColliderCastHit closestHit, ref float closestFraction, bool includeBreakable)
+    {
         bool hasHit = false;
 
         for (int i = 0; i < ActiveObstacles.Count; i++)
         {
             LevelObstacle obstacle = ActiveObstacles[i];
-            if (obstacle == null || obstacle._breakable != null || !obstacle.EnsureCollider() ||
+            if (obstacle == null || (!includeBreakable && obstacle._breakable != null) ||
+                !obstacle.EnsureCollider() ||
                 !obstacle._rigidBody.CastCollider(input, out ColliderCastHit hit) ||
                 hit.Fraction >= closestFraction)
             {
