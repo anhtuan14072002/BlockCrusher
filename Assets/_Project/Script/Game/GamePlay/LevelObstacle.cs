@@ -22,9 +22,11 @@ public sealed class LevelObstacle : MonoBehaviour
     private Aabb _bounds;
     private World _physicsWorld;
     private Entity _physicsEntity;
+    private BreakableObstacle _breakable;
 
     private void OnEnable()
     {
+        _breakable ??= GetComponent<BreakableObstacle>();
         if (!ActiveObstacles.Contains(this))
             ActiveObstacles.Add(this);
 
@@ -75,8 +77,11 @@ public sealed class LevelObstacle : MonoBehaviour
     }
 
     internal static Vector3 ClampSawTarget(Vector3 from, Vector3 to,
-        BlobAssetReference<ColliderBlob> sawCollider, Quaternion sawRotation)
+        BlobAssetReference<ColliderBlob> sawCollider, Quaternion sawRotation,
+        float damage, Vector3 sawDirection, out bool damagedObstacle)
     {
+        damagedObstacle = DamageBreakableSawContact(
+            from, to, sawCollider, sawRotation, damage, sawDirection);
         Vector3 position = from;
         Vector3 remaining = to - from;
         for (int iteration = 0; iteration < 2; iteration++)
@@ -98,6 +103,31 @@ public sealed class LevelObstacle : MonoBehaviour
         }
 
         return position;
+    }
+
+    private static bool DamageBreakableSawContact(Vector3 from, Vector3 to,
+        BlobAssetReference<ColliderBlob> sawCollider, Quaternion sawRotation, float damage, Vector3 sawDirection)
+    {
+        ColliderCastInput castInput = new ColliderCastInput(
+            sawCollider, ToFloat3(from), ToFloat3(to), ToQuaternion(sawRotation));
+        ColliderDistanceInput distanceInput = new ColliderDistanceInput(
+            sawCollider, 0f, new RigidTransform(ToQuaternion(sawRotation), ToFloat3(to)));
+
+        for (int i = 0; i < ActiveObstacles.Count; i++)
+        {
+            LevelObstacle obstacle = ActiveObstacles[i];
+            if (obstacle == null || obstacle._breakable == null || !obstacle.EnsureCollider())
+                continue;
+
+            if (!obstacle._rigidBody.CastCollider(castInput) &&
+                !obstacle._rigidBody.CalculateDistance(distanceInput))
+                continue;
+
+            obstacle._breakable.ApplySawDamage(damage, sawDirection);
+            return true;
+        }
+
+        return false;
     }
 
     internal static bool TryGetJointChainContact(
@@ -162,7 +192,7 @@ public sealed class LevelObstacle : MonoBehaviour
         for (int i = 0; i < ActiveObstacles.Count; i++)
         {
             LevelObstacle obstacle = ActiveObstacles[i];
-            if (obstacle == null || !obstacle.EnsureCollider() ||
+            if (obstacle == null || obstacle._breakable != null || !obstacle.EnsureCollider() ||
                 !obstacle._rigidBody.CastCollider(input, out ColliderCastHit hit) ||
                 hit.Fraction >= closestFraction)
             {

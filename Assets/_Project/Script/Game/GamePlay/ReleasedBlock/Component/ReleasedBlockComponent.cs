@@ -16,6 +16,7 @@ public struct ReleasedBlockComponent : IComponentData
     public byte SuctionPathIndex;
     public byte SolidConstraintFrames;
     public byte RenderAsMetaball;
+    public byte UsesGravity;
 }
 
 public struct SuctionTransit : IComponentData, IEnableableComponent

@@ -6,6 +6,40 @@ using UnityEngine;
 
 public sealed partial class LevelMapSpawner
 {
+    internal void SpawnBreakableFragments(BreakableObstacle obstacle, Vector3 sawDirection)
+    {
+        if (!EnsureReleasedBlockResources() || !EnsureEcsReady())
+            return;
+
+        Mesh sourceMesh = obstacle.GetComponent<MeshFilter>().sharedMesh;
+        Bounds bounds = sourceMesh.bounds;
+        Vector3 center = obstacle.transform.TransformPoint(bounds.center);
+        Vector3 pushDirection = sawDirection;
+        pushDirection.z = 0f;
+        pushDirection = pushDirection.sqrMagnitude > 0.0001f ? pushDirection.normalized : Vector3.down;
+        float maxVelocity = GetSafePhysicsVelocity(Mathf.Max(1f, obstacle.BreakForce * 2f));
+        var random = new System.Random(obstacle.GetInstanceID());
+
+        for (int i = 0; i < obstacle.ShardCount; i++)
+        {
+            Vector3 localPosition = new(
+                Mathf.Lerp(bounds.min.x, bounds.max.x, (float)random.NextDouble()),
+                Mathf.Lerp(bounds.min.y, bounds.max.y, (float)random.NextDouble()),
+                Mathf.Lerp(bounds.min.z, bounds.max.z, (float)random.NextDouble()));
+            Vector3 position = obstacle.transform.TransformPoint(localPosition);
+            Vector3 outward = position - center;
+            outward.z = 0f;
+            outward = outward.sqrMagnitude > 0.0001f ? outward.normalized : Vector3.up;
+            Vector3 velocity = pushDirection * (obstacle.BreakForce * 0.55f) +
+                               outward * (obstacle.BreakForce * 0.35f) + Vector3.up * 0.4f;
+            velocity.y = Mathf.Max(0f, velocity.y);
+            velocity = Vector3.ClampMagnitude(velocity, maxVelocity);
+            float angularVelocity = ((float)random.NextDouble() * 2f - 1f) * 10f;
+            CreateReleasedBlockEntity(position, obstacle.ReleasedColor, obstacle.GetReleasedTypeIndex(i),
+                velocity, maxVelocity, false, true, angularVelocity, false);
+        }
+    }
+
     private void QueueReleasedBlockSpawn(Vector3 localPosition, Color32 color, ushort typeIndex, Vector3 sawCenter,
         float pressSpeed, float outwardForce, float tangentialForce, float spinDirection, float bladeRadius,
         float sideDamping, float maxVelocity)
@@ -36,7 +70,8 @@ public sealed partial class LevelMapSpawner
         CreateReleasedBlockEntity(position, color, typeIndex, clampedVelocity, safeMaxVelocity, false, true);
     }
     private Entity CreateReleasedBlockEntity(Vector3 position, Color32 color, ushort typeIndex, Vector3 velocity,
-        float maxVelocity, bool renderAsMetaball, bool enableSolidConstraint)
+        float maxVelocity, bool renderAsMetaball, bool enableSolidConstraint, float angularVelocity = 0f,
+        bool usesGravity = true)
     {
         ReleasedBlockRuntimeType runtimeType = _releasedBlockTypes[typeIndex];
         if (_releasedBlockEntities.Count >= _maxReleasedPhysicsBlocks)
@@ -56,7 +91,7 @@ public sealed partial class LevelMapSpawner
         _entityManager.SetComponentData(entity, new PhysicsVelocity
         {
             Linear = new float3(velocity.x, velocity.y, velocity.z),
-            Angular = float3.zero
+            Angular = new float3(0f, 0f, angularVelocity)
         });
         _entityManager.SetComponentData(entity, new PhysicsDamping
         {
@@ -77,7 +112,8 @@ public sealed partial class LevelMapSpawner
                 : runtimeType.CollectibleId,
             SuctionPathIndex = byte.MaxValue,
             SolidConstraintFrames = enableSolidConstraint ? ReleasedBlockComponent.SolidConstraintDuration : (byte)0,
-            RenderAsMetaball = renderAsMetaball ? (byte)1 : (byte)0
+            RenderAsMetaball = renderAsMetaball ? (byte)1 : (byte)0,
+            UsesGravity = renderAsMetaball || !usesGravity ? (byte)0 : (byte)1
         });
         _entityManager.SetComponentEnabled<ReleasedBlockSolidConstraint>(entity, enableSolidConstraint);
         _entityManager.SetComponentEnabled<SuctionTransit>(entity, false);

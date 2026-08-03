@@ -118,6 +118,23 @@ public sealed partial class LevelMapSpawner
             decoration.CollectibleId, decoration);
     }
 
+    private bool RegisterBreakableObstacle(BreakableObstacle obstacle)
+    {
+        ushort[] typeIndices = new ushort[BreakableObstacle.ShardMeshCount];
+        for (int i = 0; i < typeIndices.Length; i++)
+        {
+            int typeIndex = GetOrCreateReleasedBlockType(obstacle.ReleasedPrefab, obstacle.ReleasedScale,
+                obstacle.CollectibleId, obstacle, obstacle.GetShardMesh(i));
+            if (typeIndex < 0 || typeIndex > ushort.MaxValue)
+                return false;
+
+            typeIndices[i] = (ushort)typeIndex;
+        }
+
+        obstacle.InitializeReleasedTypes(this, typeIndices);
+        return true;
+    }
+
     private int GetOrCreateReleasedBlockType(GameObject prefab, float scale, string collectibleName,
         Component source, Mesh authoredMesh = null)
     {

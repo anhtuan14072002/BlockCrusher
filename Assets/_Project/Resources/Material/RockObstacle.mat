@@ -63,6 +63,9 @@ Material:
     m_Floats:
     - _BumpScale: 1
     - _Cutoff: 0.5
+    - _CrackAmount: 0
+    - _CrackScale: 5
+    - _CrackWidth: 0.008
     - _DetailNormalMapScale: 1
     - _DstBlend: 0
     - _EdgeStrength: 0.12
@@ -81,6 +84,7 @@ Material:
     - _ZWrite: 1
     m_Colors:
     - _Color: {r: 0.62, g: 0.64, b: 0.66, a: 1}
+    - _CrackColor: {r: 0.08, g: 0.08, b: 0.08, a: 1}
     - _EdgeColor: {r: 0.28, g: 0.3, b: 0.32, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
   m_BuildTextureStacks: []

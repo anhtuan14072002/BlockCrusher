@@ -34,7 +34,15 @@ public sealed partial class LevelMapSpawner
 
         LevelObstacle[] obstacles = level.GetComponentsInChildren<LevelObstacle>(true);
         for (int i = 0; i < obstacles.Length; i++)
+        {
             obstacles[i].transform.SetParent(_runtimeParent, true);
+            if (obstacles[i].TryGetComponent(out BreakableObstacle _))
+            {
+                Vector3 localPosition = obstacles[i].transform.localPosition;
+                localPosition.z = -_chunkColliderDepth;
+                obstacles[i].transform.localPosition = localPosition;
+            }
+        }
 
         LevelObstacle.MaskSpawnCells(_cellSolid, _runtimeParent, _offset, _gridWidth, _gridHeight, _cellSize);
         CreateCutParticles();
@@ -123,6 +131,16 @@ public sealed partial class LevelMapSpawner
             _cellReleasedTypes[cell] = (ushort)typeIndex;
             _cellColors[cell] = block.MapColor;
             _cellReleasedColors[cell] = block.ReleasedColor;
+        }
+
+        BreakableObstacle[] breakableObstacles = level.GetComponentsInChildren<BreakableObstacle>(true);
+        for (int i = 0; i < breakableObstacles.Length; i++)
+        {
+            if (RegisterBreakableObstacle(breakableObstacles[i]))
+                continue;
+
+            DisposeCells();
+            return false;
         }
 
         BuildAuthoredMeshLibrary();

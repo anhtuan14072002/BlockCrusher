@@ -1,3 +1,4 @@
+#pragma warning disable SGICE003
 using Unity.Burst;
 using Unity.Entities;
 using Unity.Physics;
@@ -27,3 +28,4 @@ public partial struct ReleasedBlockPlanarConstraintSystem : ISystem
         state.Dependency = new ReleasedBlockPlanarConstraintJob().ScheduleParallel(_query, state.Dependency);
     }
 }
+#pragma warning restore SGICE003

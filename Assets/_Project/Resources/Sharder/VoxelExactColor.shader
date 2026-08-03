@@ -10,6 +10,10 @@ Shader "BlockCrusher/VoxelExactColor"
         _SoilTex ("Soil Texture", 2D) = "gray" {}
         _SoilStrength ("Soil Strength", Range(0,0.35)) = 0.12
         _SoilTiling ("Soil Tiling", Float) = 0.65
+        _CrackColor ("Crack Color", Color) = (0.08,0.08,0.08,1)
+        _CrackAmount ("Crack Amount", Range(0,1)) = 0
+        _CrackScale ("Crack Scale", Float) = 5
+        _CrackWidth ("Crack Width", Range(0.001,0.1)) = 0.008
     }
 
     SubShader
@@ -36,10 +40,14 @@ Shader "BlockCrusher/VoxelExactColor"
             sampler2D _SoilTex;
             half _SoilStrength;
             half _SoilTiling;
+            fixed4 _CrackColor;
+            half _CrackScale;
+            half _CrackWidth;
 
             UNITY_INSTANCING_BUFFER_START(Props)
                 UNITY_DEFINE_INSTANCED_PROP(fixed4, _Color)
                 UNITY_DEFINE_INSTANCED_PROP(half, _UseVertexColor)
+                UNITY_DEFINE_INSTANCED_PROP(half, _CrackAmount)
             UNITY_INSTANCING_BUFFER_END(Props)
 
             struct appdata
@@ -56,6 +64,7 @@ Shader "BlockCrusher/VoxelExactColor"
                 fixed4 color : COLOR;
                 float2 uv : TEXCOORD0;
                 float2 soilUv : TEXCOORD1;
+                float2 crackUv : TEXCOORD2;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -68,7 +77,46 @@ Shader "BlockCrusher/VoxelExactColor"
                 o.color = v.color;
                 o.uv = v.uv;
                 o.soilUv = mul(unity_ObjectToWorld, v.vertex).xy * _SoilTiling;
+                o.crackUv = v.vertex.xy * _CrackScale;
                 return o;
+            }
+
+            float2 Hash22(float2 p)
+            {
+                float3 p3 = frac(float3(p.xyx) * float3(0.1031, 0.1030, 0.0973));
+                p3 += dot(p3, p3.yzx + 33.33);
+                return frac((p3.xx + p3.yz) * p3.zy);
+            }
+
+            float2 VoronoiEdge(float2 p)
+            {
+                float2 cell = floor(p);
+                float2 local = frac(p);
+                float nearest = 10;
+                float secondNearest = 10;
+                float reveal = 0;
+
+                for (int y = -1; y <= 1; y++)
+                {
+                    for (int x = -1; x <= 1; x++)
+                    {
+                        float2 offset = float2(x, y);
+                        float2 feature = offset + Hash22(cell + offset) - local;
+                        float distanceSquared = dot(feature, feature);
+                        if (distanceSquared < nearest)
+                        {
+                            secondNearest = nearest;
+                            nearest = distanceSquared;
+                            reveal = Hash22(cell + offset + 17.17).x;
+                        }
+                        else if (distanceSquared < secondNearest)
+                        {
+                            secondNearest = distanceSquared;
+                        }
+                    }
+                }
+
+                return float2((sqrt(secondNearest) - sqrt(nearest)) * 0.5, reveal);
             }
 
             fixed4 frag(v2f i) : SV_Target
@@ -97,6 +145,13 @@ Shader "BlockCrusher/VoxelExactColor"
 
                 half soil = tex2D(_SoilTex, i.soilUv).r;
                 color.rgb *= lerp(1 - _SoilStrength, 1 + _SoilStrength, soil);
+
+                half crackAmount = UNITY_ACCESS_INSTANCED_PROP(Props, _CrackAmount);
+                float2 crack = VoronoiEdge(i.crackUv);
+                float crackFeather = max(fwidth(crack.x), 0.001);
+                float crackLine = 1 - smoothstep(_CrackWidth, _CrackWidth + crackFeather, crack.x);
+                float crackReveal = step(crack.y, saturate(crackAmount * 1.15));
+                color.rgb = lerp(color.rgb, _CrackColor.rgb, crackLine * crackReveal);
 
                 return color;
             }

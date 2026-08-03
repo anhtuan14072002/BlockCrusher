@@ -17,6 +17,7 @@ public sealed class SawBlockCutter : MonoBehaviour
     [SerializeField] private float _cutSweepStep = 0.08f;
     [SerializeField, Range(0f, 1f)] private float _sideDampingOnContact = 0.35f;
     [SerializeField] private float _maxBlockVelocity = 6f;
+    [SerializeField, Min(0f)] private float _obstacleDamagePerSecond = 1f;
 
     [Header("Feedback")]
     [SerializeField] private float _resistanceDuration = 0.18f;
@@ -173,7 +174,16 @@ public sealed class SawBlockCutter : MonoBehaviour
         if (!EnsureObstacleQueryCollider())
             return to;
 
-        return LevelObstacle.ClampSawTarget(from, to, _obstacleQueryCollider, transform.rotation);
+        Vector3 sawDirection = to - from;
+        Vector3 clamped = LevelObstacle.ClampSawTarget(from, to, _obstacleQueryCollider, transform.rotation,
+            _obstacleDamagePerSecond * Time.deltaTime, sawDirection, out bool damagedObstacle);
+        if (damagedObstacle)
+        {
+            RegisterBlockCut();
+            RegisterResistance();
+        }
+
+        return clamped;
     }
 
     private bool EnsureObstacleQueryCollider()

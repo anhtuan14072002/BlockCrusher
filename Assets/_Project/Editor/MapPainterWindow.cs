@@ -17,7 +17,7 @@ public sealed class MapPainterWindow : EditorWindow
     }
 
     private const float DefaultPrefabSize = 1f;
-    private const float OverlayLocalZ = -0.31f;
+    private const float DefaultOverlayLocalZ = -0.31f;
     private const string LevelFolder = "Assets/_Project/Resources/Level";
     private const string LevelSettingsFolder = "Assets/_Project/Editor/MapPainterData";
     private static readonly string[] EditModeLabels = { "None", "Edit" };
@@ -33,7 +33,9 @@ public sealed class MapPainterWindow : EditorWindow
     [SerializeField] private List<GameObject> _overlayPrefabs = new();
     [SerializeField] private List<bool> _selectedOverlayPrefabs = new();
     [SerializeField] private float _overlayScaleMultiplier = 1f;
+    [SerializeField] private float _overlayLocalZ = DefaultOverlayLocalZ;
     [SerializeField] private List<GameObject> _gridPrefabs = new();
+    [SerializeField] private List<MapPainterGridColorLayer> _gridColorLayers = new();
     [SerializeField] private Transform _mapRoot;
     [FormerlySerializedAs("_gridSize")]
     [SerializeField] private float _prefabSize = DefaultPrefabSize;
@@ -146,6 +148,7 @@ public sealed class MapPainterWindow : EditorWindow
             "Giữ Shift + chuột trái để xoá.", MessageType.Info);
 
         EnsureSelectionCount();
+        DrawPrefabDropArea(_prefabs, _selectedPrefabs, PaintType.Block);
         for (int i = 0; i < _prefabs.Count; i++)
         {
             using (new EditorGUILayout.HorizontalScope())
@@ -181,8 +184,9 @@ public sealed class MapPainterWindow : EditorWindow
             "Water / Special Prefabs", "Add Water / Special Prefab Slot", PaintType.SpecialMaterial,
             _specialMaterialPrefabs, _selectedSpecialMaterialPrefabs);
         DrawAdditionalPrefabList(
-            "Overlay Block Prefabs (Z = -0.31)", "Add Overlay Block Prefab Slot", PaintType.Overlay,
+            $"Overlay Block Prefabs (Z = {_overlayLocalZ:0.###})", "Add Overlay Block Prefab Slot", PaintType.Overlay,
             _overlayPrefabs, _selectedOverlayPrefabs);
+        _overlayLocalZ = EditorGUILayout.FloatField("Overlay Z", _overlayLocalZ);
         _overlayScaleMultiplier = Mathf.Max(
             0.01f, EditorGUILayout.FloatField("Overlay Scale Multiplier", _overlayScaleMultiplier));
         EditorGUILayout.EndScrollView();
@@ -194,6 +198,7 @@ public sealed class MapPainterWindow : EditorWindow
     {
         EditorGUILayout.Space();
         EditorGUILayout.LabelField(title, EditorStyles.boldLabel);
+        DrawPrefabDropArea(prefabs, selectedPrefabs, paintType);
         for (int i = 0; i < prefabs.Count; i++)
         {
             using (new EditorGUILayout.HorizontalScope())
@@ -232,6 +237,8 @@ public sealed class MapPainterWindow : EditorWindow
 
         _gridWidth = Mathf.Clamp(EditorGUILayout.IntField("Grid Width", _gridWidth), 1, 200);
         _gridHeight = Mathf.Clamp(EditorGUILayout.IntField("Grid Height", _gridHeight), 1, 200);
+        DrawGridColorLayers();
+        DrawPrefabDropArea(_gridPrefabs, null, PaintType.Block);
 
         for (int i = 0; i < _gridPrefabs.Count; i++)
         {
@@ -267,6 +274,125 @@ public sealed class MapPainterWindow : EditorWindow
         }
     }
 
+    private void DrawGridColorLayers()
+    {
+        EditorGUILayout.Space(2f);
+        EditorGUILayout.LabelField("Grid Color Layers", EditorStyles.boldLabel);
+        EditorGUILayout.HelpBox(
+            "Depth 0 is the top row. Ranges include both ends; the first matching layer is used.",
+            MessageType.None);
+
+        for (int i = 0; i < _gridColorLayers.Count; i++)
+        {
+            MapPainterGridColorLayer layer = _gridColorLayers[i];
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            {
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUILayout.LabelField($"Layer {i + 1}", EditorStyles.boldLabel);
+                    if (GUILayout.Button("-", GUILayout.Width(24f)))
+                    {
+                        _gridColorLayers.RemoveAt(i);
+                        GUIUtility.ExitGUI();
+                    }
+                }
+
+                layer.FromDepth = Mathf.Clamp(
+                    EditorGUILayout.IntField("From Depth", layer.FromDepth), 0, _gridHeight - 1);
+                layer.ToDepth = Mathf.Clamp(
+                    EditorGUILayout.IntField("To Depth", layer.ToDepth), layer.FromDepth, _gridHeight - 1);
+                layer.Color = EditorGUILayout.ColorField("Color", layer.Color);
+            }
+        }
+
+        using (new EditorGUILayout.HorizontalScope())
+        {
+            if (GUILayout.Button("Add Color Layer"))
+            {
+                int fromDepth = _gridColorLayers.Count == 0
+                    ? 0
+                    : Mathf.Min(_gridColorLayers[_gridColorLayers.Count - 1].ToDepth + 1, _gridHeight - 1);
+                _gridColorLayers.Add(new MapPainterGridColorLayer(fromDepth, _gridHeight - 1, Color.white));
+            }
+
+            using (new EditorGUI.DisabledScope(_mapRoot == null || _gridColorLayers.Count == 0))
+            {
+                if (GUILayout.Button("Apply Colors To Existing Grid"))
+                    ApplyGridColorsToExisting();
+            }
+        }
+    }
+
+    private void DrawPrefabDropArea(
+        List<GameObject> prefabs, List<bool> selectedPrefabs, PaintType paintType)
+    {
+        Rect dropArea = GUILayoutUtility.GetRect(0f, 34f, GUILayout.ExpandWidth(true));
+        GUI.Box(dropArea, "Drop Multiple Prefabs Here", EditorStyles.helpBox);
+
+        Event current = Event.current;
+        if (!dropArea.Contains(current.mousePosition) ||
+            (current.type != EventType.DragUpdated && current.type != EventType.DragPerform))
+            return;
+
+        DragAndDrop.visualMode = HasPrefabAssetReference(DragAndDrop.objectReferences)
+            ? DragAndDropVisualMode.Copy
+            : DragAndDropVisualMode.Rejected;
+        if (current.type == EventType.DragPerform && DragAndDrop.visualMode == DragAndDropVisualMode.Copy)
+        {
+            DragAndDrop.AcceptDrag();
+            if (AddPrefabReferences(DragAndDrop.objectReferences, prefabs, selectedPrefabs) > 0 &&
+                selectedPrefabs != null)
+                _paintType = paintType;
+        }
+
+        current.Use();
+    }
+
+    private static bool HasPrefabAssetReference(UnityEngine.Object[] references)
+    {
+        for (int i = 0; i < references.Length; i++)
+        {
+            if (references[i] is GameObject prefab && PrefabUtility.IsPartOfPrefabAsset(prefab))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static int AddPrefabReferences(
+        UnityEngine.Object[] references, List<GameObject> prefabs, List<bool> selectedPrefabs)
+    {
+        int addedCount = 0;
+        for (int i = 0; i < references.Length; i++)
+        {
+            if (references[i] is GameObject prefab && PrefabUtility.IsPartOfPrefabAsset(prefab) &&
+                TryAddPrefab(prefab, prefabs, selectedPrefabs))
+                addedCount++;
+        }
+
+        return addedCount;
+    }
+
+    private static bool TryAddPrefab(
+        GameObject prefab, List<GameObject> prefabs, List<bool> selectedPrefabs)
+    {
+        if (prefab == null || prefabs.Contains(prefab))
+            return false;
+
+        int emptyIndex = prefabs.IndexOf(null);
+        if (emptyIndex >= 0)
+        {
+            prefabs[emptyIndex] = prefab;
+            if (selectedPrefabs != null)
+                selectedPrefabs[emptyIndex] = true;
+            return true;
+        }
+
+        prefabs.Add(prefab);
+        selectedPrefabs?.Add(true);
+        return true;
+    }
+
     private void OnSceneGUI(SceneView sceneView)
     {
         ApplySelectedPreviewColor();
@@ -282,7 +408,7 @@ public sealed class MapPainterWindow : EditorWindow
             return;
 
         bool erase = IsEraseInput(current.button, current.shift);
-        DrawPreview(GetPaintLocalPosition(localPosition, _paintType), erase);
+        DrawPreview(GetPaintLocalPosition(localPosition, _paintType, _overlayLocalZ), erase);
 
         if (current.type == EventType.Layout)
             HandleUtility.AddDefaultControl(GUIUtility.GetControlID(FocusType.Passive));
@@ -341,7 +467,7 @@ public sealed class MapPainterWindow : EditorWindow
             return;
 
         _lastPaintedCell = cell;
-        localPosition = GetPaintLocalPosition(localPosition, _paintType);
+        localPosition = GetPaintLocalPosition(localPosition, _paintType, _overlayLocalZ);
         if (erase)
         {
             EraseAt(localPosition);
@@ -352,7 +478,8 @@ public sealed class MapPainterWindow : EditorWindow
         if (prefab == null)
             return;
 
-        if (_paintType == PaintType.Block && _gridPrefabs.Contains(prefab))
+        bool useGridColorLayer = _paintType == PaintType.Block && _gridPrefabs.Contains(prefab);
+        if (useGridColorLayer)
             prefab = GetGridPrefabForCell(cell.x, cell.y);
 
         bool isWater = prefab.GetComponentInChildren<LevelWater>(true) != null;
@@ -362,6 +489,9 @@ public sealed class MapPainterWindow : EditorWindow
             return;
 
         GameObject instance = CreateBlock(prefab, localPosition, _paintType != PaintType.Overlay);
+        if (useGridColorLayer)
+            ApplyGridLayerColor(instance, cell.y);
+
         if (_paintType == PaintType.Overlay)
         {
             instance.transform.localScale *= _overlayScaleMultiplier;
@@ -409,7 +539,9 @@ public sealed class MapPainterWindow : EditorWindow
                 if (!occupiedCells.Add(cell))
                     continue;
 
-                CreateBlock(GetGridPrefabForCell(x, y), GetGridLocalPosition(x, y, cellStep));
+                GameObject instance = CreateBlock(
+                    GetGridPrefabForCell(x, y), GetGridLocalPosition(x, y, cellStep));
+                ApplyGridLayerColor(instance, y);
             }
         }
         EndStroke();
@@ -446,6 +578,7 @@ public sealed class MapPainterWindow : EditorWindow
 
             PrefabUtility.ReplacePrefabAssetOfPrefabInstance(
                 instance, prefab, InteractionMode.AutomatedAction);
+            ApplyGridLayerColor(instance, cellY);
             ApplyPreviewColor(instance);
             replacedCount++;
         }
@@ -453,6 +586,62 @@ public sealed class MapPainterWindow : EditorWindow
         EditorUtility.SetDirty(_mapRoot.gameObject);
         SceneView.RepaintAll();
         Debug.Log($"Randomized {replacedCount} grid blocks.", _mapRoot);
+    }
+
+    private void ApplyGridColorsToExisting()
+    {
+        Undo.RegisterFullObjectHierarchyUndo(_mapRoot.gameObject, "Apply Grid Color Layers");
+        float cellStep = GetCellStep(_prefabSize, _spacing);
+        int coloredCount = 0;
+        for (int i = 0; i < _mapRoot.childCount; i++)
+        {
+            GameObject instance = _mapRoot.GetChild(i).gameObject;
+            if (instance.GetComponent<LevelBlock>() == null)
+                continue;
+
+            int cellY = Mathf.RoundToInt(instance.transform.localPosition.y / cellStep);
+            if (ApplyGridLayerColor(instance, cellY))
+                coloredCount++;
+        }
+
+        EditorUtility.SetDirty(_mapRoot.gameObject);
+        SceneView.RepaintAll();
+        Debug.Log($"Applied grid color layers to {coloredCount} blocks.", _mapRoot);
+    }
+
+    private bool ApplyGridLayerColor(GameObject instance, int cellY)
+    {
+        if (!TryGetGridLayerColor(_gridColorLayers, _gridHeight, cellY, out Color color))
+            return false;
+
+        LevelBlock block = instance.GetComponent<LevelBlock>();
+        if (block == null)
+            return false;
+
+        SerializedObject serializedBlock = new(block);
+        serializedBlock.FindProperty("_mapColor").colorValue = color;
+        serializedBlock.FindProperty("_releasedColor").colorValue = color;
+        serializedBlock.ApplyModifiedPropertiesWithoutUndo();
+        ApplyPreviewColor(instance);
+        return true;
+    }
+
+    private static bool TryGetGridLayerColor(
+        List<MapPainterGridColorLayer> layers, int gridHeight, int cellY, out Color color)
+    {
+        int depth = gridHeight - 1 - cellY;
+        for (int i = 0; i < layers.Count; i++)
+        {
+            MapPainterGridColorLayer layer = layers[i];
+            if (depth < layer.FromDepth || depth > layer.ToDepth)
+                continue;
+
+            color = layer.Color;
+            return true;
+        }
+
+        color = default;
+        return false;
     }
 
     private void EraseAt(Vector3 localPosition)
@@ -619,10 +808,11 @@ public sealed class MapPainterWindow : EditorWindow
         return new Vector3(x * cellStep, y * cellStep, 0f);
     }
 
-    private static Vector3 GetPaintLocalPosition(Vector3 localPosition, PaintType paintType)
+    private static Vector3 GetPaintLocalPosition(
+        Vector3 localPosition, PaintType paintType, float overlayLocalZ)
     {
         if (paintType == PaintType.Overlay)
-            localPosition.z = OverlayLocalZ;
+            localPosition.z = overlayLocalZ;
 
         return localPosition;
     }
@@ -965,8 +1155,13 @@ public sealed class MapPainterWindow : EditorWindow
         settings.SelectedOverlayPrefabs.Clear();
         settings.SelectedOverlayPrefabs.AddRange(_selectedOverlayPrefabs);
         settings.OverlayScaleMultiplier = _overlayScaleMultiplier;
+        settings.OverlayLocalZ = _overlayLocalZ;
+        settings.HasOverlayLocalZ = true;
         settings.GridPrefabs.Clear();
         settings.GridPrefabs.AddRange(_gridPrefabs);
+        settings.GridColorLayers.Clear();
+        for (int i = 0; i < _gridColorLayers.Count; i++)
+            settings.GridColorLayers.Add(new MapPainterGridColorLayer(_gridColorLayers[i]));
         settings.PaintType = (int)_paintType;
         settings.PrefabSize = _prefabSize;
         settings.Spacing = _spacing;
@@ -1000,8 +1195,12 @@ public sealed class MapPainterWindow : EditorWindow
         _selectedOverlayPrefabs.Clear();
         _selectedOverlayPrefabs.AddRange(settings.SelectedOverlayPrefabs);
         _overlayScaleMultiplier = Mathf.Max(0.01f, settings.OverlayScaleMultiplier);
+        _overlayLocalZ = settings.HasOverlayLocalZ ? settings.OverlayLocalZ : DefaultOverlayLocalZ;
         _gridPrefabs.Clear();
         _gridPrefabs.AddRange(settings.GridPrefabs);
+        _gridColorLayers.Clear();
+        for (int i = 0; i < settings.GridColorLayers.Count; i++)
+            _gridColorLayers.Add(new MapPainterGridColorLayer(settings.GridColorLayers[i]));
         _paintType = (PaintType)settings.PaintType;
         _prefabSize = settings.PrefabSize;
         _spacing = settings.Spacing;
@@ -1091,14 +1290,28 @@ public sealed class MapPainterWindow : EditorWindow
             "Map Painter erase input failed.");
         Debug.Assert(GetGridLocalPosition(2, 3, prefabSize) == new Vector3(2.4f, 3.6f, 0f),
             "Map Painter grid generation position failed.");
-        Debug.Assert(GetPaintLocalPosition(Vector3.zero, PaintType.Overlay).z == OverlayLocalZ,
+        Debug.Assert(GetPaintLocalPosition(Vector3.zero, PaintType.Overlay, DefaultOverlayLocalZ).z ==
+                     DefaultOverlayLocalZ,
             "Map Painter overlay depth failed.");
+        Debug.Assert(GetPaintLocalPosition(Vector3.zero, PaintType.Overlay, 0.75f).z == 0.75f,
+            "Map Painter custom overlay depth failed.");
         System.Random rotationRandom = new(1234);
         Debug.Assert(!Mathf.Approximately(
                 GetRandomZAngle(rotationRandom), GetRandomZAngle(rotationRandom)),
             "Map Painter overlay random rotation failed.");
         Debug.Assert(PositiveModulo(-1, 3) == 2 && PositiveModulo(4, 3) == 1,
             "Map Painter mosaic indexing failed.");
+        List<MapPainterGridColorLayer> colorLayers = new()
+        {
+            new MapPainterGridColorLayer(0, 1, Color.yellow),
+            new MapPainterGridColorLayer(2, 4, Color.red)
+        };
+        Debug.Assert(TryGetGridLayerColor(colorLayers, 5, 4, out Color topColor) &&
+                     topColor == Color.yellow &&
+                     TryGetGridLayerColor(colorLayers, 5, 0, out Color bottomColor) &&
+                     bottomColor == Color.red &&
+                     !TryGetGridLayerColor(colorLayers, 5, -1, out _),
+            "Map Painter grid color layer ranges failed.");
 
         GameObject duplicateRoot = new("MapPainterDuplicateSelfCheck");
         Material previewMaterial = null;
@@ -1114,6 +1327,14 @@ public sealed class MapPainterWindow : EditorWindow
             CollectDuplicateLevelBlocks(duplicateRoot.transform, duplicateBlocks);
             Debug.Assert(duplicateBlocks.Count == 1 && duplicateBlocks[0].gameObject == duplicate,
                 "Map Painter duplicate block detection failed.");
+
+            List<GameObject> droppedPrefabs = new() { null };
+            List<bool> droppedSelections = new() { false };
+            Debug.Assert(TryAddPrefab(first, droppedPrefabs, droppedSelections) &&
+                         TryAddPrefab(duplicate, droppedPrefabs, droppedSelections) &&
+                         !TryAddPrefab(first, droppedPrefabs, droppedSelections) &&
+                         droppedPrefabs.Count == 2 && droppedSelections[0] && droppedSelections[1],
+                "Map Painter multi-prefab drop failed.");
 
             MeshRenderer renderer = first.GetComponent<MeshRenderer>();
             previewMaterial = new Material(Shader.Find("BlockCrusher/VoxelExactColor"));
