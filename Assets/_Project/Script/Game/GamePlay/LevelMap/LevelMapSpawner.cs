@@ -29,7 +29,6 @@ public sealed partial class LevelMapSpawner : MonoBehaviour
     [SerializeField, Range(1, 8)] private int _maxChunkRebuildsPerFrame = 2;
 
     [Header("Released Blocks")]
-    [SerializeField] private float _sawReleaseRadius = 0.18f;
     [SerializeField, Min(0f)] private float _releasedBlockLiftSpeed = 1.5f;
     [SerializeField, Range(0f, 20f)] private float _releasedBlockDamping = 2.5f;
     [SerializeField, Range(0f, 20f)] private float _releasedBlockAngularDamping = 4f;

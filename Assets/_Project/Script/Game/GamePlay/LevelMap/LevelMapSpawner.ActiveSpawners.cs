@@ -14,9 +14,9 @@ public sealed partial class LevelMapSpawner
     internal static int ActiveSpawnerCount => ActiveSpawners.Count;
     internal static LevelMapSpawner GetActiveSpawner(int index) => ActiveSpawners[index];
     internal static void RemoveActiveSpawnerAt(int index) => ActiveSpawners.RemoveAt(index);
-    public static bool ReleaseAtWorldForActiveSpawners(Vector3 worldPoint, Vector3 pressDirection, float pressSpeed,
-        float outwardForce, float tangentialForce, float spinDirection, float bladeRadius, float sideDamping,
-        float maxVelocity)
+    public static bool ReleaseInBoxForActiveSpawners(Matrix4x4 cutLocalToWorld, Bounds cutLocalBounds,
+        Vector3 pressDirection, float pressSpeed, float outwardForce, float tangentialForce, float spinDirection,
+        float bladeRadius, float sideDamping, float maxVelocity)
     {
         bool releasedAny = false;
         for (int i = ActiveSpawners.Count - 1; i >= 0; i--)
@@ -27,8 +27,8 @@ public sealed partial class LevelMapSpawner
                 ActiveSpawners.RemoveAt(i);
                 continue;
             }
-            releasedAny |= spawner.ReleaseAtWorld(worldPoint, pressDirection, pressSpeed, outwardForce, tangentialForce,
-                spinDirection, bladeRadius, sideDamping, maxVelocity);
+            releasedAny |= spawner.ReleaseInBox(cutLocalToWorld, cutLocalBounds, pressDirection, pressSpeed,
+                outwardForce, tangentialForce, spinDirection, bladeRadius, sideDamping, maxVelocity);
         }
         return releasedAny;
     }
@@ -81,10 +81,5 @@ public sealed partial class LevelMapSpawner
             DeltaTime = deltaTime,
             AllowSuctionCapture = allowCapture ? (byte)1 : (byte)0
         });
-    }
-    public static void ScaleSawReleaseRadiusForActiveSpawners(float multiplier)
-    {
-        for (int i = 0; i < ActiveSpawners.Count; i++)
-            ActiveSpawners[i]._sawReleaseRadius *= multiplier;
     }
 }

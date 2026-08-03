@@ -124,7 +124,7 @@ public sealed class SawBlockCutter : MonoBehaviour
         if (!_hasMovedSinceEnable)
             return;
 
-        ReleaseAndPush(collision.collider, collision.GetContact(0).point);
+        ReleaseAndPush(collision.collider);
     }
 
     private void OnCollisionStay(Collision collision)
@@ -132,7 +132,7 @@ public sealed class SawBlockCutter : MonoBehaviour
         if (!_hasMovedSinceEnable)
             return;
 
-        ReleaseAndPush(collision.collider, collision.GetContact(0).point);
+        ReleaseAndPush(collision.collider);
     }
 
     private void OnCollisionExit(Collision collision)
@@ -166,7 +166,6 @@ public sealed class SawBlockCutter : MonoBehaviour
 
         float scaleMultiplier = nextScale / currentScale;
         transform.localScale *= scaleMultiplier;
-        LevelMapSpawner.ScaleSawReleaseRadiusForActiveSpawners(scaleMultiplier);
     }
 
     internal Vector3 ClampObstacleTarget(Vector3 from, Vector3 to)
@@ -216,15 +215,7 @@ public sealed class SawBlockCutter : MonoBehaviour
 
     private void ReleaseAndPush(Collider other)
     {
-        Vector3 contactPoint = other.ClosestPoint(transform.position);
-        ReleaseAndPush(other, contactPoint);
-    }
-
-    private void ReleaseAndPush(Collider other, Vector3 contactPoint)
-    {
-        LevelMapChunk chunk = GetChunk(other);
-        if (chunk != null && chunk.ReleaseAtWorld(contactPoint, _pressDirection, _pressSpeed, _compressionForce,
-                _bladeTangentialForce, _bladeSpinDirection, _bladePushRadius, _sideDampingOnContact, _maxBlockVelocity))
+        if (GetChunk(other) != null && ReleaseCutBoxAt(transform.position))
         {
             RegisterBlockCut();
             RegisterResistance();
@@ -252,12 +243,21 @@ public sealed class SawBlockCutter : MonoBehaviour
         for (int i = 1; i <= steps; i++)
         {
             Vector3 samplePosition = Vector3.Lerp(from, to, i / (float)steps);
-            releasedAny |= LevelMapSpawner.ReleaseAtWorldForActiveSpawners(samplePosition, _pressDirection,
-                _pressSpeed, _compressionForce, _bladeTangentialForce, _bladeSpinDirection, _bladePushRadius,
-                _sideDampingOnContact, _maxBlockVelocity);
+            releasedAny |= ReleaseCutBoxAt(samplePosition);
         }
 
         return releasedAny;
+    }
+
+    private bool ReleaseCutBoxAt(Vector3 position)
+    {
+        if (_meshFilter == null || _meshFilter.sharedMesh == null)
+            return false;
+
+        Matrix4x4 cutLocalToWorld = Matrix4x4.TRS(position, transform.rotation, transform.lossyScale);
+        return LevelMapSpawner.ReleaseInBoxForActiveSpawners(cutLocalToWorld, _meshFilter.sharedMesh.bounds,
+            _pressDirection, _pressSpeed, _compressionForce, _bladeTangentialForce, _bladeSpinDirection,
+            _bladePushRadius, _sideDampingOnContact, _maxBlockVelocity);
     }
 
     private void ClearCache(Collider other)

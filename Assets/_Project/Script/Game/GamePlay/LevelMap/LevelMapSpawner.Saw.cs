@@ -3,49 +3,75 @@ using UnityEngine;
 
 public sealed partial class LevelMapSpawner
 {
-    public bool ReleaseAtWorld(Vector3 worldPoint, Vector3 pressDirection, float pressSpeed, float outwardForce,
-        float tangentialForce, float spinDirection, float bladeRadius, float sideDamping, float maxVelocity)
+    public bool ReleaseInBox(Matrix4x4 cutLocalToWorld, Bounds cutLocalBounds, Vector3 pressDirection,
+        float pressSpeed, float outwardForce, float tangentialForce, float spinDirection, float bladeRadius,
+        float sideDamping, float maxVelocity)
     {
         if (!_cellSolid.IsCreated || _runtimeParent == null)
             return false;
-        QueueSawPush(worldPoint, pressDirection, pressSpeed, outwardForce, tangentialForce, spinDirection,
+
+        Vector3 sawCenter = cutLocalToWorld.MultiplyPoint3x4(cutLocalBounds.center);
+        QueueSawPush(sawCenter, pressDirection, pressSpeed, outwardForce, tangentialForce, spinDirection,
             bladeRadius, maxVelocity);
-        Vector3 localPoint = _runtimeParent.InverseTransformPoint(worldPoint);
-        float radiusSqr = _sawReleaseRadius * _sawReleaseRadius;
-        int centerX = Mathf.RoundToInt((localPoint.x - _offset.x) / _cellSize);
-        int centerY = Mathf.RoundToInt((localPoint.y - _offset.y) / _cellSize);
-        int radiusCells = Mathf.Max(1, Mathf.CeilToInt(_sawReleaseRadius / _cellSize));
-        int minX = Mathf.Max(0, centerX - radiusCells);
-        int maxX = Mathf.Min(_gridWidth - 1, centerX + radiusCells);
-        int minY = Mathf.Max(0, centerY - radiusCells);
-        int maxY = Mathf.Min(_gridHeight - 1, centerY + radiusCells);
+
+        Matrix4x4 cutWorldToLocal = cutLocalToWorld.inverse;
+        Vector3 boundsMin = cutLocalBounds.min;
+        Vector3 boundsMax = cutLocalBounds.max;
+        Vector3 min = new(float.PositiveInfinity, float.PositiveInfinity);
+        Vector3 max = new(float.NegativeInfinity, float.NegativeInfinity);
+        for (int i = 0; i < 4; i++)
+        {
+            Vector3 corner = new(
+                (i & 1) == 0 ? boundsMin.x : boundsMax.x,
+                (i & 2) == 0 ? boundsMin.y : boundsMax.y,
+                cutLocalBounds.center.z);
+            Vector3 gridLocalCorner = _runtimeParent.InverseTransformPoint(cutLocalToWorld.MultiplyPoint3x4(corner));
+            min = Vector3.Min(min, gridLocalCorner);
+            max = Vector3.Max(max, gridLocalCorner);
+        }
+
+        int minX = Mathf.Max(0, Mathf.FloorToInt((min.x - _offset.x) / _cellSize));
+        int maxX = Mathf.Min(_gridWidth - 1, Mathf.CeilToInt((max.x - _offset.x) / _cellSize));
+        int minY = Mathf.Max(0, Mathf.FloorToInt((min.y - _offset.y) / _cellSize));
+        int maxY = Mathf.Min(_gridHeight - 1, Mathf.CeilToInt((max.y - _offset.y) / _cellSize));
         bool releasedAny = false;
         for (int y = minY; y <= maxY; y++)
         {
             for (int x = minX; x <= maxX; x++)
             {
-                Vector3 cellLocal = GetCellLocalPosition(x, y);
-                Vector3 delta = cellLocal - localPoint;
-                if (delta.x * delta.x + delta.y * delta.y > radiusSqr)
-                    continue;
                 int cellIndex = y * _gridWidth + x;
                 if (_cellSolid[cellIndex] == 0)
                     continue;
-                Color32 surfaceColor = _cellColors[cellIndex];
-                Color32 releasedColor = _cellReleasedColors[cellIndex];
-                ushort typeIndex = _cellReleasedTypes[cellIndex];
-                _cellSolid[cellIndex] = 0;
-                Vector3 releasedWorldPosition = _runtimeParent.TransformPoint(cellLocal);
-                EmitCutParticles(releasedWorldPosition, surfaceColor, releasedWorldPosition - worldPoint);
-                QueueReleasedBlockSpawn(cellLocal, releasedColor, typeIndex, worldPoint, pressSpeed,
-                    outwardForce, tangentialForce, spinDirection, bladeRadius, sideDamping, maxVelocity);
-                SpawnReleasedDecorationsAtCell(cellIndex, cellLocal, worldPoint, pressSpeed,
-                    outwardForce, tangentialForce, spinDirection, bladeRadius, sideDamping, maxVelocity);
-                MarkCellChunkDirty(x, y);
+
+                Vector3 cellLocal = GetCellLocalPosition(x, y);
+                Vector3 cutLocal = cutWorldToLocal.MultiplyPoint3x4(_runtimeParent.TransformPoint(cellLocal));
+                if (cutLocal.x < boundsMin.x || cutLocal.x > boundsMax.x ||
+                    cutLocal.y < boundsMin.y || cutLocal.y > boundsMax.y)
+                    continue;
+
+                ReleaseCell(cellIndex, x, y, cellLocal, sawCenter, pressSpeed, outwardForce, tangentialForce,
+                    spinDirection, bladeRadius, sideDamping, maxVelocity);
                 releasedAny = true;
             }
         }
         return releasedAny;
+    }
+
+    private void ReleaseCell(int cellIndex, int cellX, int cellY, Vector3 cellLocal, Vector3 sawCenter,
+        float pressSpeed, float outwardForce, float tangentialForce, float spinDirection, float bladeRadius,
+        float sideDamping, float maxVelocity)
+    {
+        Color32 surfaceColor = _cellColors[cellIndex];
+        Color32 releasedColor = _cellReleasedColors[cellIndex];
+        ushort typeIndex = _cellReleasedTypes[cellIndex];
+        _cellSolid[cellIndex] = 0;
+        Vector3 releasedWorldPosition = _runtimeParent.TransformPoint(cellLocal);
+        EmitCutParticles(releasedWorldPosition, surfaceColor, releasedWorldPosition - sawCenter);
+        QueueReleasedBlockSpawn(cellLocal, releasedColor, typeIndex, sawCenter, pressSpeed, outwardForce,
+            tangentialForce, spinDirection, bladeRadius, sideDamping, maxVelocity);
+        SpawnReleasedDecorationsAtCell(cellIndex, cellLocal, sawCenter, pressSpeed, outwardForce, tangentialForce,
+            spinDirection, bladeRadius, sideDamping, maxVelocity);
+        MarkCellChunkDirty(cellX, cellY);
     }
     private void MarkCellChunkDirty(int cellX, int cellY)
     {

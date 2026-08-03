@@ -29,12 +29,11 @@ public sealed partial class LevelMapSpawner
                 chunkObject.transform.SetParent(_runtimeParent, false);
                 MeshFilter meshFilter = chunkObject.AddComponent<MeshFilter>();
                 MeshRenderer meshRenderer = chunkObject.AddComponent<MeshRenderer>();
-                LevelMapChunk chunk = chunkObject.AddComponent<LevelMapChunk>();
+                chunkObject.AddComponent<LevelMapChunk>();
                 Mesh mesh = new Mesh { name = "LevelChunk_Mesh_" + chunkX + "_" + chunkY };
                 mesh.MarkDynamic();
                 meshFilter.sharedMesh = mesh;
                 meshRenderer.sharedMaterial = _chunkMaterial;
-                chunk.Initialize(this);
                 _chunks.Add(CreateChunkRuntime(mesh, meshRenderer, startX, startY, width, height));
             }
         }
