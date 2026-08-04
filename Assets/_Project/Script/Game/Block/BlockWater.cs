@@ -1,7 +1,6 @@
 using UnityEngine;
 
-[DisallowMultipleComponent]
-public sealed class LevelWater : MonoBehaviour
+public  class LevelWater : MonoBehaviour
 {
     private void OnDrawGizmos()
     {
