@@ -18,9 +18,11 @@ public sealed partial class LevelMapSpawner
         Matrix4x4 cutWorldToLocal = cutLocalToWorld.inverse;
         Vector3 boundsMin = cutLocalBounds.min;
         Vector3 boundsMax = cutLocalBounds.max;
-        float halfCell = _cellSize * 0.5f;
-        Vector3 cellAxisX = cutWorldToLocal.MultiplyVector(_runtimeParent.TransformVector(Vector3.right * halfCell));
-        Vector3 cellAxisY = cutWorldToLocal.MultiplyVector(_runtimeParent.TransformVector(Vector3.up * halfCell));
+        Vector2 halfCell = _cellSize * 0.5f;
+        Vector3 cellAxisX = cutWorldToLocal.MultiplyVector(
+            _runtimeParent.TransformVector(Vector3.right * halfCell.x));
+        Vector3 cellAxisY = cutWorldToLocal.MultiplyVector(
+            _runtimeParent.TransformVector(Vector3.up * halfCell.y));
         Vector3 cellCutExtents = new(
             Mathf.Abs(cellAxisX.x) + Mathf.Abs(cellAxisY.x),
             Mathf.Abs(cellAxisX.y) + Mathf.Abs(cellAxisY.y),
@@ -40,10 +42,10 @@ public sealed partial class LevelMapSpawner
             max = Vector3.Max(max, gridLocalCorner);
         }
 
-        int minX = Mathf.Max(0, Mathf.FloorToInt((min.x - _offset.x) / _cellSize));
-        int maxX = Mathf.Min(_gridWidth - 1, Mathf.CeilToInt((max.x - _offset.x) / _cellSize));
-        int minY = Mathf.Max(0, Mathf.FloorToInt((min.y - _offset.y) / _cellSize));
-        int maxY = Mathf.Min(_gridHeight - 1, Mathf.CeilToInt((max.y - _offset.y) / _cellSize));
+        int minX = Mathf.Max(0, Mathf.FloorToInt((min.x - _offset.x) / _cellSize.x));
+        int maxX = Mathf.Min(_gridWidth - 1, Mathf.CeilToInt((max.x - _offset.x) / _cellSize.x));
+        int minY = Mathf.Max(0, Mathf.FloorToInt((min.y - _offset.y) / _cellSize.y));
+        int maxY = Mathf.Min(_gridHeight - 1, Mathf.CeilToInt((max.y - _offset.y) / _cellSize.y));
         bool releasedAny = false;
         for (int y = minY; y <= maxY; y++)
         {
@@ -224,7 +226,7 @@ public sealed partial class LevelMapSpawner
             SpinDirection = _pendingSawSpinDirection,
             BladeRadius = _pendingSawRadius,
             MaxVelocity = safeMaxVelocity,
-            CellSize = _cellSize,
+            CellSize = ToFloat2(_cellSize),
             WorldCellSize = worldCellSize,
             GridWidth = _gridWidth,
             GridHeight = _gridHeight,
@@ -245,11 +247,11 @@ public sealed partial class LevelMapSpawner
             WorldToLocal = ToFloat4x4(_runtimeParent.worldToLocalMatrix),
             LocalToWorld = ToFloat4x4(_runtimeParent.localToWorldMatrix),
             Offset = ToFloat3(_offset),
-            CellSize = _cellSize,
-            GridBoundsMin = new float2(_offset.x, _offset.y) - _cellSize * 0.98f,
+            CellSize = ToFloat2(_cellSize),
+            GridBoundsMin = new float2(_offset.x, _offset.y) - ToFloat2(_cellSize) * 0.98f,
             GridBoundsMax = new float2(
-                _offset.x + (_gridWidth - 1) * _cellSize,
-                _offset.y + (_gridHeight - 1) * _cellSize) + _cellSize * 0.98f,
+                _offset.x + (_gridWidth - 1) * _cellSize.x,
+                _offset.y + (_gridHeight - 1) * _cellSize.y) + ToFloat2(_cellSize) * 0.98f,
             DeltaTime = Mathf.Max(Time.fixedDeltaTime, MinimumPhysicsDeltaTime),
             LocalRadiusScale = GetMaxLocalUnitsPerWorldUnit(),
             ResolveAfterPhysics = resolveAfterPhysics ? (byte)1 : (byte)0,

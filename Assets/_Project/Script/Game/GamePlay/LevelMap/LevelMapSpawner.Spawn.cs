@@ -78,26 +78,25 @@ public sealed partial class LevelMapSpawner
         }
 
         TypeBlockMap firstBlockMap = firstRenderer.GetComponent<TypeBlockMap>();
-        Vector2 cellSize = GetCellSizeInSpace(firstBlockMap, _runtimeParent);
-        _cellSize = cellSize.x;
-        if (_cellSize <= 0.0001f || Mathf.Abs(cellSize.y - _cellSize) > _cellSize * 0.01f)
+        _cellSize = GetCellSizeInSpace(firstBlockMap, _runtimeParent);
+        if (_cellSize.x <= 0.0001f || _cellSize.y <= 0.0001f)
         {
-            Debug.LogError("Level prefab blocks must use a non-zero square cell size.", level);
+            Debug.LogError("Level prefab blocks must use a non-zero cell size.", level);
             return false;
         }
 
         Vector3 blockSize = GetBlockSizeInSpace(firstRenderer, _runtimeParent);
         _chunkColliderDepth = blockSize.z;
         _offset = new Vector3(min.x, min.y, 0f);
-        _gridWidth = Mathf.RoundToInt((max.x - min.x) / _cellSize) + 1;
-        _gridHeight = Mathf.RoundToInt((max.y - min.y) / _cellSize) + 1;
+        _gridWidth = Mathf.RoundToInt((max.x - min.x) / _cellSize.x) + 1;
+        _gridHeight = Mathf.RoundToInt((max.y - min.y) / _cellSize.y) + 1;
         DisposeCells();
         _cellColors = new NativeArray<Color32>(_gridWidth * _gridHeight, Allocator.Persistent);
         _cellReleasedColors = new NativeArray<Color32>(_gridWidth * _gridHeight, Allocator.Persistent);
         _cellSolid = new NativeArray<byte>(_gridWidth * _gridHeight, Allocator.Persistent);
         _cellReleasedTypes = new NativeArray<ushort>(_gridWidth * _gridHeight, Allocator.Persistent);
 
-        float alignmentTolerance = _cellSize * 0.01f;
+        Vector2 alignmentTolerance = _cellSize * 0.01f;
         for (int i = 0; i < blocks.Length; i++)
         {
             TypeBlockMap blockMap = blocks[i];
@@ -110,11 +109,11 @@ public sealed partial class LevelMapSpawner
             }
 
             Vector3 localPosition = _runtimeParent.InverseTransformPoint(blockMap.transform.position);
-            int x = Mathf.RoundToInt((localPosition.x - _offset.x) / _cellSize);
-            int y = Mathf.RoundToInt((localPosition.y - _offset.y) / _cellSize);
+            int x = Mathf.RoundToInt((localPosition.x - _offset.x) / _cellSize.x);
+            int y = Mathf.RoundToInt((localPosition.y - _offset.y) / _cellSize.y);
             Vector3 cellPosition = GetCellLocalPosition(x, y);
-            if (Mathf.Abs(localPosition.x - cellPosition.x) > alignmentTolerance ||
-                Mathf.Abs(localPosition.y - cellPosition.y) > alignmentTolerance)
+            if (Mathf.Abs(localPosition.x - cellPosition.x) > alignmentTolerance.x ||
+                Mathf.Abs(localPosition.y - cellPosition.y) > alignmentTolerance.y)
             {
                 Debug.LogError($"Level block '{renderer.name}' is not aligned to the {_cellSize} grid.", renderer);
                 DisposeCells();
@@ -201,9 +200,10 @@ public sealed partial class LevelMapSpawner
         if (firstBlock == null)
             return;
 
-        float cellSize = GetCellSizeInSpace(blocks[0], levelPrefab.transform).x;
-        Debug.Assert(cellSize > 0.0001f, "Level prefab block size is invalid.", firstBlock);
-        if (cellSize <= 0.0001f)
+        Vector2 cellSize = GetCellSizeInSpace(blocks[0], levelPrefab.transform);
+        Debug.Assert(cellSize.x > 0.0001f && cellSize.y > 0.0001f,
+            "Level prefab block size is invalid.", firstBlock);
+        if (cellSize.x <= 0.0001f || cellSize.y <= 0.0001f)
             return;
 
         HashSet<Vector2Int> occupiedCells = new HashSet<Vector2Int>();
@@ -219,11 +219,11 @@ public sealed partial class LevelMapSpawner
 
             Vector3 localPosition = levelPrefab.transform.InverseTransformPoint(blockMap.transform.position);
             Vector2Int cell = new Vector2Int(
-                Mathf.RoundToInt(localPosition.x / cellSize),
-                Mathf.RoundToInt(localPosition.y / cellSize));
+                Mathf.RoundToInt(localPosition.x / cellSize.x),
+                Mathf.RoundToInt(localPosition.y / cellSize.y));
             Debug.Assert(occupiedCells.Add(cell), $"Duplicate level block at cell {cell}.", renderer);
-            Debug.Assert(Mathf.Abs(localPosition.x - cell.x * cellSize) <= cellSize * 0.01f &&
-                         Mathf.Abs(localPosition.y - cell.y * cellSize) <= cellSize * 0.01f,
+            Debug.Assert(Mathf.Abs(localPosition.x - cell.x * cellSize.x) <= cellSize.x * 0.01f &&
+                         Mathf.Abs(localPosition.y - cell.y * cellSize.y) <= cellSize.y * 0.01f,
                 $"Level block '{renderer.name}' is not aligned to the {cellSize} grid.", renderer);
         }
 

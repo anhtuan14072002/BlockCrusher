@@ -39,8 +39,8 @@ public sealed partial class LevelMapSpawner
     private bool TryGetWaterCell(Vector3 worldPosition, out int cell)
     {
         Vector3 localPosition = _runtimeParent.InverseTransformPoint(worldPosition);
-        int x = Mathf.RoundToInt((localPosition.x - _offset.x) / _cellSize);
-        int y = Mathf.RoundToInt((localPosition.y - _offset.y) / _cellSize);
+        int x = Mathf.RoundToInt((localPosition.x - _offset.x) / _cellSize.x);
+        int y = Mathf.RoundToInt((localPosition.y - _offset.y) / _cellSize.y);
         if ((uint)x >= (uint)_gridWidth || (uint)y >= (uint)_gridHeight)
         {
             cell = -1;

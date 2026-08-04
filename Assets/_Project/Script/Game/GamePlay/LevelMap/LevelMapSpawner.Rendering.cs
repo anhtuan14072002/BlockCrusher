@@ -73,6 +73,9 @@ public sealed partial class LevelMapSpawner
             int batchIndex = renderIndex / MaxInstancesPerBatch;
             int indexInBatch = renderIndex % MaxInstancesPerBatch;
             float4x4 matrix = frame.Matrices[sourceIndex];
+            matrix.c0 *= runtimeType.RenderScale.x;
+            matrix.c1 *= runtimeType.RenderScale.y;
+            matrix.c2 *= runtimeType.RenderScale.z;
             runtimeType.BatchMatrices[batchIndex][indexInBatch] =
                 new Matrix4x4(matrix.c0, matrix.c1, matrix.c2, matrix.c3);
             runtimeType.BatchColors[batchIndex][indexInBatch] = frame.Colors[sourceIndex];

@@ -630,7 +630,9 @@ public sealed class MapPainterWindow : EditorWindow
 
         SerializedObject serializedBlock = new(blockMap);
         serializedBlock.FindProperty("_mapColor").colorValue = color;
-        serializedBlock.FindProperty("_releasedColor").colorValue = color;
+        SerializedProperty releasedColor = serializedBlock.FindProperty("_releasedColor");
+        if (releasedColor.prefabOverride)
+            PrefabUtility.RevertPropertyOverride(releasedColor, InteractionMode.AutomatedAction);
         serializedBlock.ApplyModifiedPropertiesWithoutUndo();
         ApplyPreviewColor(instance);
         return true;
@@ -1016,9 +1018,12 @@ public sealed class MapPainterWindow : EditorWindow
         if (blocks.Length < 2)
             return;
 
-        float cellSize = root.InverseTransformVector(
-            blocks[0].transform.TransformVector(Vector3.right * blocks[0].CellSize)).magnitude;
-        if (cellSize <= 0.0001f)
+        Vector2 cellSize = new(
+            root.InverseTransformVector(
+                blocks[0].transform.TransformVector(Vector3.right * blocks[0].CellSize)).magnitude,
+            root.InverseTransformVector(
+                blocks[0].transform.TransformVector(Vector3.up * blocks[0].CellSize)).magnitude);
+        if (cellSize.x <= 0.0001f || cellSize.y <= 0.0001f)
             return;
 
         Vector2 min = new(float.MaxValue, float.MaxValue);
@@ -1042,8 +1047,8 @@ public sealed class MapPainterWindow : EditorWindow
         {
             Vector3 position = root.InverseTransformPoint(blocks[i].transform.position);
             Vector2Int cell = new(
-                Mathf.RoundToInt((position.x - min.x) / cellSize),
-                Mathf.RoundToInt((position.y - min.y) / cellSize));
+                Mathf.RoundToInt((position.x - min.x) / cellSize.x),
+                Mathf.RoundToInt((position.y - min.y) / cellSize.y));
             if (!occupiedCells.Add(cell))
                 duplicates.Add(blocks[i]);
         }

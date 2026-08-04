@@ -227,11 +227,14 @@ public sealed partial class LevelMapSpawner
         for (int i = ActiveSpawners.Count - 1; i >= 0; i--)
         {
             LevelMapSpawner spawner = ActiveSpawners[i];
-            if (spawner == null || spawner._cellSize <= 0f)
+            if (spawner == null || spawner._cellSize.x <= 0f || spawner._cellSize.y <= 0f)
                 continue;
 
-            Vector3 worldCell = spawner._runtimeParent.TransformVector(Vector3.right * spawner._cellSize);
-            step = Mathf.Min(step, Mathf.Max(worldCell.magnitude * 0.2f, 0.005f));
+            float worldCellX = spawner._runtimeParent.TransformVector(
+                Vector3.right * spawner._cellSize.x).magnitude;
+            float worldCellY = spawner._runtimeParent.TransformVector(
+                Vector3.up * spawner._cellSize.y).magnitude;
+            step = Mathf.Min(step, Mathf.Max(Mathf.Min(worldCellX, worldCellY) * 0.2f, 0.005f));
         }
 
         return step;
@@ -276,7 +279,8 @@ public sealed partial class LevelMapSpawner
     {
         worldNormal = Vector3.zero;
         worldPenetration = 0f;
-        if (_cellSolidSnapshot == null || _runtimeParent == null || _cellSize <= 0f)
+        if (_cellSolidSnapshot == null || _runtimeParent == null ||
+            _cellSize.x <= 0f || _cellSize.y <= 0f)
             return false;
 
         Vector3 localCenter3 = _runtimeParent.InverseTransformPoint(worldCenter);
@@ -286,24 +290,26 @@ public sealed partial class LevelMapSpawner
         Vector2 localHalfAxisX = new Vector2(localHalfAxisX3.x, localHalfAxisX3.y);
         Vector2 localHalfAxisY = new Vector2(localHalfAxisY3.x, localHalfAxisY3.y);
         float boundRadius = localHalfAxisX.magnitude + localHalfAxisY.magnitude;
-        int centerX = Mathf.RoundToInt((localCenter.x - _offset.x) / _cellSize);
-        int centerY = Mathf.RoundToInt((localCenter.y - _offset.y) / _cellSize);
-        int searchRadius = Mathf.CeilToInt(boundRadius / _cellSize + 0.5f);
+        int centerX = Mathf.RoundToInt((localCenter.x - _offset.x) / _cellSize.x);
+        int centerY = Mathf.RoundToInt((localCenter.y - _offset.y) / _cellSize.y);
+        int searchRadiusX = Mathf.CeilToInt(boundRadius / _cellSize.x + 0.5f);
+        int searchRadiusY = Mathf.CeilToInt(boundRadius / _cellSize.y + 0.5f);
         Vector2 bestLocalNormal = Vector2.zero;
         float bestLocalPenetration = 0f;
 
-        for (int y = centerY - searchRadius; y <= centerY + searchRadius; y++)
+        for (int y = centerY - searchRadiusY; y <= centerY + searchRadiusY; y++)
         {
             if ((uint)y >= (uint)_gridHeight)
                 continue;
 
-            for (int x = centerX - searchRadius; x <= centerX + searchRadius; x++)
+            for (int x = centerX - searchRadiusX; x <= centerX + searchRadiusX; x++)
             {
                 int cellIndex = y * _gridWidth + x;
                 if ((uint)x >= (uint)_gridWidth || _cellSolidSnapshot[cellIndex] == 0)
                     continue;
 
-                Vector2 cellCenter = new Vector2(_offset.x + x * _cellSize, _offset.y + y * _cellSize);
+                Vector2 cellCenter = new Vector2(
+                    _offset.x + x * _cellSize.x, _offset.y + y * _cellSize.y);
                 if (!TryGetBoxCellContact(localCenter, localHalfAxisX, localHalfAxisY, cellCenter,
                         _cellSize * 0.5f, out Vector2 normal, out float penetration) ||
                     penetration <= bestLocalPenetration)
@@ -324,7 +330,7 @@ public sealed partial class LevelMapSpawner
     }
 
     private static bool TryGetBoxCellContact(Vector2 boxCenter, Vector2 halfAxisX, Vector2 halfAxisY,
-        Vector2 cellCenter, float halfCell, out Vector2 contactNormal, out float penetration)
+        Vector2 cellCenter, Vector2 halfCell, out Vector2 contactNormal, out float penetration)
     {
         Vector2 centerDelta = boxCenter - cellCenter;
         contactNormal = Vector2.zero;
@@ -351,12 +357,12 @@ public sealed partial class LevelMapSpawner
     }
 
     private static bool AccumulateBoxCellAxis(Vector2 axis, Vector2 centerDelta,
-        Vector2 halfAxisX, Vector2 halfAxisY, float halfCell,
+        Vector2 halfAxisX, Vector2 halfAxisY, Vector2 halfCell,
         ref Vector2 contactNormal, ref float penetration)
     {
         float boxRadius = Mathf.Abs(Vector2.Dot(halfAxisX, axis)) +
                           Mathf.Abs(Vector2.Dot(halfAxisY, axis));
-        float cellRadius = halfCell * (Mathf.Abs(axis.x) + Mathf.Abs(axis.y));
+        float cellRadius = halfCell.x * Mathf.Abs(axis.x) + halfCell.y * Mathf.Abs(axis.y);
         float signedDistance = Vector2.Dot(centerDelta, axis);
         float overlap = boxRadius + cellRadius - Mathf.Abs(signedDistance);
         if (overlap <= 0f)

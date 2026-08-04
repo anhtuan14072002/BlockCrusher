@@ -86,7 +86,7 @@ public sealed partial class LevelMapSpawner : MonoBehaviour
     private int _gridWidth;
     private int _gridHeight;
     private int _chunkColumns;
-    private float _cellSize;
+    private Vector2 _cellSize;
     private float _chunkColliderDepth;
 
     private ParticleSystem.Particle[] _metaballParticleBuffer;
@@ -121,6 +121,7 @@ public sealed partial class LevelMapSpawner : MonoBehaviour
         public RenderMaterial Material;
         public BlobAssetReference<Collider> Collider;
         public float Scale;
+        public Vector3 RenderScale;
         public float Radius;
         public TypeBlock CollectibleType;
         public Matrix4x4[][] BatchMatrices;

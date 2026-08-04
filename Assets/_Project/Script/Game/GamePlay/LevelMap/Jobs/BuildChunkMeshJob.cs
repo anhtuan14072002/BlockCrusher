@@ -27,7 +27,7 @@ internal struct BuildChunkMeshJob : IJob
     public int ChunkWidth;
     public int ChunkHeight;
 
-    public float CellSize;
+    public Vector2 CellSize;
     public Vector3 Offset;
 
     public byte ExtrudeMergedQuads;

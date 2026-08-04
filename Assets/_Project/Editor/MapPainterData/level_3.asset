@@ -90,8 +90,8 @@ MonoBehaviour:
     Color: {r: 0.4056604, g: 0.051664297, b: 0.075264014, a: 1}
   PaintType: 3
   PrefabSize: 1
-  Scale: {x: 0.5, y: 0.5, z: 0.5}
+  Scale: {x: 1, y: 0.5, z: 0.5}
   HasScale: 1
   Spacing: 0
-  GridWidth: 30
+  GridWidth: 15
   GridHeight: 90

@@ -21,7 +21,7 @@ public sealed partial class LevelMapSpawner
         public float SpinDirection;
         public float BladeRadius;
         public float MaxVelocity;
-        public float CellSize;
+        public float2 CellSize;
         public float WorldCellSize;
         public int GridWidth;
         public int GridHeight;
@@ -129,8 +129,8 @@ public sealed partial class LevelMapSpawner
         private bool IsSolidAtWorldCell(float3 worldPosition)
         {
             float3 local = math.transform(WorldToLocal, worldPosition);
-            int x = (int)math.round((local.x - Offset.x) / CellSize);
-            int y = (int)math.round((local.y - Offset.y) / CellSize);
+            int x = (int)math.round((local.x - Offset.x) / CellSize.x);
+            int y = (int)math.round((local.y - Offset.y) / CellSize.y);
             if ((uint)x >= (uint)GridWidth || (uint)y >= (uint)GridHeight)
                 return false;
             return CellSolid[y * GridWidth + x] != 0;

@@ -271,6 +271,6 @@ public sealed partial class LevelMapSpawner
     }
     private Vector3 GetCellLocalPosition(int x, int y)
     {
-        return _offset + new Vector3(x * _cellSize, y * _cellSize, 0f);
+        return _offset + new Vector3(x * _cellSize.x, y * _cellSize.y, 0f);
     }
 }

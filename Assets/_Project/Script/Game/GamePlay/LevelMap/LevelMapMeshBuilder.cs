@@ -22,7 +22,7 @@ public sealed partial class LevelMapSpawner
         public int StartY;
         public int ChunkWidth;
         public int ChunkHeight;
-        public float CellSize;
+        public Vector2 CellSize;
         public Vector3 Offset;
         public byte ExtrudeMergedQuads;
         public byte MergeAnySolid;
@@ -94,14 +94,16 @@ public sealed partial class LevelMapSpawner
         {
             AuthoredMeshRange range = AuthoredMeshRanges[typeIndex];
             Vector3 center = new Vector3(
-                Offset.x + (StartX + x) * CellSize,
-                Offset.y + (StartY + y) * CellSize,
+                Offset.x + (StartX + x) * CellSize.x,
+                Offset.y + (StartY + y) * CellSize.y,
                 0f);
             int vertexIndex = Vertices.Length;
             for (int i = 0; i < range.VertexCount; i++)
             {
                 int sourceIndex = range.VertexStart + i;
-                Vertices.Add(center + AuthoredMeshVertices[sourceIndex] * CellSize);
+                Vector3 source = AuthoredMeshVertices[sourceIndex];
+                Vertices.Add(center + Vector3.Scale(source,
+                    new Vector3(CellSize.x, CellSize.y, Mathf.Min(CellSize.x, CellSize.y))));
                 Colors.Add(color);
                 Uvs.Add(AuthoredMeshUvs[sourceIndex]);
             }
@@ -110,10 +112,10 @@ public sealed partial class LevelMapSpawner
         }
         private void AddQuad(int x, int y, int width, int height, Color32 color)
         {
-            float minX = Offset.x + (StartX + x) * CellSize - CellSize * 0.5f;
-            float minY = Offset.y + (StartY + y) * CellSize - CellSize * 0.5f;
-            float maxX = minX + width * CellSize;
-            float maxY = minY + height * CellSize;
+            float minX = Offset.x + (StartX + x) * CellSize.x - CellSize.x * 0.5f;
+            float minY = Offset.y + (StartY + y) * CellSize.y - CellSize.y * 0.5f;
+            float maxX = minX + width * CellSize.x;
+            float maxY = minY + height * CellSize.y;
             int vertexIndex = Vertices.Length;
             Vertices.Add(new Vector3(minX, minY, 0f));
             Vertices.Add(new Vector3(minX, maxY, 0f));
@@ -124,10 +126,10 @@ public sealed partial class LevelMapSpawner
         }
         private void AddMergedBox(int x, int y, int width, int height, Color32 color)
         {
-            float minX = Offset.x + (StartX + x) * CellSize - CellSize * 0.5f;
-            float minY = Offset.y + (StartY + y) * CellSize - CellSize * 0.5f;
-            float maxX = minX + width * CellSize;
-            float maxY = minY + height * CellSize;
+            float minX = Offset.x + (StartX + x) * CellSize.x - CellSize.x * 0.5f;
+            float minY = Offset.y + (StartY + y) * CellSize.y - CellSize.y * 0.5f;
+            float maxX = minX + width * CellSize.x;
+            float maxY = minY + height * CellSize.y;
             float halfDepth = DetailDepth * 0.5f;
             Vector3 frontMin = new Vector3(minX, minY, -halfDepth);
             Vector3 frontMax = new Vector3(maxX, maxY, -halfDepth);

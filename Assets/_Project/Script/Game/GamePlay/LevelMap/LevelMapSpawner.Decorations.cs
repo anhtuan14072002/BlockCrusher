@@ -47,8 +47,8 @@ public sealed partial class LevelMapSpawner
                 continue;
 
             Vector3 localPosition = _runtimeParent.InverseTransformPoint(decoration.transform.position);
-            int cellX = Mathf.RoundToInt((localPosition.x - _offset.x) / _cellSize);
-            int cellY = Mathf.RoundToInt((localPosition.y - _offset.y) / _cellSize);
+            int cellX = Mathf.RoundToInt((localPosition.x - _offset.x) / _cellSize.x);
+            int cellY = Mathf.RoundToInt((localPosition.y - _offset.y) / _cellSize.y);
             if ((uint)cellX >= (uint)_gridWidth || (uint)cellY >= (uint)_gridHeight)
                 continue;
 
@@ -145,7 +145,7 @@ public sealed partial class LevelMapSpawner
         List<int> triangles = new List<int>(sourceTriangles.Length * 4);
         List<int> cells = new List<int>(sourceTriangles.Length);
         HashSet<int> covered = new HashSet<int>();
-        float targetEdgeLength = Mathf.Max(_cellSize * 0.45f, 0.0001f);
+        float targetEdgeLength = Mathf.Max(Mathf.Min(_cellSize.x, _cellSize.y) * 0.45f, 0.0001f);
 
         for (int triangle = 0; triangle < sourceTriangles.Length; triangle += 3)
         {
@@ -200,8 +200,8 @@ public sealed partial class LevelMapSpawner
         void AddSegment(DecorationVertex first, DecorationVertex second, DecorationVertex third)
         {
             Vector3 center = (first.Position + second.Position + third.Position) / 3f;
-            int centerX = Mathf.RoundToInt((center.x - _offset.x) / _cellSize);
-            int centerY = Mathf.RoundToInt((center.y - _offset.y) / _cellSize);
+            int centerX = Mathf.RoundToInt((center.x - _offset.x) / _cellSize.x);
+            int centerY = Mathf.RoundToInt((center.y - _offset.y) / _cellSize.y);
             int cell = FindNearestDecorationCell(center, centerX, centerY);
             if (cell < 0)
                 cell = fallbackCell;

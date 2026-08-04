@@ -7,11 +7,11 @@ public sealed partial class LevelMapSpawner
 {
     private float GetWorldCellSize()
     {
-        if (_runtimeParent == null || _cellSize <= 0f)
-            return _cellSize;
+        if (_runtimeParent == null || _cellSize.x <= 0f || _cellSize.y <= 0f)
+            return Mathf.Min(_cellSize.x, _cellSize.y);
 
-        float worldX = _runtimeParent.TransformVector(Vector3.right * _cellSize).magnitude;
-        float worldY = _runtimeParent.TransformVector(Vector3.up * _cellSize).magnitude;
+        float worldX = _runtimeParent.TransformVector(Vector3.right * _cellSize.x).magnitude;
+        float worldY = _runtimeParent.TransformVector(Vector3.up * _cellSize.y).magnitude;
         return Mathf.Min(worldX, worldY);
     }
 
@@ -36,6 +36,11 @@ public sealed partial class LevelMapSpawner
     private static float3 ToFloat3(Vector3 value)
     {
         return new float3(value.x, value.y, value.z);
+    }
+
+    private static float2 ToFloat2(Vector2 value)
+    {
+        return new float2(value.x, value.y);
     }
 
     private static float4 ToFloat4(Vector4 value)

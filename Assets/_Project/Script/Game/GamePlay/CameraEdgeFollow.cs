@@ -8,6 +8,8 @@ public sealed class CameraEdgeFollow : MonoBehaviour
     [SerializeField] private Vector2 _maxViewport = new Vector2(0.72f, 0.76f);
     [SerializeField] private float _smoothTime = 0.12f;
     [SerializeField] private float _focusSmoothTime = 0.22f;
+    [SerializeField] private bool _followX = true;
+    [SerializeField] private bool _followY = true;
 
     private Vector3 _velocity;
     private Transform _transform;
@@ -35,6 +37,12 @@ public sealed class CameraEdgeFollow : MonoBehaviour
             ? GetCenteredCameraPosition()
             : GetCameraTargetPosition();
         Vector3 cameraPosition = _transform.position;
+
+        if (!_followX)
+            _velocity.x = 0f;
+        if (!_followY)
+            _velocity.y = 0f;
+
         float sqrDistance = (targetPosition - cameraPosition).sqrMagnitude;
 
         if (_isFocusing && sqrDistance <= 0.0001f)
@@ -62,8 +70,12 @@ public sealed class CameraEdgeFollow : MonoBehaviour
     {
         Vector3 viewportPosition = _camera.WorldToViewportPoint(_target.position);
         Vector3 cameraPosition = _transform.position;
-        cameraPosition.x += (viewportPosition.x - 0.5f) * _worldWidth;
-        cameraPosition.y += (viewportPosition.y - 0.5f) * _worldHeight;
+
+        if (_followX)
+            cameraPosition.x += (viewportPosition.x - 0.5f) * _worldWidth;
+        if (_followY)
+            cameraPosition.y += (viewportPosition.y - 0.5f) * _worldHeight;
+
         return cameraPosition;
     }
 
@@ -72,15 +84,21 @@ public sealed class CameraEdgeFollow : MonoBehaviour
         Vector3 viewportPosition = _camera.WorldToViewportPoint(_target.position);
         Vector3 cameraPosition = _transform.position;
 
-        if (viewportPosition.x < _minViewport.x)
-            cameraPosition.x += (viewportPosition.x - _minViewport.x) * _worldWidth;
-        else if (viewportPosition.x > _maxViewport.x)
-            cameraPosition.x += (viewportPosition.x - _maxViewport.x) * _worldWidth;
+        if (_followX)
+        {
+            if (viewportPosition.x < _minViewport.x)
+                cameraPosition.x += (viewportPosition.x - _minViewport.x) * _worldWidth;
+            else if (viewportPosition.x > _maxViewport.x)
+                cameraPosition.x += (viewportPosition.x - _maxViewport.x) * _worldWidth;
+        }
 
-        if (viewportPosition.y < _minViewport.y)
-            cameraPosition.y += (viewportPosition.y - _minViewport.y) * _worldHeight;
-        else if (viewportPosition.y > _maxViewport.y)
-            cameraPosition.y += (viewportPosition.y - _maxViewport.y) * _worldHeight;
+        if (_followY)
+        {
+            if (viewportPosition.y < _minViewport.y)
+                cameraPosition.y += (viewportPosition.y - _minViewport.y) * _worldHeight;
+            else if (viewportPosition.y > _maxViewport.y)
+                cameraPosition.y += (viewportPosition.y - _maxViewport.y) * _worldHeight;
+        }
 
         return cameraPosition;
     }

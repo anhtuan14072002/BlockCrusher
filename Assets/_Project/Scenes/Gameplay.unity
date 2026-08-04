@@ -7720,8 +7720,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _levelPrefabs:
+  - {fileID: 1749666366606836664, guid: 52227f16793b5504c8bcffe1e08048e5, type: 3}
   - {fileID: 1749666366606836664, guid: 3cd71752da4a5b44297d7930c16d8003, type: 3}
-  _startLevel: 1
+  - {fileID: 5455250794730262600, guid: a8520bbb74eea5248acd5f14fa1ebd03, type: 3}
+  _startLevel: 3
   _container: {fileID: 925441448}
   _chunkMaterial: {fileID: 2100000, guid: 27e4bb3294908924e9d6a58207d8f342, type: 2}
   _spawnOnAwake: 1
@@ -8835,8 +8837,8 @@ Transform:
   m_GameObject: {fileID: 1623616260}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -4.5445, y: -20.4616, z: -0.03250122}
-  m_LocalScale: {x: 3.4993105, y: 37.82302, z: 1}
+  m_LocalPosition: {x: -4.5886, y: -20.4616, z: -0.03250122}
+  m_LocalScale: {x: 3.4111278, y: 37.82302, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 508487805}
@@ -9182,8 +9184,8 @@ Transform:
   m_GameObject: {fileID: 1697064007}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 4.511, y: -20.2108, z: -0.03250122}
-  m_LocalScale: {x: 3.3868456, y: 37.3214, z: 1}
+  m_LocalPosition: {x: 4.4508, y: -20.2108, z: -0.03250122}
+  m_LocalScale: {x: 3.507079, y: 37.3214, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 508487805}
@@ -9715,7 +9717,7 @@ Camera:
   far clip plane: 1000
   field of view: 60
   orthographic: 1
-  orthographic size: 5.15
+  orthographic size: 4.95
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
@@ -9740,7 +9742,7 @@ Transform:
   m_GameObject: {fileID: 1912903401}
   serializedVersion: 2
   m_LocalRotation: {x: 0.036120456, y: 0, z: 0, w: 0.99934745}
-  m_LocalPosition: {x: 0, y: 9.61, z: 0}
+  m_LocalPosition: {x: -0.09, y: 9.61, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -9761,10 +9763,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _target: {fileID: 3000001902}
   _camera: {fileID: 1912903403}
-  _minViewport: {x: 0.28, y: 0.62}
+  _minViewport: {x: 0.28, y: 0.21}
   _maxViewport: {x: 0.72, y: 0.72}
   _smoothTime: 0.1
   _focusSmoothTime: 0.22
+  _followX: 0
+  _followY: 1
 --- !u!1 &1998582535
 GameObject:
   m_ObjectHideFlags: 0
@@ -10167,8 +10171,12 @@ PrefabInstance:
       value: -2
       objectReference: {fileID: 0}
     - target: {fileID: 7025930913786966314, guid: 96b4cd1043cf80545803facee008decf, type: 3}
+      propertyPath: orthographic
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 7025930913786966314, guid: 96b4cd1043cf80545803facee008decf, type: 3}
       propertyPath: orthographic size
-      value: 5.15
+      value: 4.95
       objectReference: {fileID: 0}
     - target: {fileID: 7025930913786966314, guid: 96b4cd1043cf80545803facee008decf, type: 3}
       propertyPath: m_BackGroundColor.b

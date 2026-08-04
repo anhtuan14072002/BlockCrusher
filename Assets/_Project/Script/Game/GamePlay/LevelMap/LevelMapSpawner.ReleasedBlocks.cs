@@ -217,8 +217,8 @@ public sealed partial class LevelMapSpawner
         if (!_cellSolid.IsCreated || _runtimeParent == null)
             return false;
         Vector3 local = _runtimeParent.InverseTransformPoint(worldPosition);
-        int x = Mathf.RoundToInt((local.x - _offset.x) / _cellSize);
-        int y = Mathf.RoundToInt((local.y - _offset.y) / _cellSize);
+        int x = Mathf.RoundToInt((local.x - _offset.x) / _cellSize.x);
+        int y = Mathf.RoundToInt((local.y - _offset.y) / _cellSize.y);
         if ((uint)x >= (uint)_gridWidth || (uint)y >= (uint)_gridHeight)
             return false;
         return _cellSolid[y * _gridWidth + x] != 0;

@@ -14,7 +14,7 @@ public sealed partial class LevelMapSpawner
         public float4x4 WorldToLocal;
         public float4x4 LocalToWorld;
         public float3 Offset;
-        public float CellSize;
+        public float2 CellSize;
         public float2 GridBoundsMin;
         public float2 GridBoundsMax;
         public float DeltaTime;
@@ -48,7 +48,7 @@ public sealed partial class LevelMapSpawner
             }
 
             float3 localPosition = math.transform(WorldToLocal, position);
-            float2 constraintMargin = new float2(localRadius + CellSize);
+            float2 constraintMargin = new float2(localRadius) + CellSize;
             if (math.any((localPosition.xy < GridBoundsMin - constraintMargin) |
                          (localPosition.xy > GridBoundsMax + constraintMargin)))
             {
@@ -77,7 +77,8 @@ public sealed partial class LevelMapSpawner
             float3 startLocal = math.transform(WorldToLocal, startWorld);
             float3 endLocal = math.transform(WorldToLocal, endWorld);
             float localDistance = math.distance(startLocal.xy, endLocal.xy);
-            int requiredSteps = (int)math.ceil(localDistance / math.max(CellSize * 0.2f, 0.0001f));
+            int requiredSteps = (int)math.ceil(
+                localDistance / math.max(math.cmin(CellSize) * 0.2f, 0.0001f));
             if (requiredSteps <= 0)
                 return ResolvePenetration(endWorld, localBlockRadius);
 
@@ -106,7 +107,7 @@ public sealed partial class LevelMapSpawner
             ref EnabledRefRW<ReleasedBlockSolidConstraint> solidConstraint)
         {
             float2 localPosition = math.transform(WorldToLocal, worldPosition).xy;
-            float2 margin = new float2(localBlockRadius + CellSize);
+            float2 margin = new float2(localBlockRadius) + CellSize;
             if (math.any((localPosition < GridBoundsMin - margin) | (localPosition > GridBoundsMax + margin)))
                 solidConstraint.ValueRW = false;
         }
@@ -121,15 +122,16 @@ public sealed partial class LevelMapSpawner
             for (int iteration = 0; iteration < 4; iteration++)
             {
                 float2 previousPosition = position;
-                int centerX = (int)math.round((position.x - Offset.x) / CellSize);
-                int centerY = (int)math.round((position.y - Offset.y) / CellSize);
+                int centerX = (int)math.round((position.x - Offset.x) / CellSize.x);
+                int centerY = (int)math.round((position.y - Offset.y) / CellSize.y);
 
-                int searchRadius = (int)math.ceil(localBlockRadius / CellSize + 0.5f);
-                for (int y = centerY - searchRadius; y <= centerY + searchRadius; y++)
+                int searchRadiusX = (int)math.ceil(localBlockRadius / CellSize.x + 0.5f);
+                int searchRadiusY = (int)math.ceil(localBlockRadius / CellSize.y + 0.5f);
+                for (int y = centerY - searchRadiusY; y <= centerY + searchRadiusY; y++)
                 {
                     if ((uint)y >= (uint)GridHeight) continue;
 
-                    for (int x = centerX - searchRadius; x <= centerX + searchRadius; x++)
+                    for (int x = centerX - searchRadiusX; x <= centerX + searchRadiusX; x++)
                     {
                         if ((uint)x >= (uint)GridWidth || CellSolid[y * GridWidth + x] == 0) continue;
                         position = ResolveCellPenetration(position, x, y, localBlockRadius);
@@ -148,7 +150,7 @@ public sealed partial class LevelMapSpawner
         private float2 ResolveCellPenetration(float2 position, int cellX, int cellY, float blockRadius)
         {
             float2 cellCenter = Offset.xy + new float2(cellX, cellY) * CellSize;
-            float halfCell = CellSize * 0.5f;
+            float2 halfCell = CellSize * 0.5f;
             float2 boundsMin = cellCenter - halfCell;
             float2 boundsMax = cellCenter + halfCell;
             float2 closest = math.clamp(position, boundsMin, boundsMax);

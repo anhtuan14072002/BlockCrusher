@@ -106,8 +106,10 @@ public sealed partial class LevelMapSpawner
     private int GetOrCreateReleasedBlockType(TypeBlockMap blockMap)
     {
         MeshFilter meshFilter = blockMap.GetComponent<MeshFilter>();
-        return GetOrCreateReleasedBlockType(blockMap.ReleasedPrefab, blockMap.ReleasedScale, blockMap.BlockType, blockMap,
-            meshFilter != null ? meshFilter.sharedMesh : null);
+        float shortestCellSide = Mathf.Min(_cellSize.x, _cellSize.y);
+        Vector3 renderScale = new(_cellSize.x / shortestCellSide, _cellSize.y / shortestCellSide, 1f);
+        return GetOrCreateReleasedBlockType(blockMap.ReleasedPrefab, blockMap.ReleasedScale, renderScale,
+            blockMap.BlockType, blockMap, meshFilter != null ? meshFilter.sharedMesh : null);
     }
 
     private int GetOrCreateReleasedBlockType(LevelDecoration decoration)
@@ -115,7 +117,7 @@ public sealed partial class LevelMapSpawner
         if (!decoration.ReleasesCollectible)
             return -1;
 
-        return GetOrCreateReleasedBlockType(decoration.ReleasedPrefab, decoration.ReleasedScale,
+        return GetOrCreateReleasedBlockType(decoration.ReleasedPrefab, decoration.ReleasedScale, Vector3.one,
             decoration.BlockType, decoration);
     }
 
@@ -124,7 +126,7 @@ public sealed partial class LevelMapSpawner
         ushort[] typeIndices = new ushort[BreakableObstacle.ShardMeshCount];
         for (int i = 0; i < typeIndices.Length; i++)
         {
-            int typeIndex = GetOrCreateReleasedBlockType(obstacle.ReleasedPrefab, obstacle.ReleasedScale,
+            int typeIndex = GetOrCreateReleasedBlockType(obstacle.ReleasedPrefab, obstacle.ReleasedScale, Vector3.one,
                 obstacle.CollectibleType, obstacle, obstacle.GetShardMesh(i));
             if (typeIndex < 0 || typeIndex > ushort.MaxValue)
                 return false;
@@ -136,8 +138,8 @@ public sealed partial class LevelMapSpawner
         return true;
     }
 
-    private int GetOrCreateReleasedBlockType(GameObject prefab, float scale, TypeBlock collectibleType,
-        Component source, Mesh authoredMesh = null)
+    private int GetOrCreateReleasedBlockType(GameObject prefab, float scale, Vector3 renderScale,
+        TypeBlock collectibleType, Component source, Mesh authoredMesh = null)
     {
         if (prefab == null || scale <= 0f || collectibleType == TypeBlock.None)
         {
@@ -158,6 +160,7 @@ public sealed partial class LevelMapSpawner
         {
             ReleasedBlockRuntimeType existing = _releasedBlockTypes[i];
             if (existing.Prefab == prefab && existing.Mesh == sourceMesh && Mathf.Approximately(existing.Scale, scale) &&
+                (existing.RenderScale - renderScale).sqrMagnitude <= 0.000001f &&
                 existing.CollectibleType == collectibleType)
                 return i;
         }
@@ -182,6 +185,7 @@ public sealed partial class LevelMapSpawner
             Material = material,
             Collider = collider,
             Scale = scale,
+            RenderScale = renderScale,
             Radius = radius * scale,
             CollectibleType = collectibleType,
             BatchMatrices = new Matrix4x4[batchCapacity][],

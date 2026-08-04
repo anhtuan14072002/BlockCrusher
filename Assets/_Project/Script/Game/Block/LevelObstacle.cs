@@ -9,7 +9,7 @@ using UnityEngine;
 using ColliderBlob = Unity.Physics.Collider;
 using PhysicsRaycastHit = Unity.Physics.RaycastHit;
 
-[DisallowMultipleComponent]
+#pragma warning disable SGICE002
 [RequireComponent(typeof(PhysicsShapeAuthoring))]
 public sealed class LevelObstacle : MonoBehaviour
 {
@@ -42,7 +42,7 @@ public sealed class LevelObstacle : MonoBehaviour
     }
 
     internal static void MaskSpawnCells(NativeArray<byte> cellSolid, Transform gridTransform, Vector3 offset,
-        int gridWidth, int gridHeight, float cellSize)
+        int gridWidth, int gridHeight, Vector2 cellSize)
     {
         LevelObstacle[] obstacles =
             FindObjectsByType<LevelObstacle>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
@@ -60,7 +60,7 @@ public sealed class LevelObstacle : MonoBehaviour
                     continue;
 
                 Vector3 worldCenter = gridTransform.TransformPoint(
-                    offset + new Vector3(x * cellSize, y * cellSize, 0f));
+                    offset + new Vector3(x * cellSize.x, y * cellSize.y, 0f));
 
                 for (int i = 0; i < obstacles.Length; i++)
                 {
@@ -360,3 +360,4 @@ public sealed class LevelObstacle : MonoBehaviour
         return new quaternion(value.x, value.y, value.z, value.w);
     }
 }
+#pragma warning restore SGICE002
