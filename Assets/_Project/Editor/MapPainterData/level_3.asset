@@ -10,7 +10,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7b3d8fb1d7521324ea11c41998fd220b, type: 3}
-  m_Name: level_2
+  m_Name: level_3
   m_EditorClassIdentifier: 
   PaintPrefabs:
   - {fileID: 4377372095242228172, guid: 7680c44a0b0efb94abc960730dd89eb4, type: 3}
@@ -57,7 +57,7 @@ MonoBehaviour:
   - {fileID: 5752300303716107331, guid: c436734b13cda4342ae15b844423e408, type: 3}
   - {fileID: 5831705302585161779, guid: 5e05129c948092b489c0e9fa83ae1bab, type: 3}
   - {fileID: 3488254414830135800, guid: cbaaf1c5569a167419968e1381692ff6, type: 3}
-  SelectedOverlayPrefabs: 00000000010101000000
+  SelectedOverlayPrefabs: 00000000010000000000
   OverlayScaleMultiplier: 1
   OverlayLocalZ: -0.31
   HasOverlayLocalZ: 1
@@ -89,7 +89,7 @@ MonoBehaviour:
     ToDepth: 89
     Color: {r: 0.4056604, g: 0.051664297, b: 0.075264014, a: 1}
   PaintType: 3
-  PrefabSize: 0.5
+  PrefabSize: 1
   Scale: {x: 0.5, y: 0.5, z: 0.5}
   HasScale: 1
   Spacing: 0

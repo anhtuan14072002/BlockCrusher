@@ -17,6 +17,9 @@ public sealed class MapPainterWindow : EditorWindow
 
     private static readonly Vector3 DefaultScale = Vector3.one;
     private const float DefaultOverlayLocalZ = -0.31f;
+    private const float RandomOverlayPositionRange = 0.35f;
+    private const float RandomOverlayScaleMin = 0.65f;
+    private const float RandomOverlayScaleMax = 1.35f;
     private const string LevelFolder = "Assets/_Project/Resources/Level";
     private const string LevelSettingsFolder = "Assets/_Project/Editor/MapPainterData";
     private static readonly string[] EditModeLabels = { "None", "Edit" };
@@ -33,6 +36,7 @@ public sealed class MapPainterWindow : EditorWindow
     [SerializeField] private List<bool> _selectedOverlayPrefabs = new();
     [SerializeField] private float _overlayScaleMultiplier = 1f;
     [SerializeField] private float _overlayLocalZ = DefaultOverlayLocalZ;
+    [SerializeField] private bool _randomizeOverlaySizeAndPosition;
     [SerializeField] private List<GameObject> _gridPrefabs = new();
     [SerializeField] private List<MapPainterGridColorLayer> _gridColorLayers = new();
     [SerializeField] private Transform _mapRoot;
@@ -187,6 +191,8 @@ public sealed class MapPainterWindow : EditorWindow
         _overlayLocalZ = EditorGUILayout.FloatField("Overlay Z", _overlayLocalZ);
         _overlayScaleMultiplier = Mathf.Max(
             0.01f, EditorGUILayout.FloatField("Overlay Scale Multiplier", _overlayScaleMultiplier));
+        _randomizeOverlaySizeAndPosition = EditorGUILayout.Toggle(
+            "Randomize Size & Position", _randomizeOverlaySizeAndPosition);
         EditorGUILayout.EndScrollView();
     }
 
@@ -481,7 +487,7 @@ public sealed class MapPainterWindow : EditorWindow
             prefab = GetGridPrefabForCell(cell.x, cell.y);
 
         bool isWater = prefab.GetComponentInChildren<BlockWater>(true) != null;
-        if ((_paintType == PaintType.Overlay && FindBlockAt(localPosition) != null) ||
+        if ((_paintType == PaintType.Overlay && FindOverlayInCell(localPosition) != null) ||
             (isWater && HasComponentAt<BlockWater>(localPosition)) ||
             (!isWater && _paintType == PaintType.Block && HasBlockAt(localPosition)))
             return;
@@ -493,6 +499,12 @@ public sealed class MapPainterWindow : EditorWindow
         if (_paintType == PaintType.Overlay)
         {
             instance.transform.localScale *= _overlayScaleMultiplier;
+            if (_randomizeOverlaySizeAndPosition)
+            {
+                instance.transform.localPosition += GetRandomOverlayOffset(_random, GetCellStep(_scale, _spacing));
+                instance.transform.localScale *= GetRandomOverlayScale(_random);
+            }
+
             Vector3 eulerAngles = instance.transform.localEulerAngles;
             eulerAngles.z = GetRandomZAngle(_random);
             instance.transform.localEulerAngles = eulerAngles;
@@ -644,9 +656,29 @@ public sealed class MapPainterWindow : EditorWindow
 
     private void EraseAt(Vector3 localPosition)
     {
-        Transform block = FindBlockAt(localPosition);
+        Transform block = _paintType == PaintType.Overlay
+            ? FindOverlayInCell(localPosition)
+            : FindBlockAt(localPosition);
         if (block != null)
             Undo.DestroyObjectImmediate(block.gameObject);
+    }
+
+    private Transform FindOverlayInCell(Vector3 localPosition)
+    {
+        if (_mapRoot == null)
+            return null;
+
+        Vector2 halfCell = GetCellStep(_scale, _spacing) * 0.5f;
+        for (int i = _mapRoot.childCount - 1; i >= 0; i--)
+        {
+            Transform child = _mapRoot.GetChild(i);
+            Vector3 offset = child.localPosition - localPosition;
+            if (Mathf.Abs(offset.x) < halfCell.x && Mathf.Abs(offset.y) < halfCell.y &&
+                Mathf.Approximately(child.localPosition.z, _overlayLocalZ))
+                return child;
+        }
+
+        return null;
     }
 
     private bool HasBlockAt(Vector3 localPosition)
@@ -828,6 +860,19 @@ public sealed class MapPainterWindow : EditorWindow
     private static float GetRandomZAngle(System.Random random)
     {
         return (float)(random.NextDouble() * 360d);
+    }
+
+    private static Vector3 GetRandomOverlayOffset(System.Random random, Vector2 cellStep)
+    {
+        return new Vector3(
+            ((float)random.NextDouble() * 2f - 1f) * cellStep.x * RandomOverlayPositionRange,
+            ((float)random.NextDouble() * 2f - 1f) * cellStep.y * RandomOverlayPositionRange,
+            0f);
+    }
+
+    private static float GetRandomOverlayScale(System.Random random)
+    {
+        return Mathf.Lerp(RandomOverlayScaleMin, RandomOverlayScaleMax, (float)random.NextDouble());
     }
 
     private void EnsureSelectionCount()
@@ -1165,6 +1210,7 @@ public sealed class MapPainterWindow : EditorWindow
         settings.OverlayScaleMultiplier = _overlayScaleMultiplier;
         settings.OverlayLocalZ = _overlayLocalZ;
         settings.HasOverlayLocalZ = true;
+        settings.RandomizeOverlaySizeAndPosition = _randomizeOverlaySizeAndPosition;
         settings.GridPrefabs.Clear();
         settings.GridPrefabs.AddRange(_gridPrefabs);
         settings.GridColorLayers.Clear();
@@ -1205,6 +1251,7 @@ public sealed class MapPainterWindow : EditorWindow
         _selectedOverlayPrefabs.AddRange(settings.SelectedOverlayPrefabs);
         _overlayScaleMultiplier = Mathf.Max(0.01f, settings.OverlayScaleMultiplier);
         _overlayLocalZ = settings.HasOverlayLocalZ ? settings.OverlayLocalZ : DefaultOverlayLocalZ;
+        _randomizeOverlaySizeAndPosition = settings.RandomizeOverlaySizeAndPosition;
         _gridPrefabs.Clear();
         _gridPrefabs.AddRange(settings.GridPrefabs);
         _gridColorLayers.Clear();
@@ -1309,6 +1356,13 @@ public sealed class MapPainterWindow : EditorWindow
         Debug.Assert(!Mathf.Approximately(
                 GetRandomZAngle(rotationRandom), GetRandomZAngle(rotationRandom)),
             "Map Painter overlay random rotation failed.");
+        System.Random transformRandom = new(1234);
+        Vector3 randomOffset = GetRandomOverlayOffset(transformRandom, new Vector2(2f, 3f));
+        float randomScale = GetRandomOverlayScale(transformRandom);
+        Debug.Assert(Mathf.Abs(randomOffset.x) <= 0.7f && Mathf.Abs(randomOffset.y) <= 1.05f &&
+                     randomOffset.z == 0f &&
+                     randomScale >= RandomOverlayScaleMin && randomScale <= RandomOverlayScaleMax,
+            "Map Painter overlay random size and position failed.");
         Debug.Assert(PositiveModulo(-1, 3) == 2 && PositiveModulo(4, 3) == 1,
             "Map Painter mosaic indexing failed.");
         List<MapPainterGridColorLayer> colorLayers = new()
