@@ -33,19 +33,11 @@ namespace Crusher
 
         private void ApplySawAtPosition(Vector3 sawPosition)
         {
-            if (_saw == null || _activeJointCount == 0)
+            if (_saw == null)
                 return;
 
             _sawTarget = sawPosition;
             _saw.position = sawPosition;
-
-            Transform lastJoint = _joints[_activeJointCount - 1];
-            if (lastJoint == null)
-                return;
-
-            Vector3 sawDirection = sawPosition - lastJoint.position;
-            if (sawDirection.sqrMagnitude > 0.0001f)
-                _saw.rotation = GetSegmentRotation(sawDirection) * _sawRotationOffset;
         }
     }
 }

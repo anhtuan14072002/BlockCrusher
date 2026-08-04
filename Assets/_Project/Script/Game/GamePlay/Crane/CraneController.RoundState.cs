@@ -28,12 +28,8 @@ namespace Crusher
             _saw.localRotation = _initialSawLocalRotation;
             _sawTarget = _saw.position;
             _lastSawMoveDirection = Vector3.zero;
-            _useSawInputRotation = false;
-            SeedCoiledPoseToSaw();
-            SolveJointsToSaw();
             _saw.localRotation = _initialSawLocalRotation;
-            _useSawInputRotation = true;
-            RefreshActiveSegmentData();
+            _cableVisual.SnapToEndpoints();
         }
     }
 }

@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using TMPro;
 using Unity.Collections;
 using Unity.Mathematics;
@@ -22,21 +21,16 @@ namespace Crusher
         [SerializeField] private Vector2 _targetXBounds;
         [SerializeField] private Vector2 _targetYBounds;
 
-        [Header("Joint Chain")]
-        [SerializeField] private GameObject _jointPrefab;
-        [SerializeField] private int _ikIterations = 16;
-        [SerializeField] private int _activeJointCount = 4;
-        [SerializeField] private int _maxJointCount = 7;
-        [SerializeField] private float _segmentLength = 1.15f;
-        [SerializeField, Min(0f)] private float _jointCollisionRadius = 0.13f;
-        [SerializeField] private List<Transform> _joints = new();
-        [SerializeField] private Transform _saw;
+        [Header("Cable")]
+        [SerializeField, Min(0.1f)] private float _cableMaxLength = 4.72f;
+        [SerializeField, Min(0.01f)] private float _cableLengthUpgradeStep = 1.18f;
+        [SerializeField] private CraneHoseVisual _cableVisual;
 
         [Header("Tools")]
+        [SerializeField] private Transform _saw;
         [SerializeField] private SawBlockCutter _sawCutter;
         [SerializeField] private SuctionDevice _suctionDevice;
         [SerializeField] private Button _switchToolButton;
-        [SerializeField] private Button _addJointButton;
 
         [Header("Fuel Settings")]
         [SerializeField, Min(1f)] private float _maxFuel = 100f;
@@ -48,21 +42,13 @@ namespace Crusher
         [SerializeField] private Image _fuelFillMask;
         [SerializeField] private TMP_Text _fuelPercentText;
 
-        private Quaternion _sawRotationOffset = Quaternion.identity;
         private Quaternion _sawInputRotationOffset = Quaternion.identity;
-        private Quaternion[] _jointRotationOffsets;
         private Transform _movementCameraTransform;
-        private Transform _rootParent;
-        private Vector3[] _solvePositions;
-        private Vector3 _rootLocalPosition;
-        private float[] _segmentLengths;
 
         private Vector3 _lastSawMoveDirection;
         private Vector3 _sawTarget;
-        private float _activeReach;
 
         private bool _isSuctionMode;
-        private bool _useSawInputRotation = true;
 
         private void Awake()
         {
@@ -96,7 +82,7 @@ namespace Crusher
                 return;
 
             MoveSawTarget(input);
-            SolveJointsToSaw();
+            ApplyToolPosition();
         }
 
         private void FixedUpdate()
@@ -108,32 +94,10 @@ namespace Crusher
                 _suctionDevice.ProcessSuction(_isSuctionMode && HasFuel);
         }
 
-        public void AddJoint()
+        public void IncreaseCableLength()
         {
-            if (_activeJointCount >= _maxJointCount)
-                return;
-
-            Vector3 lockedSawPosition = GetSawPosition();
-            Quaternion lockedSawRotation = _saw.rotation;
-            int insertIndex = _activeJointCount - 1;
-            int storageIndex = _activeJointCount;
-            Transform insertedJoint = GetOrCreateJoint(storageIndex);
-
-            if (insertedJoint == null)
-                return;
-
-            _sawTarget = lockedSawPosition;
-
-            InsertJointBeforeLast(insertIndex, storageIndex, insertedJoint);
-            _activeJointCount++;
-            ApplyActiveJointCount();
-            _useSawInputRotation = false;
-            SeedCoiledPoseToSaw();
-            SolveJointsToSaw();
-            ApplySawAtPosition(lockedSawPosition);
-            _saw.rotation = lockedSawRotation;
-            CacheSawRotationOffset();
-            _useSawInputRotation = true;
+            _cableMaxLength += _cableLengthUpgradeStep;
+            _cableVisual.SetMaxLength(_cableMaxLength);
         }
 
         public void IncreaseSawContactMoveMultiplier()
@@ -177,17 +141,9 @@ namespace Crusher
         {
             _switchToolButton.onClick.AddListener(ToggleTool);
 
-            int existingJointCount = GetExistingJointCount();
-            _maxJointCount = Mathf.Max(_maxJointCount, existingJointCount);
-            _activeJointCount = existingJointCount > 0 ? Mathf.Clamp(_activeJointCount, 1, existingJointCount) : 0;
-
             CacheMovementCamera();
-            AllocateSolverBuffers();
-            CacheFixedRoot();
-            CacheModelPoseOffsets();
-            DetachSawFromJoints();
             CacheSawInputRotationOffset();
-            ApplyActiveJointCount();
+            CacheCableVisual();
             CacheSawCutter();
             _sawTarget = GetSawPosition();
             SetToolActive(false);
@@ -205,44 +161,39 @@ namespace Crusher
                 _sawCutter.gameObject.SetActive(!isSuction);
             if (_suctionDevice != null)
                 _suctionDevice.gameObject.SetActive(isSuction);
+            _cableVisual.SetSuctionMode(isSuction);
         }
 
         internal void AppendSuctionTubePath(ref FixedList512Bytes<float3> path)
         {
-            int lastJointIndex = Mathf.Min(_activeJointCount, _joints.Count) - 1;
-            int availableSlots = path.Capacity - path.Length;
-            if (lastJointIndex < 0 || availableSlots <= 0)
+            _cableVisual.AppendToolPath(ref path);
+        }
+
+        private void CacheCableVisual()
+        {
+            if (_cableVisual == null)
+                _cableVisual = GetComponent<CraneHoseVisual>();
+            _cableVisual.Bind(_saw, _cableMaxLength);
+        }
+
+        private void ApplyToolPosition()
+        {
+            if (_saw == null)
                 return;
 
-            int sampledJointCount = Mathf.Min(lastJointIndex + 1, availableSlots);
-            if (sampledJointCount == 1)
-            {
-                Transform rootJoint = _joints[0];
-                if (rootJoint != null)
-                    path.Add(new float3(rootJoint.position.x, rootJoint.position.y, rootJoint.position.z));
+            _saw.position = _sawTarget;
+            if (_lastSawMoveDirection.sqrMagnitude <= 0.0001f)
                 return;
-            }
-            
-            int sampleDenominator = sampledJointCount - 1;
-            for (int i = 0; i < sampledJointCount; i++)
-            {
-                int jointIndex = lastJointIndex -
-                    (i * lastJointIndex + sampleDenominator / 2) / sampleDenominator;
-                Transform joint = _joints[jointIndex];
-                if (joint != null)
-                    path.Add(new float3(joint.position.x, joint.position.y, joint.position.z));
-            }
 
-#if UNITY_EDITOR
-            Transform expectedRoot = _joints[0];
-            if (expectedRoot != null)
+            if (_isSuctionMode && _suctionDevice != null)
             {
-                float3 rootPosition = new float3(expectedRoot.position.x, expectedRoot.position.y,
-                    expectedRoot.position.z);
-                Debug.Assert(math.distancesq(path[path.Length - 1], rootPosition) < 0.000001f,
-                    "Suction path sampling must preserve the root joint.");
+                Quaternion rotation = _suctionDevice.GetMovementRotation(_saw, _lastSawMoveDirection);
+                _saw.rotation = _suctionDevice.ClampToolRotation(_saw, rotation);
             }
-#endif
+            else
+            {
+                _saw.rotation = GetToolRotation(_lastSawMoveDirection) * _sawInputRotationOffset;
+            }
         }
     }
 }

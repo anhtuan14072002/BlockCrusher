@@ -4,23 +4,21 @@ namespace Crusher
 {
     public sealed partial class CraneController
     {
-        private Vector3 GetRootPosition()
+        private Vector3 GetCableStartPosition()
         {
-            if (_rootParent != null)
-                return _rootParent.TransformPoint(_rootLocalPosition);
-            return _joints.Count > 0 && _joints[0] != null ? _joints[0].position : transform.position;
+            return _cableVisual.StartPosition;
         }
 
         private bool ClampSawTargetToReach()
         {
-            Vector3 rootPosition = GetRootPosition();
-            Vector3 offset = _sawTarget - rootPosition;
+            Vector3 startPosition = GetCableStartPosition();
+            Vector3 offset = _sawTarget - startPosition;
             float maxReach = GetActiveReach();
 
             if (offset.sqrMagnitude <= maxReach * maxReach)
                 return false;
 
-            _sawTarget = rootPosition + offset.normalized * maxReach;
+            _sawTarget = startPosition + offset.normalized * maxReach;
             return true;
         }
 
@@ -66,15 +64,15 @@ namespace Crusher
             if (_saw == null)
                 return;
 
-            _sawInputRotationOffset = Quaternion.Inverse(GetSegmentRotation(Vector3.up)) * _saw.rotation;
+            _sawInputRotationOffset = Quaternion.Inverse(GetToolRotation(Vector3.up)) * _saw.rotation;
         }
 
         private float GetActiveReach()
         {
-            return _activeReach;
+            return _cableMaxLength;
         }
 
-        private static Quaternion GetSegmentRotation(Vector3 direction)
+        private static Quaternion GetToolRotation(Vector3 direction)
         {
             return Quaternion.Euler(0f, 0f, Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg);
         }
