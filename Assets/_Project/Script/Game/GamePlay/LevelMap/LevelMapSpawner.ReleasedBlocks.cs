@@ -103,7 +103,7 @@ public sealed partial class LevelMapSpawner
             Linear = _releasedBlockDamping,
             Angular = _releasedBlockAngularDamping
         });
-        _entityManager.SetComponentData(entity, new PhysicsGravityFactor { Value = renderAsMetaball ? 0f : 1f });
+        _entityManager.SetComponentData(entity, new PhysicsGravityFactor { Value = usesGravity ? 1f : 0f });
         _entityManager.SetComponentData(entity, new ReleasedBlockComponent
         {
             OwnerId = _ownerId,
@@ -116,7 +116,7 @@ public sealed partial class LevelMapSpawner
             CollectibleType = renderAsMetaball ? TypeBlock.Water : runtimeType.CollectibleType,
             SuctionPathIndex = byte.MaxValue,
             RenderAsMetaball = renderAsMetaball ? (byte)1 : (byte)0,
-            UsesGravity = renderAsMetaball || !usesGravity ? (byte)0 : (byte)1
+            UsesGravity = usesGravity ? (byte)1 : (byte)0
         });
         _entityManager.SetComponentEnabled<ReleasedBlockSolidConstraint>(entity, enableSolidConstraint);
         _entityManager.SetComponentEnabled<SuctionTransit>(entity, false);

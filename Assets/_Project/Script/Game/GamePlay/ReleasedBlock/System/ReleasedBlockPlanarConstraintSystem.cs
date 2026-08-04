@@ -33,9 +33,6 @@ public partial struct ReleasedBlockPostPhysicsConstraintSystem : ISystem
 
     public void OnUpdate(ref SystemState state)
     {
-        if (_query.IsEmpty)
-            return;
-
         JobHandle dependency = new ReleasedBlockContinuousCollisionJob
         {
             CollisionWorld = SystemAPI.GetSingleton<PhysicsWorldSingleton>().CollisionWorld
