@@ -45,6 +45,8 @@ public sealed class MapPainterLevelSettings : ScriptableObject
     public int PaintType;
     [FormerlySerializedAs("GridSize")]
     public float PrefabSize = 1f;
+    public Vector3 Scale = Vector3.one;
+    public bool HasScale;
     public float Spacing;
     public int GridWidth = 10;
     public int GridHeight = 10;

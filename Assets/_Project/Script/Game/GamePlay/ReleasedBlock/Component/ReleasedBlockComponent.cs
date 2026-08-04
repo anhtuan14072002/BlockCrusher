@@ -1,4 +1,4 @@
-using Unity.Collections;
+using Crusher;
 using Unity.Entities;
 using Unity.Mathematics;
 
@@ -11,7 +11,7 @@ public struct ReleasedBlockComponent : IComponentData
     public float Radius;
     public float3 PhysicsStepStartPosition;
     public ushort TypeIndex;
-    public FixedString64Bytes CollectibleId;
+    public TypeBlock CollectibleType;
     public byte SuctionPathIndex;
     public byte RenderAsMetaball;
     public byte UsesGravity;

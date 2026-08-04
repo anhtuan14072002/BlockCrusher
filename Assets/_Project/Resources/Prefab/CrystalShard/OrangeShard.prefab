@@ -100,7 +100,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _color: {r: 1, g: 0.42, b: 0.06, a: 1}
-  _collectibleId: orange_ore
+  _type: 4
   _releasedPrefab: {fileID: 7321888941567124337, guid: a1cc3a1b1f8e4d44293b438c9ab36a65, type: 3}
   _releasedScale: 0.12
   _releasedColor: {r: 1, g: 0.42, b: 0.06, a: 1}

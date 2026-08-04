@@ -1,3 +1,4 @@
+using Crusher;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -102,10 +103,10 @@ public sealed partial class LevelMapSpawner
             _authoredMeshRanges.Dispose();
     }
 
-    private int GetOrCreateReleasedBlockType(LevelBlock block)
+    private int GetOrCreateReleasedBlockType(TypeBlockMap blockMap)
     {
-        MeshFilter meshFilter = block.GetComponent<MeshFilter>();
-        return GetOrCreateReleasedBlockType(block.ReleasedPrefab, block.ReleasedScale, block.CollectibleId, block,
+        MeshFilter meshFilter = blockMap.GetComponent<MeshFilter>();
+        return GetOrCreateReleasedBlockType(blockMap.ReleasedPrefab, blockMap.ReleasedScale, blockMap.BlockType, blockMap,
             meshFilter != null ? meshFilter.sharedMesh : null);
     }
 
@@ -115,7 +116,7 @@ public sealed partial class LevelMapSpawner
             return -1;
 
         return GetOrCreateReleasedBlockType(decoration.ReleasedPrefab, decoration.ReleasedScale,
-            decoration.CollectibleId, decoration);
+            decoration.BlockType, decoration);
     }
 
     private bool RegisterBreakableObstacle(BreakableObstacle obstacle)
@@ -124,7 +125,7 @@ public sealed partial class LevelMapSpawner
         for (int i = 0; i < typeIndices.Length; i++)
         {
             int typeIndex = GetOrCreateReleasedBlockType(obstacle.ReleasedPrefab, obstacle.ReleasedScale,
-                obstacle.CollectibleId, obstacle, obstacle.GetShardMesh(i));
+                obstacle.CollectibleType, obstacle, obstacle.GetShardMesh(i));
             if (typeIndex < 0 || typeIndex > ushort.MaxValue)
                 return false;
 
@@ -135,16 +136,14 @@ public sealed partial class LevelMapSpawner
         return true;
     }
 
-    private int GetOrCreateReleasedBlockType(GameObject prefab, float scale, string collectibleName,
+    private int GetOrCreateReleasedBlockType(GameObject prefab, float scale, TypeBlock collectibleType,
         Component source, Mesh authoredMesh = null)
     {
-        if (prefab == null || scale <= 0f || string.IsNullOrWhiteSpace(collectibleName) ||
-            collectibleName.Length > 60)
+        if (prefab == null || scale <= 0f || collectibleType == TypeBlock.None)
         {
-            Debug.LogError($"'{source.name}' needs a collectible id up to 60 characters, released prefab and positive scale.", source);
+            Debug.LogError($"'{source.name}' needs a collectible type, released prefab and positive scale.", source);
             return -1;
         }
-        FixedString64Bytes collectibleId = collectibleName;
 
         MeshFilter meshFilter = prefab.GetComponentInChildren<MeshFilter>();
         Renderer meshRenderer = prefab.GetComponentInChildren<Renderer>();
@@ -159,7 +158,7 @@ public sealed partial class LevelMapSpawner
         {
             ReleasedBlockRuntimeType existing = _releasedBlockTypes[i];
             if (existing.Prefab == prefab && existing.Mesh == sourceMesh && Mathf.Approximately(existing.Scale, scale) &&
-                existing.CollectibleId.Equals(collectibleId))
+                existing.CollectibleType == collectibleType)
                 return i;
         }
 
@@ -184,7 +183,7 @@ public sealed partial class LevelMapSpawner
             Collider = collider,
             Scale = scale,
             Radius = radius * scale,
-            CollectibleId = collectibleId,
+            CollectibleType = collectibleType,
             BatchMatrices = new Matrix4x4[batchCapacity][],
             BatchColors = new Vector4[batchCapacity][],
             BatchCounts = new int[batchCapacity]

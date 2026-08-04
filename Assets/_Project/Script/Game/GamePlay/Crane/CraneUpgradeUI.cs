@@ -6,15 +6,16 @@ using UnityEngine.UI;
 
 namespace Crusher
 {
-    public sealed class CraneUpgradeUI : MonoBehaviour
+    public class CraneUpgradeUI : MonoBehaviour
     {
         [SerializeField] private CraneController _craneController;
         [SerializeField] private TextMeshProUGUI _suckedBlockCountText;
+        
         [SerializeField] private Button _increaseSawContactSpeedButton;
         [SerializeField] private Button _increaseSawScaleButton;
         [SerializeField] private Button _increaseFuelButton;
 
-        private readonly StringBuilder _materialsText = new StringBuilder(128);
+        private readonly StringBuilder _materialsText = new (128);
 
         private void Awake()
         {
@@ -50,7 +51,7 @@ namespace Crusher
             _craneController.IncreaseFuelCapacity();
         }
 
-        private void AddSuckedItem(string _, int __)
+        private void AddSuckedItem(TypeBlock _, int __)
         {
             RefreshMaterials();
         }
@@ -75,7 +76,7 @@ namespace Crusher
             _suckedBlockCountText.alignment = TextAlignmentOptions.TopLeft;
             _suckedBlockCountText.margin = new Vector4(16f, 12f, 16f, 12f);
             _suckedBlockCountText.raycastTarget = false;
-        }
+        }       
 
         private void RefreshMaterials()
         {
@@ -85,14 +86,14 @@ namespace Crusher
             _materialsText.Clear();
             _materialsText.Append("NGUYEN LIEU: ").Append(LevelMapSpawner.SuckedBlockCount);
 
-            IReadOnlyDictionary<string, int> items = LevelMapSpawner.SuckedItems;
+            IReadOnlyDictionary<TypeBlock, int> items = LevelMapSpawner.SuckedItems;
             if (items.Count == 0)
             {
                 _materialsText.Append("\nChua thu duoc");
             }
             else
             {
-                foreach (KeyValuePair<string, int> item in items)
+                foreach (KeyValuePair<TypeBlock, int> item in items)
                 {
                     _materialsText.Append('\n');
                     AppendDisplayName(item.Key);
@@ -103,31 +104,16 @@ namespace Crusher
             _suckedBlockCountText.SetText(_materialsText);
         }
 
-        private void AppendDisplayName(string collectibleId)
+        private void AppendDisplayName(TypeBlock collectibleType)
         {
-            switch (collectibleId)
+            switch (collectibleType)
             {
-                case "dirt": _materialsText.Append("Dat"); return;
-                case "rock": _materialsText.Append("Da"); return;
-                case "orange_ore": _materialsText.Append("Quang cam"); return;
-                case "blue_ore": _materialsText.Append("Quang xanh"); return;
-                case "purple_ore": _materialsText.Append("Quang tim"); return;
-                case "water": _materialsText.Append("Nuoc"); return;
-            }
-
-            bool upperNext = true;
-            for (int i = 0; i < collectibleId.Length; i++)
-            {
-                char character = collectibleId[i];
-                if (character == '_')
-                {
-                    _materialsText.Append(' ');
-                    upperNext = true;
-                    continue;
-                }
-
-                _materialsText.Append(upperNext ? char.ToUpperInvariant(character) : character);
-                upperNext = false;
+                case TypeBlock.Dirt: _materialsText.Append("Dat"); return;
+                case TypeBlock.Rock: _materialsText.Append("Da"); return;
+                case TypeBlock.Orange_ore: _materialsText.Append("Quang cam"); return;
+                case TypeBlock.Blue_ore: _materialsText.Append("Quang xanh"); return;
+                case TypeBlock.Purple_ore: _materialsText.Append("Quang tim"); return;
+                case TypeBlock.Water: _materialsText.Append("Nuoc"); return;
             }
         }
     }

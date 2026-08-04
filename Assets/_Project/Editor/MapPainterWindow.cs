@@ -4,7 +4,6 @@ using System.IO;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
-using UnityEngine.Serialization;
 
 public sealed class MapPainterWindow : EditorWindow
 {
@@ -16,7 +15,7 @@ public sealed class MapPainterWindow : EditorWindow
         Overlay
     }
 
-    private const float DefaultPrefabSize = 1f;
+    private static readonly Vector3 DefaultScale = Vector3.one;
     private const float DefaultOverlayLocalZ = -0.31f;
     private const string LevelFolder = "Assets/_Project/Resources/Level";
     private const string LevelSettingsFolder = "Assets/_Project/Editor/MapPainterData";
@@ -37,8 +36,7 @@ public sealed class MapPainterWindow : EditorWindow
     [SerializeField] private List<GameObject> _gridPrefabs = new();
     [SerializeField] private List<MapPainterGridColorLayer> _gridColorLayers = new();
     [SerializeField] private Transform _mapRoot;
-    [FormerlySerializedAs("_gridSize")]
-    [SerializeField] private float _prefabSize = DefaultPrefabSize;
+    [SerializeField] private Vector3 _scale = DefaultScale;
     [SerializeField] private float _spacing;
     [SerializeField] private int _gridWidth = 10;
     [SerializeField] private int _gridHeight = 10;
@@ -129,7 +127,7 @@ public sealed class MapPainterWindow : EditorWindow
                 LoadLevel();
         }
 
-        _prefabSize = Mathf.Max(0.01f, EditorGUILayout.FloatField("Prefab Size", _prefabSize));
+        _scale = Max(EditorGUILayout.Vector3Field("Scale", _scale), 0.01f);
         _spacing = Mathf.Max(0f, EditorGUILayout.FloatField("Spacing", _spacing));
         bool wasPaintEnabled = _paintEnabled;
         _paintEnabled = GUILayout.Toolbar(_paintEnabled ? 1 : 0, EditModeLabels) == 1;
@@ -453,11 +451,11 @@ public sealed class MapPainterWindow : EditorWindow
 
         Vector3 worldPosition = ray.GetPoint(distance);
         Vector3 rawLocal = root != null ? root.InverseTransformPoint(worldPosition) : worldPosition;
-        float cellStep = GetCellStep(_prefabSize, _spacing);
+        Vector2 cellStep = GetCellStep(_scale, _spacing);
         cell = new Vector2Int(
-            Mathf.RoundToInt(rawLocal.x / cellStep),
-            Mathf.RoundToInt(rawLocal.y / cellStep));
-        localPosition = new Vector3(cell.x * cellStep, cell.y * cellStep, 0f);
+            Mathf.RoundToInt(rawLocal.x / cellStep.x),
+            Mathf.RoundToInt(rawLocal.y / cellStep.y));
+        localPosition = new Vector3(cell.x * cellStep.x, cell.y * cellStep.y, 0f);
         return true;
     }
 
@@ -482,9 +480,9 @@ public sealed class MapPainterWindow : EditorWindow
         if (useGridColorLayer)
             prefab = GetGridPrefabForCell(cell.x, cell.y);
 
-        bool isWater = prefab.GetComponentInChildren<LevelWater>(true) != null;
+        bool isWater = prefab.GetComponentInChildren<BlockWater>(true) != null;
         if ((_paintType == PaintType.Overlay && FindBlockAt(localPosition) != null) ||
-            (isWater && HasComponentAt<LevelWater>(localPosition)) ||
+            (isWater && HasComponentAt<BlockWater>(localPosition)) ||
             (!isWater && _paintType == PaintType.Block && HasBlockAt(localPosition)))
             return;
 
@@ -501,13 +499,13 @@ public sealed class MapPainterWindow : EditorWindow
         }
     }
 
-    private GameObject CreateBlock(GameObject prefab, Vector3 localPosition, bool applyPrefabSize = true)
+    private GameObject CreateBlock(GameObject prefab, Vector3 localPosition, bool applyScale = true)
     {
         GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, _mapRoot);
         Undo.RegisterCreatedObjectUndo(instance, "Paint Map Block");
         instance.transform.localPosition = localPosition;
-        if (applyPrefabSize)
-            instance.transform.localScale = Vector3.one * _prefabSize;
+        if (applyScale)
+            instance.transform.localScale = _scale;
         ApplyPreviewColor(instance);
         return instance;
     }
@@ -521,13 +519,13 @@ public sealed class MapPainterWindow : EditorWindow
         }
 
         HashSet<Vector2Int> occupiedCells = new(_mapRoot.childCount);
-        float cellStep = GetCellStep(_prefabSize, _spacing);
+        Vector2 cellStep = GetCellStep(_scale, _spacing);
         for (int i = 0; i < _mapRoot.childCount; i++)
         {
             Vector3 position = _mapRoot.GetChild(i).localPosition;
             occupiedCells.Add(new Vector2Int(
-                Mathf.RoundToInt(position.x / cellStep),
-                Mathf.RoundToInt(position.y / cellStep)));
+                Mathf.RoundToInt(position.x / cellStep.x),
+                Mathf.RoundToInt(position.y / cellStep.y)));
         }
 
         BeginStroke("Generate Map Grid");
@@ -551,27 +549,27 @@ public sealed class MapPainterWindow : EditorWindow
     private void RandomizeExistingGrid()
     {
         GameObject template = GetFirstValidPrefab(_gridPrefabs);
-        LevelBlock templateBlock = template != null ? template.GetComponent<LevelBlock>() : null;
-        if (templateBlock == null)
+        TypeBlockMap templateBlockMap = template != null ? template.GetComponent<TypeBlockMap>() : null;
+        if (templateBlockMap == null)
         {
-            EditorUtility.DisplayDialog("Map Painter", "Grid Prefabs need LevelBlock components.", "OK");
+            EditorUtility.DisplayDialog("Map Painter", "Grid Prefabs need TypeBlockMap components.", "OK");
             return;
         }
 
         BeginStroke("Randomize Map Grid");
         Undo.RegisterFullObjectHierarchyUndo(_mapRoot.gameObject, "Randomize Map Grid");
-        float cellStep = GetCellStep(_prefabSize, _spacing);
+        Vector2 cellStep = GetCellStep(_scale, _spacing);
         int replacedCount = 0;
         for (int i = 0; i < _mapRoot.childCount; i++)
         {
             GameObject instance = _mapRoot.GetChild(i).gameObject;
-            LevelBlock block = instance.GetComponent<LevelBlock>();
-            if (block == null || block.CollectibleId != templateBlock.CollectibleId)
+            TypeBlockMap blockMap = instance.GetComponent<TypeBlockMap>();
+            if (blockMap == null || blockMap.BlockType != templateBlockMap.BlockType)
                 continue;
 
             Vector3 position = instance.transform.localPosition;
-            int cellX = Mathf.RoundToInt(position.x / cellStep);
-            int cellY = Mathf.RoundToInt(position.y / cellStep);
+            int cellX = Mathf.RoundToInt(position.x / cellStep.x);
+            int cellY = Mathf.RoundToInt(position.y / cellStep.y);
             GameObject prefab = GetGridPrefabForCell(cellX, cellY);
             if (prefab == null)
                 continue;
@@ -591,15 +589,15 @@ public sealed class MapPainterWindow : EditorWindow
     private void ApplyGridColorsToExisting()
     {
         Undo.RegisterFullObjectHierarchyUndo(_mapRoot.gameObject, "Apply Grid Color Layers");
-        float cellStep = GetCellStep(_prefabSize, _spacing);
+        Vector2 cellStep = GetCellStep(_scale, _spacing);
         int coloredCount = 0;
         for (int i = 0; i < _mapRoot.childCount; i++)
         {
             GameObject instance = _mapRoot.GetChild(i).gameObject;
-            if (instance.GetComponent<LevelBlock>() == null)
+            if (instance.GetComponent<TypeBlockMap>() == null)
                 continue;
 
-            int cellY = Mathf.RoundToInt(instance.transform.localPosition.y / cellStep);
+            int cellY = Mathf.RoundToInt(instance.transform.localPosition.y / cellStep.y);
             if (ApplyGridLayerColor(instance, cellY))
                 coloredCount++;
         }
@@ -614,11 +612,11 @@ public sealed class MapPainterWindow : EditorWindow
         if (!TryGetGridLayerColor(_gridColorLayers, _gridHeight, cellY, out Color color))
             return false;
 
-        LevelBlock block = instance.GetComponent<LevelBlock>();
-        if (block == null)
+        TypeBlockMap blockMap = instance.GetComponent<TypeBlockMap>();
+        if (blockMap == null)
             return false;
 
-        SerializedObject serializedBlock = new(block);
+        SerializedObject serializedBlock = new(blockMap);
         serializedBlock.FindProperty("_mapColor").colorValue = color;
         serializedBlock.FindProperty("_releasedColor").colorValue = color;
         serializedBlock.ApplyModifiedPropertiesWithoutUndo();
@@ -661,7 +659,8 @@ public sealed class MapPainterWindow : EditorWindow
         if (_mapRoot == null)
             return false;
 
-        float tolerance = GetCellStep(_prefabSize, _spacing) * 0.01f;
+        Vector2 cellStep = GetCellStep(_scale, _spacing);
+        float tolerance = Mathf.Min(cellStep.x, cellStep.y) * 0.01f;
         float toleranceSquared = tolerance * tolerance;
         for (int i = _mapRoot.childCount - 1; i >= 0; i--)
         {
@@ -679,7 +678,8 @@ public sealed class MapPainterWindow : EditorWindow
         if (_mapRoot == null)
             return null;
 
-        float tolerance = GetCellStep(_prefabSize, _spacing) * 0.01f;
+        Vector2 cellStep = GetCellStep(_scale, _spacing);
+        float tolerance = Mathf.Min(cellStep.x, cellStep.y) * 0.01f;
         float toleranceSquared = tolerance * tolerance;
         for (int i = _mapRoot.childCount - 1; i >= 0; i--)
         {
@@ -698,7 +698,7 @@ public sealed class MapPainterWindow : EditorWindow
         Matrix4x4 previousMatrix = Handles.matrix;
         Handles.color = erase ? new Color(1f, 0.25f, 0.25f, 0.9f) : new Color(0.2f, 1f, 0.35f, 0.9f);
         Handles.matrix = _mapRoot != null ? _mapRoot.localToWorldMatrix : Matrix4x4.identity;
-        Handles.DrawWireCube(localPosition, new Vector3(_prefabSize, _prefabSize, _prefabSize));
+        Handles.DrawWireCube(localPosition, _scale);
         Handles.matrix = previousMatrix;
         Handles.color = previousColor;
     }
@@ -793,9 +793,9 @@ public sealed class MapPainterWindow : EditorWindow
         return result < 0 ? result + modulus : result;
     }
 
-    private static float GetCellStep(float prefabSize, float spacing)
+    private static Vector2 GetCellStep(Vector3 scale, float spacing)
     {
-        return prefabSize + spacing;
+        return new Vector2(scale.x + spacing, scale.y + spacing);
     }
 
     private static bool IsEraseInput(int mouseButton, bool shift)
@@ -803,9 +803,17 @@ public sealed class MapPainterWindow : EditorWindow
         return mouseButton == 1 || shift;
     }
 
-    private static Vector3 GetGridLocalPosition(int x, int y, float cellStep)
+    private static Vector3 GetGridLocalPosition(int x, int y, Vector2 cellStep)
     {
-        return new Vector3(x * cellStep, y * cellStep, 0f);
+        return new Vector3(x * cellStep.x, y * cellStep.y, 0f);
+    }
+
+    private static Vector3 Max(Vector3 value, float minimum)
+    {
+        return new Vector3(
+            Mathf.Max(minimum, value.x),
+            Mathf.Max(minimum, value.y),
+            Mathf.Max(minimum, value.z));
     }
 
     private static Vector3 GetPaintLocalPosition(
@@ -949,7 +957,7 @@ public sealed class MapPainterWindow : EditorWindow
 
     private static int RemoveDuplicateLevelBlocks(Transform root)
     {
-        List<LevelBlock> duplicates = new();
+        List<TypeBlockMap> duplicates = new();
         CollectDuplicateLevelBlocks(root, duplicates);
         for (int i = 0; i < duplicates.Count; i++)
             Undo.DestroyObjectImmediate(duplicates[i].gameObject);
@@ -957,9 +965,9 @@ public sealed class MapPainterWindow : EditorWindow
         return duplicates.Count;
     }
 
-    private static void CollectDuplicateLevelBlocks(Transform root, List<LevelBlock> duplicates)
+    private static void CollectDuplicateLevelBlocks(Transform root, List<TypeBlockMap> duplicates)
     {
-        LevelBlock[] blocks = root.GetComponentsInChildren<LevelBlock>(true);
+        TypeBlockMap[] blocks = root.GetComponentsInChildren<TypeBlockMap>(true);
         if (blocks.Length < 2)
             return;
 
@@ -976,7 +984,7 @@ public sealed class MapPainterWindow : EditorWindow
             min.y = Mathf.Min(min.y, position.y);
         }
 
-        LevelWater[] waterMarkers = root.GetComponentsInChildren<LevelWater>(true);
+        BlockWater[] waterMarkers = root.GetComponentsInChildren<BlockWater>(true);
         for (int i = 0; i < waterMarkers.Length; i++)
         {
             Vector3 position = root.InverseTransformPoint(waterMarkers[i].transform.position);
@@ -1016,7 +1024,7 @@ public sealed class MapPainterWindow : EditorWindow
                                   !prefabStage.scene.isDirty;
 
         MaterialPropertyBlock properties = new();
-        LevelBlock[] blocks = root.GetComponentsInChildren<LevelBlock>(true);
+        TypeBlockMap[] blocks = root.GetComponentsInChildren<TypeBlockMap>(true);
         for (int i = 0; i < blocks.Length; i++)
             ApplyPreviewColor(blocks[i], properties);
 
@@ -1039,9 +1047,9 @@ public sealed class MapPainterWindow : EditorWindow
 
         PrefabStage prefabStage = PrefabStageUtility.GetCurrentPrefabStage();
         bool preserveCleanStage = prefabStage != null && !prefabStage.scene.isDirty;
-        LevelBlock block = selected.GetComponentInParent<LevelBlock>();
-        if (block != null)
-            ApplyPreviewColor(block);
+        TypeBlockMap blockMap = selected.GetComponentInParent<TypeBlockMap>();
+        if (blockMap != null)
+            ApplyPreviewColor(blockMap);
 
         LevelDecoration decoration = selected.GetComponentInParent<LevelDecoration>();
         if (decoration != null)
@@ -1053,18 +1061,18 @@ public sealed class MapPainterWindow : EditorWindow
 
     private void ApplyPreviewColor(GameObject instance)
     {
-        LevelBlock block = instance.GetComponentInChildren<LevelBlock>(true);
-        if (block != null)
-            ApplyPreviewColor(block);
+        TypeBlockMap blockMap = instance.GetComponentInChildren<TypeBlockMap>(true);
+        if (blockMap != null)
+            ApplyPreviewColor(blockMap);
 
         LevelDecoration decoration = instance.GetComponentInChildren<LevelDecoration>(true);
         if (decoration != null)
             ApplyPreviewColor(decoration);
     }
 
-    private void ApplyPreviewColor(LevelBlock block)
+    private void ApplyPreviewColor(TypeBlockMap blockMap)
     {
-        ApplyPreviewColor(block, _previewProperties);
+        ApplyPreviewColor(blockMap, _previewProperties);
     }
 
     private void ApplyPreviewColor(LevelDecoration decoration)
@@ -1072,9 +1080,9 @@ public sealed class MapPainterWindow : EditorWindow
         ApplyPreviewColor(decoration, _previewProperties);
     }
 
-    private static void ApplyPreviewColor(LevelBlock block, MaterialPropertyBlock properties)
+    private static void ApplyPreviewColor(TypeBlockMap blockMap, MaterialPropertyBlock properties)
     {
-        ApplyPreviewColor(block.GetComponent<MeshRenderer>(), block.MapColor, false, properties);
+        ApplyPreviewColor(blockMap.GetComponent<MeshRenderer>(), blockMap.MapColor, false, properties);
     }
 
     private static void ApplyPreviewColor(LevelDecoration decoration, MaterialPropertyBlock properties)
@@ -1163,7 +1171,8 @@ public sealed class MapPainterWindow : EditorWindow
         for (int i = 0; i < _gridColorLayers.Count; i++)
             settings.GridColorLayers.Add(new MapPainterGridColorLayer(_gridColorLayers[i]));
         settings.PaintType = (int)_paintType;
-        settings.PrefabSize = _prefabSize;
+        settings.Scale = _scale;
+        settings.HasScale = true;
         settings.Spacing = _spacing;
         settings.GridWidth = _gridWidth;
         settings.GridHeight = _gridHeight;
@@ -1202,7 +1211,7 @@ public sealed class MapPainterWindow : EditorWindow
         for (int i = 0; i < settings.GridColorLayers.Count; i++)
             _gridColorLayers.Add(new MapPainterGridColorLayer(settings.GridColorLayers[i]));
         _paintType = (PaintType)settings.PaintType;
-        _prefabSize = settings.PrefabSize;
+        _scale = settings.HasScale ? settings.Scale : Vector3.one * settings.PrefabSize;
         _spacing = settings.Spacing;
         _gridWidth = settings.GridWidth;
         _gridHeight = settings.GridHeight;
@@ -1273,10 +1282,11 @@ public sealed class MapPainterWindow : EditorWindow
     [MenuItem("Tools/Map Painter Self Check")]
     private static void RunSelfCheck()
     {
-        const float prefabSize = 1.2f;
+        Vector3 scale = new(1.2f, 0.8f, 0.6f);
+        Vector2 cellStep = GetCellStep(scale, 0.3f);
         Vector2Int cell = new(
-            Mathf.RoundToInt(1.79f / prefabSize),
-            Mathf.RoundToInt(-1.81f / prefabSize));
+            Mathf.RoundToInt(1.79f / cellStep.x),
+            Mathf.RoundToInt(-1.81f / cellStep.y));
         Debug.Assert(cell == new Vector2Int(1, -2), "Map Painter grid snapping failed.");
         Debug.Assert(BuildLevelName("2") == "level_2", "Map Painter level naming failed.");
         Debug.Assert(BuildLevelName("level_3") == "level_3", "Map Painter duplicated the level prefix.");
@@ -1284,11 +1294,11 @@ public sealed class MapPainterWindow : EditorWindow
             "Map Painter level loading path failed.");
         Debug.Assert(BuildLevelSettingsPath("level_4") == "Assets/_Project/Editor/MapPainterData/level_4.asset",
             "Map Painter level settings path failed.");
-        Debug.Assert(Mathf.Approximately(GetCellStep(prefabSize, 0.3f), 1.5f),
+        Debug.Assert(cellStep == new Vector2(1.5f, 1.1f),
             "Map Painter prefab spacing failed.");
         Debug.Assert(IsEraseInput(1, false) && IsEraseInput(0, true) && !IsEraseInput(0, false),
             "Map Painter erase input failed.");
-        Debug.Assert(GetGridLocalPosition(2, 3, prefabSize) == new Vector3(2.4f, 3.6f, 0f),
+        Debug.Assert(GetGridLocalPosition(2, 3, cellStep) == new Vector3(3f, 3.3f, 0f),
             "Map Painter grid generation position failed.");
         Debug.Assert(GetPaintLocalPosition(Vector3.zero, PaintType.Overlay, DefaultOverlayLocalZ).z ==
                      DefaultOverlayLocalZ,
@@ -1319,11 +1329,11 @@ public sealed class MapPainterWindow : EditorWindow
         {
             GameObject first = new("First");
             first.transform.SetParent(duplicateRoot.transform, false);
-            first.AddComponent<LevelBlock>();
+            first.AddComponent<TypeBlockMap>();
             GameObject duplicate = new("Duplicate");
             duplicate.transform.SetParent(duplicateRoot.transform, false);
-            duplicate.AddComponent<LevelBlock>();
-            List<LevelBlock> duplicateBlocks = new();
+            duplicate.AddComponent<TypeBlockMap>();
+            List<TypeBlockMap> duplicateBlocks = new();
             CollectDuplicateLevelBlocks(duplicateRoot.transform, duplicateBlocks);
             Debug.Assert(duplicateBlocks.Count == 1 && duplicateBlocks[0].gameObject == duplicate,
                 "Map Painter duplicate block detection failed.");

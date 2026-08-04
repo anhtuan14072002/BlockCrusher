@@ -259,5 +259,5 @@ MonoBehaviour:
   _releasedScale: 0.16
   _breakForce: 2.5
   _releasedPrefab: {fileID: 3668524019919717828, guid: 91551398da83e36419f36558c908c55d, type: 3}
-  _collectibleId: rock
+  _type: 5
   _releasedColor: {r: 0.52, g: 0.53, b: 0.54, a: 1}

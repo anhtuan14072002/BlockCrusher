@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public  class LevelWater : MonoBehaviour
+public class BlockWater : MonoBehaviour
 {
     private void OnDrawGizmos()
     {

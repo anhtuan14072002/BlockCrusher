@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Crusher;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -14,7 +15,7 @@ public sealed partial class LevelMapSpawner : MonoBehaviour
     private const float MaxRadiusTravelPerStep = 0.75f;
 
     private static readonly List<LevelMapSpawner> ActiveSpawners = new();
-    private static readonly Dictionary<string, int> SuckedItemCounts = new();
+    private static readonly Dictionary<TypeBlock, int> SuckedItemCounts = new();
     private static readonly int ColorId = Shader.PropertyToID("_Color");
     private static int _nextOwnerId = 1;
 
@@ -121,7 +122,7 @@ public sealed partial class LevelMapSpawner : MonoBehaviour
         public BlobAssetReference<Collider> Collider;
         public float Scale;
         public float Radius;
-        public FixedString64Bytes CollectibleId;
+        public TypeBlock CollectibleType;
         public Matrix4x4[][] BatchMatrices;
         public Vector4[][] BatchColors;
         public int[] BatchCounts;
@@ -130,8 +131,8 @@ public sealed partial class LevelMapSpawner : MonoBehaviour
     }
 
     public static int SuckedBlockCount { get; private set; }
-    public static IReadOnlyDictionary<string, int> SuckedItems => SuckedItemCounts;
-    public static event System.Action<string, int> ItemSucked;
+    public static IReadOnlyDictionary<TypeBlock, int> SuckedItems => SuckedItemCounts;
+    public static event System.Action<TypeBlock, int> ItemSucked;
 
     public int CurrentLevel { get; private set; }
     public int LevelCount => _levelPrefabs?.Length ?? 0;

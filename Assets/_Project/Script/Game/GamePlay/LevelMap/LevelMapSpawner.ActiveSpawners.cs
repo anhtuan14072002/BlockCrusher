@@ -1,4 +1,5 @@
 using Unity.Collections;
+using Crusher;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics;
@@ -9,17 +10,18 @@ public sealed partial class LevelMapSpawner
 {
     private const float ToolCollisionSkin = 0.0002f;
 
-    internal static void NotifyItemSucked(string collectibleId, int count)
+    internal static void NotifyItemSucked(TypeBlock collectibleType, int count)
     {
-        SuckedItemCounts.TryGetValue(collectibleId, out int currentCount);
-        SuckedItemCounts[collectibleId] = currentCount + count;
+        SuckedItemCounts.TryGetValue(collectibleType, out int currentCount);
+        SuckedItemCounts[collectibleType] = currentCount + count;
         SuckedBlockCount += count;
-        ItemSucked?.Invoke(collectibleId, count);
+        ItemSucked?.Invoke(collectibleType, count);
     }
     internal static int ActiveSpawnerCount => ActiveSpawners.Count;
     internal static LevelMapSpawner GetActiveSpawner(int index) => ActiveSpawners[index];
     internal static void RemoveActiveSpawnerAt(int index) => ActiveSpawners.RemoveAt(index);
     public static bool ReleaseInBoxForActiveSpawners(Matrix4x4 cutLocalToWorld, Bounds cutLocalBounds,
+        Vector3[] cutVertices, int[] cutTriangles,
         Vector3 pressDirection, float pressSpeed, float outwardForce, float tangentialForce, float spinDirection,
         float bladeRadius, float sideDamping, float maxVelocity)
     {
@@ -32,7 +34,8 @@ public sealed partial class LevelMapSpawner
                 ActiveSpawners.RemoveAt(i);
                 continue;
             }
-            releasedAny |= spawner.ReleaseInBox(cutLocalToWorld, cutLocalBounds, pressDirection, pressSpeed,
+            releasedAny |= spawner.ReleaseInBox(cutLocalToWorld, cutLocalBounds, cutVertices, cutTriangles,
+                pressDirection, pressSpeed,
                 outwardForce, tangentialForce, spinDirection, bladeRadius, sideDamping, maxVelocity);
         }
         return releasedAny;

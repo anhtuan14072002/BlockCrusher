@@ -38,7 +38,7 @@ public sealed partial class LevelMapSpawner
             float2 delta = position.xy - SawCenter.xy;
             float distanceSq = math.lengthsq(delta);
             float radiusSq = BladeRadius * BladeRadius;
-            if (distanceSq > radiusSq)
+            if (distanceSq > radiusSq || !ShouldPushBlock(delta, PressDirection.xy, PressSpeed))
                 return;
 
             solidConstraint.ValueRW = true;
@@ -58,6 +58,15 @@ public sealed partial class LevelMapSpawner
             float3 linear = new float3(velocity.Linear.xy + impulse, 0f);
             linear = ClampMagnitude(linear, math.min(MaxVelocity, block.MaxPlanarSpeed));
             velocity.Linear = RedirectVelocityFromSolid(position, linear);
+        }
+
+        internal static bool ShouldPushBlock(float2 delta, float2 pressDirection, float pressSpeed)
+        {
+            if (pressSpeed <= 0.0001f)
+                return false;
+
+            float2 movement = math.normalizesafe(pressDirection);
+            return math.dot(delta, movement) >= 0f;
         }
 
         private float3 RedirectVelocityFromSolid(float3 worldPosition, float3 velocity)
@@ -134,4 +143,14 @@ public sealed partial class LevelMapSpawner
             return lengthSq > maxLengthSq ? value * (maxLength * math.rsqrt(lengthSq)) : value;
         }
     }
+
+#if UNITY_EDITOR
+    [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ValidateSawPushDirection()
+    {
+        UnityEngine.Debug.Assert(SawPushJob.ShouldPushBlock(new float2(0f, 1f), new float2(0f, 1f), 1f));
+        UnityEngine.Debug.Assert(!SawPushJob.ShouldPushBlock(new float2(0f, -1f), new float2(0f, 1f), 1f));
+        UnityEngine.Debug.Assert(!SawPushJob.ShouldPushBlock(new float2(0f, 1f), new float2(0f, 1f), 0f));
+    }
+#endif
 }

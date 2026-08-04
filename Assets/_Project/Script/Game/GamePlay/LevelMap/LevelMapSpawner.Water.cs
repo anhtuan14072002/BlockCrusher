@@ -8,7 +8,7 @@ public sealed partial class LevelMapSpawner
 {
     private readonly List<Vector3> _metaballWaterSizes = new(64);
 
-    private void SpawnMetaballWater(LevelWater[] waterMarkers)
+    private void SpawnMetaballWater(BlockWater[] waterMarkers)
     {
         if (!_spawnMetaballWater || _metaballParticles == null)
             return;
@@ -130,7 +130,7 @@ public sealed partial class LevelMapSpawner
     private void ValidateMetaballWater()
     {
         Debug.Assert(!_spawnMetaballWater ||
-                     FindObjectsByType<LevelWater>(FindObjectsInactive.Exclude, FindObjectsSortMode.None).Length == 0 ||
+                     FindObjectsByType<BlockWater>(FindObjectsInactive.Exclude, FindObjectsSortMode.None).Length == 0 ||
                      (_metaballParticles != null && _spawnedWaterCellCount > 0 &&
                       _metaballParticles.particleCount == _spawnedWaterCellCount),
             "Metaball water is not wired or did not spawn.", this);

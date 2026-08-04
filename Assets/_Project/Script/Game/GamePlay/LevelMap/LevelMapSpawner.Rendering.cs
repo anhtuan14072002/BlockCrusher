@@ -21,7 +21,7 @@ public sealed partial class LevelMapSpawner
                 continue;
             frame.Handle.Complete();
             frame.Pending = false;
-            _displayRenderFrame = i;
+            _displayRenderFrame = i;    
             CachePreparedRenderFrame(frame);
         }
     }

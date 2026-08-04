@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Crusher;
 using Unity.Collections;
 using UnityEngine;
 
@@ -24,7 +25,7 @@ public sealed partial class LevelMapSpawner
 
         GameObject level = Instantiate(levelPrefab, _runtimeParent, false);
         level.name = levelPrefab.name;
-        LevelWater[] waterMarkers = level.GetComponentsInChildren<LevelWater>(true);
+        BlockWater[] waterMarkers = level.GetComponentsInChildren<BlockWater>(true);
         LevelDecoration[] decorations = level.GetComponentsInChildren<LevelDecoration>(true);
         if (!TryBuildCellsFromLevel(level, waterMarkers))
         {
@@ -54,9 +55,9 @@ public sealed partial class LevelMapSpawner
         DestroyUnityObject(level);
     }
 
-    private bool TryBuildCellsFromLevel(GameObject level, LevelWater[] waterMarkers)
+    private bool TryBuildCellsFromLevel(GameObject level, BlockWater[] waterMarkers)
     {
-        LevelBlock[] blocks = level.GetComponentsInChildren<LevelBlock>(true);
+        TypeBlockMap[] blocks = level.GetComponentsInChildren<TypeBlockMap>(true);
         MeshRenderer firstRenderer = null;
         Vector3 min = new Vector3(float.MaxValue, float.MaxValue, 0f);
         Vector3 max = new Vector3(float.MinValue, float.MinValue, 0f);
@@ -76,8 +77,8 @@ public sealed partial class LevelMapSpawner
             return false;
         }
 
-        LevelBlock firstBlock = firstRenderer.GetComponent<LevelBlock>();
-        Vector2 cellSize = GetCellSizeInSpace(firstBlock, _runtimeParent);
+        TypeBlockMap firstBlockMap = firstRenderer.GetComponent<TypeBlockMap>();
+        Vector2 cellSize = GetCellSizeInSpace(firstBlockMap, _runtimeParent);
         _cellSize = cellSize.x;
         if (_cellSize <= 0.0001f || Mathf.Abs(cellSize.y - _cellSize) > _cellSize * 0.01f)
         {
@@ -99,16 +100,16 @@ public sealed partial class LevelMapSpawner
         float alignmentTolerance = _cellSize * 0.01f;
         for (int i = 0; i < blocks.Length; i++)
         {
-            LevelBlock block = blocks[i];
-            MeshRenderer renderer = block.GetComponent<MeshRenderer>();
-            int typeIndex = GetOrCreateReleasedBlockType(block);
+            TypeBlockMap blockMap = blocks[i];
+            MeshRenderer renderer = blockMap.GetComponent<MeshRenderer>();
+            int typeIndex = GetOrCreateReleasedBlockType(blockMap);
             if (typeIndex < 0)
             {
                 DisposeCells();
                 return false;
             }
 
-            Vector3 localPosition = _runtimeParent.InverseTransformPoint(block.transform.position);
+            Vector3 localPosition = _runtimeParent.InverseTransformPoint(blockMap.transform.position);
             int x = Mathf.RoundToInt((localPosition.x - _offset.x) / _cellSize);
             int y = Mathf.RoundToInt((localPosition.y - _offset.y) / _cellSize);
             Vector3 cellPosition = GetCellLocalPosition(x, y);
@@ -130,8 +131,8 @@ public sealed partial class LevelMapSpawner
 
             _cellSolid[cell] = 1;
             _cellReleasedTypes[cell] = (ushort)typeIndex;
-            _cellColors[cell] = block.MapColor;
-            _cellReleasedColors[cell] = block.ReleasedColor;
+            _cellColors[cell] = blockMap.MapColor;
+            _cellReleasedColors[cell] = blockMap.ReleasedColor;
         }
 
         BreakableObstacle[] breakableObstacles = level.GetComponentsInChildren<BreakableObstacle>(true);
@@ -173,15 +174,15 @@ public sealed partial class LevelMapSpawner
         return new Vector3(x, y, z);
     }
 
-    private static Vector2 GetCellSizeInSpace(LevelBlock block, Transform space)
+    private static Vector2 GetCellSizeInSpace(TypeBlockMap blockMap, Transform space)
     {
-        if (block == null)
+        if (blockMap == null)
             return Vector2.zero;
 
         float x = space.InverseTransformVector(
-            block.transform.TransformVector(Vector3.right * block.CellSize)).magnitude;
+            blockMap.transform.TransformVector(Vector3.right * blockMap.CellSize)).magnitude;
         float y = space.InverseTransformVector(
-            block.transform.TransformVector(Vector3.up * block.CellSize)).magnitude;
+            blockMap.transform.TransformVector(Vector3.up * blockMap.CellSize)).magnitude;
         return new Vector2(x, y);
     }
 
@@ -193,7 +194,7 @@ public sealed partial class LevelMapSpawner
         if (levelPrefab == null)
             return;
 
-        LevelBlock[] blocks = levelPrefab.GetComponentsInChildren<LevelBlock>(true);
+        TypeBlockMap[] blocks = levelPrefab.GetComponentsInChildren<TypeBlockMap>(true);
         MeshRenderer firstBlock = blocks.Length > 0 ? blocks[0].GetComponent<MeshRenderer>() : null;
 
         Debug.Assert(firstBlock != null, "Level prefab has no cuttable blocks.", levelPrefab);
@@ -208,15 +209,15 @@ public sealed partial class LevelMapSpawner
         HashSet<Vector2Int> occupiedCells = new HashSet<Vector2Int>();
         for (int i = 0; i < blocks.Length; i++)
         {
-            LevelBlock block = blocks[i];
-            MeshRenderer renderer = block.GetComponent<MeshRenderer>();
-            Debug.Assert(block.ReleasedPrefab != null, $"Level block '{block.name}' needs a released prefab.", block);
-            Debug.Assert(!string.IsNullOrWhiteSpace(block.CollectibleId),
-                $"Level block '{block.name}' needs a collectible id.", block);
-            Debug.Assert(block.ReleasedScale > 0f, $"Level block '{block.name}' needs a positive released scale.", block);
-            Debug.Assert(block.CellSize > 0f, $"Level block '{block.name}' needs a positive cell size.", block);
+            TypeBlockMap blockMap = blocks[i];
+            MeshRenderer renderer = blockMap.GetComponent<MeshRenderer>();
+            Debug.Assert(blockMap.ReleasedPrefab != null, $"Level block '{blockMap.name}' needs a released prefab.", blockMap);
+            Debug.Assert(blockMap.BlockType != TypeBlock.None,
+                $"Level block '{blockMap.name}' needs a collectible id.", blockMap);
+            Debug.Assert(blockMap.ReleasedScale > 0f, $"Level block '{blockMap.name}' needs a positive released scale.", blockMap);
+            Debug.Assert(blockMap.CellSize > 0f, $"Level block '{blockMap.name}' needs a positive cell size.", blockMap);
 
-            Vector3 localPosition = levelPrefab.transform.InverseTransformPoint(block.transform.position);
+            Vector3 localPosition = levelPrefab.transform.InverseTransformPoint(blockMap.transform.position);
             Vector2Int cell = new Vector2Int(
                 Mathf.RoundToInt(localPosition.x / cellSize),
                 Mathf.RoundToInt(localPosition.y / cellSize));

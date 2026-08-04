@@ -37,6 +37,8 @@ public sealed class SawBlockCutter : MonoBehaviour
     private readonly Dictionary<Collider, LevelMapChunk> _chunkCache = new(16);
     private PhysicsShapeAuthoring _physicsShape;
     private MeshFilter _meshFilter;
+    private Vector3[] _cutVertices;
+    private int[] _cutTriangles;
     private BlobAssetReference<PhysicsCollider> _obstacleQueryCollider;
     private Vector3 _obstacleQueryScale;
 
@@ -58,6 +60,7 @@ public sealed class SawBlockCutter : MonoBehaviour
         _bladeVisual ??= transform;
         _physicsShape = GetComponent<PhysicsShapeAuthoring>();
         _meshFilter = GetComponent<MeshFilter>();
+        CacheCutMesh();
         _previousPosition = transform.position;
     }
 
@@ -83,7 +86,8 @@ public sealed class SawBlockCutter : MonoBehaviour
     {
         Vector3 previousPosition = _previousPosition;
         Vector3 currentPosition = transform.position;
-        if ((currentPosition - previousPosition).sqrMagnitude > 0.000001f)
+        bool movedThisStep = (currentPosition - previousPosition).sqrMagnitude > 0.000001f;
+        if (movedThisStep)
             _hasMovedSinceEnable = true;
         float inverseDeltaTime = Time.fixedDeltaTime > 0f ? 1f / Time.fixedDeltaTime : 0f;
         _sawVelocity = (currentPosition - previousPosition) * inverseDeltaTime;
@@ -97,7 +101,7 @@ public sealed class SawBlockCutter : MonoBehaviour
 
         _previousPosition = currentPosition;
 
-        if (_hasMovedSinceEnable && ReleaseAlongMovement(previousPosition, currentPosition))
+        if (movedThisStep && ReleaseAlongMovement(previousPosition, currentPosition))
         {
             RegisterBlockCut();
             RegisterResistance();
@@ -261,13 +265,27 @@ public sealed class SawBlockCutter : MonoBehaviour
 
     private bool ReleaseCutBoxAt(Vector3 position)
     {
-        if (_meshFilter == null || _meshFilter.sharedMesh == null)
+        if (_cutVertices == null || _cutTriangles == null)
             return false;
 
         Matrix4x4 cutLocalToWorld = Matrix4x4.TRS(position, transform.rotation, transform.lossyScale);
         return LevelMapSpawner.ReleaseInBoxForActiveSpawners(cutLocalToWorld, _meshFilter.sharedMesh.bounds,
+            _cutVertices, _cutTriangles,
             _pressDirection, _pressSpeed, _compressionForce, _bladeTangentialForce, _bladeSpinDirection,
             _bladePushRadius, _sideDampingOnContact, _maxBlockVelocity);
+    }
+
+    private void CacheCutMesh()
+    {
+        Mesh mesh = _meshFilter != null ? _meshFilter.sharedMesh : null;
+        if (mesh == null || !mesh.isReadable)
+        {
+            Debug.LogError("Saw cut mesh must have Read/Write Enabled.", this);
+            return;
+        }
+
+        _cutVertices = mesh.vertices;
+        _cutTriangles = mesh.triangles;
     }
 
     private void ClearCache(Collider other)

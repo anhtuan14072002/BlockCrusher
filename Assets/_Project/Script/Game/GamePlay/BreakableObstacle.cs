@@ -1,3 +1,4 @@
+using Crusher;
 using UnityEngine;
 
 [DisallowMultipleComponent]
@@ -18,7 +19,7 @@ public sealed class BreakableObstacle : MonoBehaviour
     [SerializeField, Min(0.01f)] private float _releasedScale = 0.16f;
     [SerializeField, Min(0f)] private float _breakForce = 2.5f;
     [SerializeField] private GameObject _releasedPrefab;
-    [SerializeField] private string _collectibleId = "rock";
+    [SerializeField] private TypeBlock _type = TypeBlock.Rock;
     [SerializeField] private Color _releasedColor = new(0.52f, 0.53f, 0.54f, 1f);
 
     private MeshFilter _meshFilter;
@@ -33,7 +34,7 @@ public sealed class BreakableObstacle : MonoBehaviour
     internal float ReleasedScale => _releasedScale;
     internal float BreakForce => _breakForce;
     internal GameObject ReleasedPrefab => _releasedPrefab;
-    internal string CollectibleId => _collectibleId;
+    internal TypeBlock CollectibleType => _type;
     internal Color32 ReleasedColor => _releasedColor;
 
     private void Awake()
@@ -129,7 +130,6 @@ public sealed class BreakableObstacle : MonoBehaviour
         Debug.Assert(GetComponent<MeshFilter>().sharedMesh != null, "Breakable obstacle needs a mesh.", this);
         Debug.Assert(GetComponent<MeshRenderer>().sharedMaterial != null, "Breakable obstacle needs a material.", this);
         Debug.Assert(_releasedPrefab != null, "Breakable obstacle needs a released prefab.", this);
-        Debug.Assert(!string.IsNullOrWhiteSpace(_collectibleId),
-            "Breakable obstacle needs a collectible id.", this);
+        Debug.Assert(_type != TypeBlock.None, "Breakable obstacle needs a collectible type.", this);
     }
 }

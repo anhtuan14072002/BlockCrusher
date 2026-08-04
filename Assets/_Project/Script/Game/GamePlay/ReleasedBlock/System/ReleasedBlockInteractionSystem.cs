@@ -1,3 +1,4 @@
+using Crusher;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -12,7 +13,7 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
     private EntityQuery _suctionTransitQuery;
     private EntityQuery _solidConstraintQuery;
     private NativeList<ReleasedBlockInteractionRequest> _requests;
-    private NativeQueue<FixedString64Bytes> _collectedItems;
+    private NativeQueue<TypeBlock> _collectedItems;
     private JobHandle _lastInteractionHandle;
     private bool _hasPendingCollection;
 
@@ -45,7 +46,7 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
             .WithAllRW<LocalTransform>()
             .Build();
         _requests = new NativeList<ReleasedBlockInteractionRequest>(8, Allocator.Persistent);
-        _collectedItems = new NativeQueue<FixedString64Bytes>(Allocator.Persistent);
+        _collectedItems = new NativeQueue<TypeBlock>(Allocator.Persistent);
     }
 
     public void OnDestroy(ref SystemState state)
@@ -137,7 +138,7 @@ public partial struct ReleasedBlockInteractionSystem : ISystem
             return;
         _lastInteractionHandle.Complete();
         _hasPendingCollection = false;
-        while (_collectedItems.TryDequeue(out FixedString64Bytes collectibleId))
-            LevelMapSpawner.NotifyItemSucked(collectibleId.ToString(), 1);
+        while (_collectedItems.TryDequeue(out TypeBlock collectibleType))
+            LevelMapSpawner.NotifyItemSucked(collectibleType, 1);
     }
 }

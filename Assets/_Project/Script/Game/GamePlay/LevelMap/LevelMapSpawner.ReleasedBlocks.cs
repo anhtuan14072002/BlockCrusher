@@ -1,3 +1,4 @@
+using Crusher;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics;
@@ -112,9 +113,7 @@ public sealed partial class LevelMapSpawner
             Radius = runtimeType.Radius,
             PhysicsStepStartPosition = new float3(position.x, position.y, position.z),
             TypeIndex = typeIndex,
-            CollectibleId = renderAsMetaball
-                ? new Unity.Collections.FixedString64Bytes("water")
-                : runtimeType.CollectibleId,
+            CollectibleType = renderAsMetaball ? TypeBlock.Water : runtimeType.CollectibleType,
             SuctionPathIndex = byte.MaxValue,
             RenderAsMetaball = renderAsMetaball ? (byte)1 : (byte)0,
             UsesGravity = renderAsMetaball || !usesGravity ? (byte)0 : (byte)1

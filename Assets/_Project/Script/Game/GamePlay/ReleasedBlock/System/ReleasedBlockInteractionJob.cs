@@ -1,3 +1,4 @@
+using Crusher;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
@@ -10,7 +11,7 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
 {
     [ReadOnly] public NativeArray<ReleasedBlockInteractionRequest> Requests;
     public EntityCommandBuffer.ParallelWriter CommandBuffer;
-    public NativeQueue<FixedString64Bytes>.ParallelWriter CollectedItems;
+    public NativeQueue<TypeBlock>.ParallelWriter CollectedItems;
 
     private void Execute([EntityIndexInQuery] int sortKey, Entity entity, ref LocalTransform transform,
         ref PhysicsCollider collider, ref PhysicsVelocity velocity, ref PhysicsGravityFactor gravity,
@@ -106,8 +107,8 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
                     if (pathIndex == lastPathIndex &&
                         math.lengthsq(suctionDelta) < request.DestroyRadius * request.DestroyRadius)
                     {
-                        if (!block.CollectibleId.IsEmpty)
-                            CollectedItems.Enqueue(block.CollectibleId);
+                        if (block.CollectibleType != TypeBlock.None)
+                            CollectedItems.Enqueue(block.CollectibleType);
                         simulate.ValueRW = false;
                         CommandBuffer.DestroyEntity(sortKey, entity);
                         return;

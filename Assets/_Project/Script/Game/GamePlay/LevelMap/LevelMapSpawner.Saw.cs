@@ -3,7 +3,8 @@ using UnityEngine;
 
 public sealed partial class LevelMapSpawner
 {
-    public bool ReleaseInBox(Matrix4x4 cutLocalToWorld, Bounds cutLocalBounds, Vector3 pressDirection,
+    public bool ReleaseInBox(Matrix4x4 cutLocalToWorld, Bounds cutLocalBounds,
+        Vector3[] cutVertices, int[] cutTriangles, Vector3 pressDirection,
         float pressSpeed, float outwardForce, float tangentialForce, float spinDirection, float bladeRadius,
         float sideDamping, float maxVelocity)
     {
@@ -58,6 +59,9 @@ public sealed partial class LevelMapSpawner
                     cutLocal.y < overlapMin.y || cutLocal.y > overlapMax.y)
                     continue;
 
+                if (!MeshOverlapsCell(cutVertices, cutTriangles, cutLocal, cellAxisX, cellAxisY))
+                    continue;
+
                 if (!releasedAny)
                     CompleteReleasedBlockJobs();
                 ReleaseCell(cellIndex, x, y, cellLocal, sawCenter, pressSpeed, outwardForce, tangentialForce,
@@ -67,6 +71,96 @@ public sealed partial class LevelMapSpawner
         }
         return releasedAny;
     }
+
+    private static bool MeshOverlapsCell(Vector3[] vertices, int[] triangles, Vector3 center,
+        Vector3 axisX, Vector3 axisY)
+    {
+        Vector2 a = center - axisX - axisY;
+        Vector2 b = center + axisX - axisY;
+        Vector2 c = center + axisX + axisY;
+        Vector2 d = center - axisX + axisY;
+        float minX = Mathf.Min(Mathf.Min(a.x, b.x), Mathf.Min(c.x, d.x));
+        float maxX = Mathf.Max(Mathf.Max(a.x, b.x), Mathf.Max(c.x, d.x));
+        float minY = Mathf.Min(Mathf.Min(a.y, b.y), Mathf.Min(c.y, d.y));
+        float maxY = Mathf.Max(Mathf.Max(a.y, b.y), Mathf.Max(c.y, d.y));
+
+        for (int i = 0; i < triangles.Length; i += 3)
+        {
+            Vector2 t0 = vertices[triangles[i]];
+            Vector2 t1 = vertices[triangles[i + 1]];
+            Vector2 t2 = vertices[triangles[i + 2]];
+            if (Mathf.Abs(Cross(t1 - t0, t2 - t0)) < 0.000001f)
+                continue;
+
+            if (Mathf.Max(Mathf.Max(t0.x, t1.x), t2.x) < minX ||
+                Mathf.Min(Mathf.Min(t0.x, t1.x), t2.x) > maxX ||
+                Mathf.Max(Mathf.Max(t0.y, t1.y), t2.y) < minY ||
+                Mathf.Min(Mathf.Min(t0.y, t1.y), t2.y) > maxY)
+                continue;
+
+            if (PointInTriangle(a, t0, t1, t2) || PointInTriangle(b, t0, t1, t2) ||
+                PointInTriangle(c, t0, t1, t2) || PointInTriangle(d, t0, t1, t2) ||
+                PointInQuad(t0, a, b, c, d) || PointInQuad(t1, a, b, c, d) ||
+                PointInQuad(t2, a, b, c, d) ||
+                EdgesIntersect(t0, t1, a, b, c, d) || EdgesIntersect(t1, t2, a, b, c, d) ||
+                EdgesIntersect(t2, t0, a, b, c, d))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool PointInTriangle(Vector2 point, Vector2 a, Vector2 b, Vector2 c)
+    {
+        float ab = Cross(b - a, point - a);
+        float bc = Cross(c - b, point - b);
+        float ca = Cross(a - c, point - c);
+        return ab >= 0f && bc >= 0f && ca >= 0f || ab <= 0f && bc <= 0f && ca <= 0f;
+    }
+
+    private static bool PointInQuad(Vector2 point, Vector2 a, Vector2 b, Vector2 c, Vector2 d)
+    {
+        return PointInTriangle(point, a, b, c) || PointInTriangle(point, a, c, d);
+    }
+
+    private static bool EdgesIntersect(Vector2 a, Vector2 b, Vector2 q0, Vector2 q1, Vector2 q2, Vector2 q3)
+    {
+        return SegmentsIntersect(a, b, q0, q1) || SegmentsIntersect(a, b, q1, q2) ||
+               SegmentsIntersect(a, b, q2, q3) || SegmentsIntersect(a, b, q3, q0);
+    }
+
+    private static bool SegmentsIntersect(Vector2 a, Vector2 b, Vector2 c, Vector2 d)
+    {
+        float abC = Cross(b - a, c - a);
+        float abD = Cross(b - a, d - a);
+        float cdA = Cross(d - c, a - c);
+        float cdB = Cross(d - c, b - c);
+        if (abC * abD > 0f || cdA * cdB > 0f)
+            return false;
+
+        return Mathf.Max(Mathf.Min(a.x, b.x), Mathf.Min(c.x, d.x)) <=
+               Mathf.Min(Mathf.Max(a.x, b.x), Mathf.Max(c.x, d.x)) &&
+               Mathf.Max(Mathf.Min(a.y, b.y), Mathf.Min(c.y, d.y)) <=
+               Mathf.Min(Mathf.Max(a.y, b.y), Mathf.Max(c.y, d.y));
+    }
+
+    private static float Cross(Vector2 a, Vector2 b)
+    {
+        return a.x * b.y - a.y * b.x;
+    }
+
+#if UNITY_EDITOR
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ValidateMeshCellOverlap()
+    {
+        Vector3[] vertices = { new(0f, 0f), new(1f, 0f), new(0f, 1f) };
+        int[] triangles = { 0, 1, 2 };
+        Debug.Assert(MeshOverlapsCell(vertices, triangles, new Vector3(0.25f, 0.25f),
+            new Vector3(0.05f, 0f), new Vector3(0f, 0.05f)));
+        Debug.Assert(!MeshOverlapsCell(vertices, triangles, new Vector3(2f, 2f),
+            new Vector3(0.05f, 0f), new Vector3(0f, 0.05f)));
+    }
+#endif
 
     private void ReleaseCell(int cellIndex, int cellX, int cellY, Vector3 cellLocal, Vector3 sawCenter,
         float pressSpeed, float outwardForce, float tangentialForce, float spinDirection, float bladeRadius,
