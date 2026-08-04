@@ -9,16 +9,14 @@ namespace Crusher
     {
         [SerializeField] private Transform _point;
         [SerializeField] private Transform _tool;
+        [SerializeField] private LineRenderer _line;
         [SerializeField, Min(4)] private int _segmentCount = 18;
-        [SerializeField, Min(0.01f)] private float _width = 0.12f;
         [SerializeField, Min(0f)] private float _gravity = 0.75f;
         [SerializeField, Range(0.8f, 1f)] private float _damping = 0.9f;
         [SerializeField, Range(2, 16)] private int _constraintIterations = 12;
         [SerializeField] private Color _cutColor = new(0.08f, 0.08f, 0.08f, 1f);
         [SerializeField] private Color _suctionColor = new(0.08f, 0.08f, 0.08f, 0.38f);
 
-        private LineRenderer _line;
-        private Material _material;
         private Vector3[] _positions;
         private Vector3[] _previousPositions;
         private float _maxLength = 4.72f;
@@ -27,28 +25,6 @@ namespace Crusher
         private bool _initialized;
 
         internal Vector3 StartPosition => _point.position;
-
-        private void Awake()
-        {
-            _line = GetComponent<LineRenderer>();
-            _line.useWorldSpace = true;
-            _line.alignment = LineAlignment.TransformZ;
-            _line.numCapVertices = 6;
-            _line.numCornerVertices = 6;
-            _line.textureMode = LineTextureMode.Tile;
-            _line.positionCount = _segmentCount + 1;
-            _line.widthMultiplier = _width;
-            _line.sortingOrder = 2;
-
-            Shader shader = Shader.Find("Sprites/Default");
-            if (shader != null)
-            {
-                _material = new Material(shader) { name = "Crane Cable Runtime" };
-                _line.sharedMaterial = _material;
-            }
-
-            SetColor(_cutColor);
-        }
 
         private void LateUpdate()
         {
@@ -201,8 +177,6 @@ namespace Crusher
 
             _line.startColor = color;
             _line.endColor = color;
-            if (_material != null)
-                _material.color = color;
         }
 
         [System.Diagnostics.Conditional("UNITY_EDITOR")]
@@ -217,10 +191,5 @@ namespace Crusher
                 "Crane cable endpoints must stay attached to the crane and tool.");
         }
 
-        private void OnDestroy()
-        {
-            if (_material != null)
-                Destroy(_material);
-        }
     }
 }
