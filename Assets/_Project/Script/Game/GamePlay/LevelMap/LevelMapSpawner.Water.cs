@@ -13,6 +13,8 @@ public sealed partial class LevelMapSpawner
         if (!_spawnMetaballWater || _metaballParticles == null)
             return;
 
+        _metaballParticles.gameObject.layer = LayerMask.NameToLayer("Metaball");
+
         List<Vector3> waterPositions = new List<Vector3>(waterMarkers.Length);
         List<Vector3> waterSizes = new List<Vector3>(waterMarkers.Length);
         float depth = -_chunkColliderDepth * 0.5f;

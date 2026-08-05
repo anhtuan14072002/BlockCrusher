@@ -8,6 +8,9 @@ namespace Crusher
         Blue_ore, 
         Orange_ore,
         Rock,
-        Water
+        Water,
+        Crystal_0_Purple,
+        Crystal_0_Blue,
+        Crystal_0_Orange
     }
 }

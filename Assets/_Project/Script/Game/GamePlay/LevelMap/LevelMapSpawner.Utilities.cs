@@ -38,6 +38,11 @@ public sealed partial class LevelMapSpawner
         return new float3(value.x, value.y, value.z);
     }
 
+    private static quaternion ToQuaternion(Quaternion value)
+    {
+        return new quaternion(value.x, value.y, value.z, value.w);
+    }
+
     private static float2 ToFloat2(Vector2 value)
     {
         return new float2(value.x, value.y);

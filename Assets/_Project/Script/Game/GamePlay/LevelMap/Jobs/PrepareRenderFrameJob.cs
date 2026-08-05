@@ -8,28 +8,50 @@ using Unity.Transforms;
 [BurstCompile(FloatMode = FloatMode.Fast, FloatPrecision = FloatPrecision.Low)]
 internal partial struct PrepareRenderFrameJob : IJobEntity
 {
+    private const float AttachmentRenderOffset = -0.005f;
+
     [WriteOnly] public NativeArray<float4x4> Matrices;
     [WriteOnly] public NativeArray<float4> Colors;
     [WriteOnly] public NativeArray<ushort> Types;
     public NativeReference<int> Count;
     public int OwnerId;
 
-    private void Execute(Entity entity, in LocalTransform transformData, in ReleasedBlockComponent block)
+    private void Execute(Entity entity, in LocalTransform transformData, in ReleasedBlockComponent block,
+        in DynamicBuffer<ReleasedBlockAttachment> attachments)
     {
         if (block.OwnerId != OwnerId || block.RenderAsMetaball != 0)
             return;
 
         int index = Count.Value;
-        if (index >= Matrices.Length)
+        if (!TryWriteRecord(entity, index, block.TypeIndex, block.Color, transformData.Position,
+                transformData.Rotation, new float3(transformData.Scale), 0f))
             return;
 
-        float3 renderPosition = transformData.Position;
-        renderPosition.z += (entity.Index & 255) * 0.0001f;
-        Matrices[index] = float4x4.TRS(renderPosition, transformData.Rotation,
-            new float3(transformData.Scale));
-        Colors[index] = block.Color;
-        Types[index] = block.TypeIndex;
         Count.Value = index + 1;
+        for (int i = 0; i < attachments.Length; i++)
+        {
+            ReleasedBlockAttachment attachment = attachments[i];
+            index = Count.Value;
+            float3 renderPosition = transformData.Position + math.rotate(transformData.Rotation, attachment.LocalPosition);
+            quaternion renderRotation = math.mul(transformData.Rotation, attachment.LocalRotation);
+            if (!TryWriteRecord(entity, index, attachment.TypeIndex, attachment.Color, renderPosition,
+                    renderRotation, attachment.Scale, AttachmentRenderOffset))
+                return;
+            Count.Value = index + 1;
+        }
+    }
+
+    private bool TryWriteRecord(Entity entity, int index, ushort typeIndex, float4 color, float3 renderPosition,
+        quaternion renderRotation, float3 scale, float renderOffset)
+    {
+        if (index >= Matrices.Length)
+            return false;
+
+        renderPosition.z += (entity.Index & 255) * 0.0001f + renderOffset;
+        Matrices[index] = float4x4.TRS(renderPosition, renderRotation, scale);
+        Colors[index] = color;
+        Types[index] = typeIndex;
+        return true;
     }
 }
 
@@ -41,7 +63,7 @@ public partial struct ReleasedBlockRenderPreparationSystem : ISystem
     public void OnCreate(ref SystemState state)
     {
         _query = SystemAPI.QueryBuilder()
-            .WithAll<LocalTransform, ReleasedBlockComponent>()
+            .WithAll<LocalTransform, ReleasedBlockComponent, ReleasedBlockAttachment>()
             .Build();
     }
 

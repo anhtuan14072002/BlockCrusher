@@ -22,6 +22,7 @@ public sealed class MapPainterWindow : EditorWindow
     private const float RandomOverlayScaleMax = 1.35f;
     private const string LevelFolder = "Assets/_Project/Resources/Level";
     private const string LevelSettingsFolder = "Assets/_Project/Editor/MapPainterData";
+    private const string PaintedBlocksRootName = "Blocks";
     private static readonly string[] EditModeLabels = { "None", "Edit" };
     private static readonly int ColorPropertyId = Shader.PropertyToID("_Color");
     private static readonly int UseVertexColorPropertyId = Shader.PropertyToID("_UseVertexColor");
@@ -50,6 +51,7 @@ public sealed class MapPainterWindow : EditorWindow
     [SerializeField] private PaintType _paintType;
 
     private readonly System.Random _random = new();
+    private readonly List<Transform> _paintedInstances = new();
     private MaterialPropertyBlock _previewProperties;
     private Vector2 _scrollPosition;
     private Vector2Int _lastPaintedCell = new(int.MinValue, int.MinValue);
@@ -513,13 +515,54 @@ public sealed class MapPainterWindow : EditorWindow
 
     private GameObject CreateBlock(GameObject prefab, Vector3 localPosition, bool applyScale = true)
     {
-        GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, _mapRoot);
+        Transform blocksRoot = GetOrCreatePaintedBlocksRoot();
+        GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, blocksRoot);
         Undo.RegisterCreatedObjectUndo(instance, "Paint Map Block");
         instance.transform.localPosition = localPosition;
         if (applyScale)
             instance.transform.localScale = _scale;
         ApplyPreviewColor(instance);
         return instance;
+    }
+
+    private Transform GetOrCreatePaintedBlocksRoot()
+    {
+        Transform blocksRoot = GetExistingPaintedBlocksRoot();
+        if (blocksRoot != null)
+            return blocksRoot;
+
+        GameObject blocksObject = new GameObject(PaintedBlocksRootName);
+        Undo.RegisterCreatedObjectUndo(blocksObject, "Create Map Blocks Root");
+        blocksRoot = blocksObject.transform;
+        blocksRoot.SetParent(_mapRoot, false);
+        return blocksRoot;
+    }
+
+    private Transform GetExistingPaintedBlocksRoot()
+    {
+        return _mapRoot != null ? _mapRoot.Find(PaintedBlocksRootName) : null;
+    }
+
+    private void CollectPaintedInstances()
+    {
+        _paintedInstances.Clear();
+        if (_mapRoot == null)
+            return;
+
+        Transform blocksRoot = GetExistingPaintedBlocksRoot();
+        for (int i = 0; i < _mapRoot.childCount; i++)
+        {
+            Transform child = _mapRoot.GetChild(i);
+            if (child == blocksRoot)
+            {
+                for (int j = 0; j < blocksRoot.childCount; j++)
+                    _paintedInstances.Add(blocksRoot.GetChild(j));
+            }
+            else
+            {
+                _paintedInstances.Add(child);
+            }
+        }
     }
 
     private void GenerateGrid()
@@ -530,11 +573,12 @@ public sealed class MapPainterWindow : EditorWindow
             return;
         }
 
-        HashSet<Vector2Int> occupiedCells = new(_mapRoot.childCount);
+        CollectPaintedInstances();
+        HashSet<Vector2Int> occupiedCells = new(_paintedInstances.Count);
         Vector2 cellStep = GetCellStep(_scale, _spacing);
-        for (int i = 0; i < _mapRoot.childCount; i++)
+        for (int i = 0; i < _paintedInstances.Count; i++)
         {
-            Vector3 position = _mapRoot.GetChild(i).localPosition;
+            Vector3 position = _paintedInstances[i].localPosition;
             occupiedCells.Add(new Vector2Int(
                 Mathf.RoundToInt(position.x / cellStep.x),
                 Mathf.RoundToInt(position.y / cellStep.y)));
@@ -570,11 +614,12 @@ public sealed class MapPainterWindow : EditorWindow
 
         BeginStroke("Randomize Map Grid");
         Undo.RegisterFullObjectHierarchyUndo(_mapRoot.gameObject, "Randomize Map Grid");
+        CollectPaintedInstances();
         Vector2 cellStep = GetCellStep(_scale, _spacing);
         int replacedCount = 0;
-        for (int i = 0; i < _mapRoot.childCount; i++)
+        for (int i = 0; i < _paintedInstances.Count; i++)
         {
-            GameObject instance = _mapRoot.GetChild(i).gameObject;
+            GameObject instance = _paintedInstances[i].gameObject;
             TypeBlockMap blockMap = instance.GetComponent<TypeBlockMap>();
             if (blockMap == null || blockMap.BlockType != templateBlockMap.BlockType)
                 continue;
@@ -601,11 +646,12 @@ public sealed class MapPainterWindow : EditorWindow
     private void ApplyGridColorsToExisting()
     {
         Undo.RegisterFullObjectHierarchyUndo(_mapRoot.gameObject, "Apply Grid Color Layers");
+        CollectPaintedInstances();
         Vector2 cellStep = GetCellStep(_scale, _spacing);
         int coloredCount = 0;
-        for (int i = 0; i < _mapRoot.childCount; i++)
+        for (int i = 0; i < _paintedInstances.Count; i++)
         {
-            GameObject instance = _mapRoot.GetChild(i).gameObject;
+            GameObject instance = _paintedInstances[i].gameObject;
             if (instance.GetComponent<TypeBlockMap>() == null)
                 continue;
 
@@ -671,9 +717,10 @@ public sealed class MapPainterWindow : EditorWindow
             return null;
 
         Vector2 halfCell = GetCellStep(_scale, _spacing) * 0.5f;
-        for (int i = _mapRoot.childCount - 1; i >= 0; i--)
+        CollectPaintedInstances();
+        for (int i = _paintedInstances.Count - 1; i >= 0; i--)
         {
-            Transform child = _mapRoot.GetChild(i);
+            Transform child = _paintedInstances[i];
             Vector3 offset = child.localPosition - localPosition;
             if (Mathf.Abs(offset.x) < halfCell.x && Mathf.Abs(offset.y) < halfCell.y &&
                 Mathf.Approximately(child.localPosition.z, _overlayLocalZ))
@@ -696,9 +743,10 @@ public sealed class MapPainterWindow : EditorWindow
         Vector2 cellStep = GetCellStep(_scale, _spacing);
         float tolerance = Mathf.Min(cellStep.x, cellStep.y) * 0.01f;
         float toleranceSquared = tolerance * tolerance;
-        for (int i = _mapRoot.childCount - 1; i >= 0; i--)
+        CollectPaintedInstances();
+        for (int i = _paintedInstances.Count - 1; i >= 0; i--)
         {
-            Transform child = _mapRoot.GetChild(i);
+            Transform child = _paintedInstances[i];
             if ((child.localPosition - localPosition).sqrMagnitude <= toleranceSquared &&
                 child.GetComponentInChildren<T>(true) != null)
                 return true;
@@ -715,9 +763,10 @@ public sealed class MapPainterWindow : EditorWindow
         Vector2 cellStep = GetCellStep(_scale, _spacing);
         float tolerance = Mathf.Min(cellStep.x, cellStep.y) * 0.01f;
         float toleranceSquared = tolerance * tolerance;
-        for (int i = _mapRoot.childCount - 1; i >= 0; i--)
+        CollectPaintedInstances();
+        for (int i = _paintedInstances.Count - 1; i >= 0; i--)
         {
-            Transform child = _mapRoot.GetChild(i);
+            Transform child = _paintedInstances[i];
             if ((child.localPosition - localPosition).sqrMagnitude <= toleranceSquared)
                 return child;
         }

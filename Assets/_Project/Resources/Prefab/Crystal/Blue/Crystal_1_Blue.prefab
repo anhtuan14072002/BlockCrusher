@@ -62,7 +62,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4970482013353890756, guid: a8e8b324213dc4c49b9e9ccbd88833cb, type: 3}
       propertyPath: m_Name
-      value: Crystal_1 Variant
+      value: Crystal_1_Blue
+      objectReference: {fileID: 0}
+    - target: {fileID: 4970482013353890756, guid: a8e8b324213dc4c49b9e9ccbd88833cb, type: 3}
+      propertyPath: m_Layer
+      value: 7
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

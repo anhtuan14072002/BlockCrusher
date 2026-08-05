@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using Crusher;
+using Unity.Entities;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -7,6 +9,7 @@ public sealed partial class LevelMapSpawner
     private readonly List<DecorationRuntime> _levelDecorations = new(256);
     private List<int>[] _decorationChunksByCell;
     private List<int>[] _decorationsByCell;
+    private List<int>[] _separateDecorationsByCell;
 
     private sealed class DecorationRuntime
     {
@@ -19,6 +22,10 @@ public sealed partial class LevelMapSpawner
         public Color32 ReleasedColor;
         public int[] TriangleCells;
         public ushort ReleasedTypeIndex;
+        public TypeBlock ReleasedCollectibleType;
+        public Vector3 ReleasedLocalPosition;
+        public Quaternion ReleasedLocalRotation;
+        public Vector3 ReleasedVisualScale;
     }
 
     private struct DecorationVertex
@@ -37,6 +44,7 @@ public sealed partial class LevelMapSpawner
         List<int>[] chunkDecorations = new List<int>[_chunks.Count];
         _decorationChunksByCell = new List<int>[_cellSolid.Length];
         _decorationsByCell = new List<int>[_cellSolid.Length];
+        _separateDecorationsByCell = new List<int>[_cellSolid.Length];
         Matrix4x4 worldToGrid = _runtimeParent.worldToLocalMatrix;
         for (int i = 0; i < decorations.Length; i++)
         {
@@ -64,6 +72,7 @@ public sealed partial class LevelMapSpawner
 
             int chunkIndex = cellY / _chunkSize * _chunkColumns + cellX / _chunkSize;
             Matrix4x4 matrix = worldToGrid * decoration.transform.localToWorldMatrix;
+            Vector3 cellWorldPosition = _runtimeParent.TransformPoint(GetCellLocalPosition(cellX, cellY));
             BuildSegmentedDecorationGeometry(sourceMesh, matrix, cellIndex,
                 out Vector3[] vertices, out Vector2[] uvs, out Color32[] colors,
                 out int[] triangles, out int[] triangleCells, out HashSet<int> coveredCells);
@@ -81,7 +90,11 @@ public sealed partial class LevelMapSpawner
                 Tint = decoration.Tint,
                 ReleasedColor = decoration.ReleasedColor,
                 TriangleCells = triangleCells,
-                ReleasedTypeIndex = releasedTypeIndex >= 0 ? (ushort)releasedTypeIndex : ushort.MaxValue
+                ReleasedTypeIndex = releasedTypeIndex >= 0 ? (ushort)releasedTypeIndex : ushort.MaxValue,
+                ReleasedCollectibleType = decoration.BlockType,
+                ReleasedLocalPosition = decoration.transform.position - cellWorldPosition,
+                ReleasedLocalRotation = decoration.transform.rotation,
+                ReleasedVisualScale = decoration.transform.lossyScale
             };
             int decorationIndex = _levelDecorations.Count;
             _levelDecorations.Add(runtime);
@@ -96,8 +109,11 @@ public sealed partial class LevelMapSpawner
                 if (runtime.ReleasedTypeIndex == ushort.MaxValue)
                     continue;
 
-                _decorationsByCell[coveredCell] ??= new List<int>(1);
-                _decorationsByCell[coveredCell].Add(decorationIndex);
+                List<int>[] decorationsByCell = IsDirtAttachedDecoration(runtime.ReleasedCollectibleType)
+                    ? _decorationsByCell
+                    : _separateDecorationsByCell;
+                decorationsByCell[coveredCell] ??= new List<int>(1);
+                decorationsByCell[coveredCell].Add(decorationIndex);
             }
         }
 
@@ -317,24 +333,61 @@ public sealed partial class LevelMapSpawner
         chunk.DecorationRenderer.enabled = true;
     }
 
-    private void SpawnReleasedDecorationsAtCell(int cellIndex, Vector3 localPosition, Vector3 sawCenter,
-        float pressSpeed, float outwardForce, float tangentialForce, float spinDirection,
-        float bladeRadius, float sideDamping, float maxVelocity)
+    private void AttachReleasedDecorationsAtCell(int cellIndex, Entity releasedEntity)
     {
-        if (_decorationsByCell == null || (uint)cellIndex >= (uint)_decorationsByCell.Length)
+        if (releasedEntity == Entity.Null || !_entityManager.Exists(releasedEntity) ||
+            _decorationsByCell == null || (uint)cellIndex >= (uint)_decorationsByCell.Length)
             return;
 
         List<int> decorationIndices = _decorationsByCell[cellIndex];
         if (decorationIndices == null)
             return;
 
+        DynamicBuffer<ReleasedBlockAttachment> attachments = _entityManager.GetBuffer<ReleasedBlockAttachment>(releasedEntity);
         for (int i = 0; i < decorationIndices.Count; i++)
         {
             DecorationRuntime decoration = _levelDecorations[decorationIndices[i]];
+            if (decoration.ReleasedTypeIndex == ushort.MaxValue)
+                continue;
+
+            attachments.Add(new ReleasedBlockAttachment
+            {
+                TypeIndex = decoration.ReleasedTypeIndex,
+                CollectibleType = decoration.ReleasedCollectibleType,
+                LocalPosition = ToFloat3(decoration.ReleasedLocalPosition),
+                LocalRotation = ToQuaternion(decoration.ReleasedLocalRotation),
+                Scale = ToFloat3(decoration.ReleasedVisualScale),
+                Color = ToFloat4(decoration.ReleasedColor)
+            });
+        }
+    }
+
+    private void SpawnSeparateReleasedDecorationsAtCell(int cellIndex, Vector3 localPosition, Vector3 sawCenter,
+        float pressSpeed, float outwardForce, float tangentialForce, float spinDirection, float bladeRadius,
+        float sideDamping, float maxVelocity)
+    {
+        if (_separateDecorationsByCell == null || (uint)cellIndex >= (uint)_separateDecorationsByCell.Length)
+            return;
+
+        List<int> decorationIndices = _separateDecorationsByCell[cellIndex];
+        if (decorationIndices == null)
+            return;
+
+        for (int i = 0; i < decorationIndices.Count; i++)
+        {
+            DecorationRuntime decoration = _levelDecorations[decorationIndices[i]];
+            if (decoration.ReleasedTypeIndex == ushort.MaxValue)
+                continue;
+
             QueueReleasedBlockSpawn(localPosition, decoration.ReleasedColor, decoration.ReleasedTypeIndex,
                 sawCenter, pressSpeed, outwardForce, tangentialForce, spinDirection, bladeRadius,
                 sideDamping, maxVelocity);
         }
+    }
+
+    private static bool IsDirtAttachedDecoration(TypeBlock type)
+    {
+        return type == TypeBlock.Purple_ore || type == TypeBlock.Blue_ore || type == TypeBlock.Orange_ore;
     }
 
     private void MarkDecorationChunksDirty(int cellIndex)
@@ -386,5 +439,6 @@ public sealed partial class LevelMapSpawner
         _levelDecorations.Clear();
         _decorationChunksByCell = null;
         _decorationsByCell = null;
+        _separateDecorationsByCell = null;
     }
 }

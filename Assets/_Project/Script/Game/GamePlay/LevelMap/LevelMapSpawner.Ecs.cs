@@ -217,7 +217,7 @@ public sealed partial class LevelMapSpawner
                 typeof(LocalTransform), typeof(PhysicsCollider), typeof(PhysicsMass), typeof(PhysicsVelocity),
                 typeof(PhysicsDamping), typeof(PhysicsGravityFactor), typeof(Simulate),
                 typeof(ReleasedBlockComponent), typeof(ReleasedBlockSolidConstraint), typeof(SuctionTransit),
-                typeof(PhysicsWorldIndex));
+                typeof(ReleasedBlockAttachment), typeof(PhysicsWorldIndex));
             _releasedBlockQuery = _entityManager.CreateEntityQuery(
                 ComponentType.ReadOnly<ReleasedBlockComponent>(),
                 ComponentType.ReadOnly<LocalTransform>(),

@@ -76,7 +76,7 @@ public sealed partial class LevelMapSpawner
         {
             if (_renderFrames[i] != null)
                 continue;
-            _renderFrames[i] = new RenderFrameData(_maxReleasedPhysicsBlocks);
+            _renderFrames[i] = new RenderFrameData(_maxReleasedPhysicsBlocks * 4);
         }
     }
 

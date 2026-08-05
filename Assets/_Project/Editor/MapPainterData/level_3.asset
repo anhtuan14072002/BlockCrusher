@@ -45,23 +45,20 @@ MonoBehaviour:
   SelectedObstaclePrefabs: 000000010101010101010101010101
   SpecialMaterialPrefabs:
   - {fileID: 3567369757448790777, guid: fa9e079026d6ea74c8991501d7bd3e2a, type: 3}
-  SelectedSpecialMaterialPrefabs: 00
+  SelectedSpecialMaterialPrefabs: 01
   OverlayPrefabs:
   - {fileID: 4915179277221544483, guid: 8d687ddd55aefad4d806ccaadbae1b45, type: 3}
-  - {fileID: 3224242862274245264, guid: a42fe9ae94f6ca742ab80279fed913b1, type: 3}
-  - {fileID: 3858047283572957541, guid: 7322505dd101ca245b87af390840d3f9, type: 3}
-  - {fileID: 420772988789535723, guid: a4011efb5af85e946a416bc15cf25a22, type: 3}
   - {fileID: 4970482013353890756, guid: a8e8b324213dc4c49b9e9ccbd88833cb, type: 3}
   - {fileID: 6185358022084267644, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
   - {fileID: 5886897174249047021, guid: c2af108b90fc0704784f0b3e10c14d33, type: 3}
   - {fileID: 5752300303716107331, guid: c436734b13cda4342ae15b844423e408, type: 3}
   - {fileID: 5831705302585161779, guid: 5e05129c948092b489c0e9fa83ae1bab, type: 3}
   - {fileID: 3488254414830135800, guid: cbaaf1c5569a167419968e1381692ff6, type: 3}
-  SelectedOverlayPrefabs: 00000000010000000000
+  SelectedOverlayPrefabs: 00000000000000
   OverlayScaleMultiplier: 1
-  OverlayLocalZ: -0.31
+  OverlayLocalZ: -0.23
   HasOverlayLocalZ: 1
-  RandomizeOverlaySizeAndPosition: 1
+  RandomizeOverlaySizeAndPosition: 0
   GridPrefabs:
   - {fileID: 4377372095242228172, guid: 7680c44a0b0efb94abc960730dd89eb4, type: 3}
   - {fileID: 2373744388869953939, guid: 07666b8eaeb141445874ed7592c1d861, type: 3}
@@ -88,9 +85,9 @@ MonoBehaviour:
   - FromDepth: 61
     ToDepth: 89
     Color: {r: 0.4056604, g: 0.051664297, b: 0.075264014, a: 1}
-  PaintType: 3
+  PaintType: 2
   PrefabSize: 1
-  Scale: {x: 1, y: 0.5, z: 0.5}
+  Scale: {x: 0.3, y: 0.3, z: 0.3}
   HasScale: 1
   Spacing: 0
   GridWidth: 15

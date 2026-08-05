@@ -99,15 +99,24 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b275e5f92732148048d7b77e264ac30e, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
   m_ForceUniqueID: 183746252
   m_PrefabInstanceID: 0
   m_ShapeType: 31
-  m_PrimitiveCenter: {x: 0, y: 0, z: 0}
-  m_PrimitiveSize: {x: 1, y: 1, z: 1}
+  m_PrimitiveCenter:
+    x: 0
+    y: 0
+    z: 0
+  m_PrimitiveSize:
+    x: 1
+    y: 1
+    z: 1
   m_PrimitiveOrientation:
-    Value: {x: 0, y: 0, z: 0}
+    Value:
+      x: 0
+      y: 0
+      z: 0
     RotationOrder: 4
   m_Capsule:
     Height: 1
@@ -239,8 +248,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 43ad46b78f1e48dda540c11d2edb0cf4, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!114 &4915179277221544488
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -251,8 +260,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 81a2196e9f171454a8148baedf2b0478, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
   _durability: 1.2
   _crackStages: 3
   _shardCount: 18

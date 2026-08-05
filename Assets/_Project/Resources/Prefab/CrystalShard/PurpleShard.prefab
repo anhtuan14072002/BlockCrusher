@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 4795744563855051026}
   - component: {fileID: 1160801590867358599}
   - component: {fileID: 2574209374285660021}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: PurpleShard
   m_TagString: Untagged
   m_Icon: {fileID: 0}

@@ -1,3 +1,4 @@
+using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -176,10 +177,11 @@ public sealed partial class LevelMapSpawner
             _cellSolidSnapshot[cellIndex] = 0;
         Vector3 releasedWorldPosition = _runtimeParent.TransformPoint(cellLocal);
         EmitCutParticles(releasedWorldPosition, surfaceColor, releasedWorldPosition - sawCenter);
-        QueueReleasedBlockSpawn(cellLocal, releasedColor, typeIndex, sawCenter, pressSpeed, outwardForce,
+        Entity releasedEntity = QueueReleasedBlockSpawn(cellLocal, releasedColor, typeIndex, sawCenter, pressSpeed, outwardForce,
             tangentialForce, spinDirection, bladeRadius, sideDamping, maxVelocity);
-        SpawnReleasedDecorationsAtCell(cellIndex, cellLocal, sawCenter, pressSpeed, outwardForce, tangentialForce,
-            spinDirection, bladeRadius, sideDamping, maxVelocity);
+        AttachReleasedDecorationsAtCell(cellIndex, releasedEntity);
+        SpawnSeparateReleasedDecorationsAtCell(cellIndex, cellLocal, sawCenter, pressSpeed, outwardForce,
+            tangentialForce, spinDirection, bladeRadius, sideDamping, maxVelocity);
         MarkCellChunkDirty(cellX, cellY);
     }
     private void MarkCellChunkDirty(int cellX, int cellY)

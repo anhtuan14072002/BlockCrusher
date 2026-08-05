@@ -915,6 +915,7 @@ MonoBehaviour:
   _point: {fileID: 7118576392509342572}
   _tool: {fileID: 2697512586575510461}
   _line: {fileID: 4796949928601710294}
+  _widthLine: 0.36
   _segmentCount: 18
   _gravity: 0.75
   _damping: 0.9
@@ -945,7 +946,7 @@ LineRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10754, guid: 0000000000000000f000000000000000, type: 0}
+  - {fileID: 2100000, guid: 48d8de1e25a04e86a0ce16a1a38d3b5f, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -971,7 +972,7 @@ LineRenderer:
   - {x: 0, y: 0, z: 1}
   m_Parameters:
     serializedVersion: 3
-    widthMultiplier: 0.12
+    widthMultiplier: 0.36
     widthCurve:
       serializedVersion: 2
       m_Curve:

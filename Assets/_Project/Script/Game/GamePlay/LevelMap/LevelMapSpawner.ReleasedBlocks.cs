@@ -41,12 +41,12 @@ public sealed partial class LevelMapSpawner
         }
     }
 
-    private void QueueReleasedBlockSpawn(Vector3 localPosition, Color32 color, ushort typeIndex, Vector3 sawCenter,
+    private Entity QueueReleasedBlockSpawn(Vector3 localPosition, Color32 color, ushort typeIndex, Vector3 sawCenter,
         float pressSpeed, float outwardForce, float tangentialForce, float spinDirection, float bladeRadius,
         float sideDamping, float maxVelocity)
     {
         if (!EnsureReleasedBlockResources() || !EnsureEcsReady() || typeIndex >= _releasedBlockTypes.Count)
-            return;
+            return Entity.Null;
         Vector3 position = _runtimeParent.TransformPoint(localPosition);
         Vector3 outward = position - sawCenter;
         outward.z = 0f;
@@ -68,7 +68,9 @@ public sealed partial class LevelMapSpawner
         Vector3 clampedVelocity = Vector3.ClampMagnitude(velocity, safeMaxVelocity);
         clampedVelocity = RedirectVelocityFromSolid(position, clampedVelocity);
         clampedVelocity = ApplyReleaseLift(position, clampedVelocity, safeMaxVelocity);
-        CreateReleasedBlockEntity(position, color, typeIndex, clampedVelocity, safeMaxVelocity, false, true);
+        float angularVelocity = tangentialForce * 0.18f * speedScale * radiusPush * Mathf.Sign(spinDirection);
+        return CreateReleasedBlockEntity(position, color, typeIndex, clampedVelocity, safeMaxVelocity, false, true,
+            angularVelocity);
     }
     private Entity CreateReleasedBlockEntity(Vector3 position, Color32 color, ushort typeIndex, Vector3 velocity,
         float maxVelocity, bool renderAsMetaball, bool enableSolidConstraint, float angularVelocity = 0f,

@@ -1,3 +1,4 @@
+using System;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
@@ -10,6 +11,7 @@ namespace Crusher
         [SerializeField] private Transform _point;
         [SerializeField] private Transform _tool;
         [SerializeField] private LineRenderer _line;
+        [SerializeField, Min(0f)] private float _widthLine = 0.12f;
         [SerializeField, Min(4)] private int _segmentCount = 18;
         [SerializeField, Min(0f)] private float _gravity = 0.75f;
         [SerializeField, Range(0.8f, 1f)] private float _damping = 0.9f;
@@ -24,40 +26,53 @@ namespace Crusher
         private bool _isSuctionMode;
         private bool _initialized;
 
-        internal Vector3 StartPosition => _point.position;
+        public Vector3 StartPosition => _point.position;
+
+        private void Awake()
+        {
+            ApplyWidth();
+        }
+
+        private void OnValidate()
+        {
+            ApplyWidth();
+        }
+
+        private void ApplyWidth()
+        {
+            if (_line == null) return;
+            _line.widthMultiplier = _widthLine;
+        }
 
         private void LateUpdate()
         {
-            if (_point == null || _tool == null)
-                return;
-
-            if (!_initialized)
-                SnapToEndpoints();
+            if (_point == null || _tool == null) return;
+            if (!_initialized) SnapToEndpoints();
 
             float deltaTime = Mathf.Min(Time.deltaTime, 1f / 30f);
             Simulate(deltaTime);
             SolveLengthConstraints();
             DrawCable();
-            AssertAnchors();
         }
 
-        internal void Bind(Transform tool, float maxLength)
+        public void Bind(Transform tool, float maxLength)
         {
             _tool = tool;
             _maxLength = Mathf.Max(0.1f, maxLength);
             if (_line != null)
+            {
                 SnapToEndpoints();
+            }
         }
 
-        internal void SetMaxLength(float maxLength)
+        public void SetMaxLength(float maxLength)
         {
             _maxLength = Mathf.Max(0.1f, maxLength);
         }
 
-        internal void SnapToEndpoints()
+        public void SnapToEndpoints()
         {
-            if (_point == null || _tool == null)
-                return;
+            if (_point == null || _tool == null) return;
 
             int pointCount = _segmentCount + 1;
             if (_positions == null || _positions.Length != pointCount)
@@ -84,22 +99,19 @@ namespace Crusher
             DrawCable();
         }
 
-        internal void SetSuctionMode(bool isSuctionMode)
+        public void SetSuctionMode(bool isSuctionMode)
         {
             _isSuctionMode = isSuctionMode;
             SetColor(_isSuctionMode ? _suctionColor : _cutColor);
         }
 
-        internal void AppendToolPath(ref FixedList512Bytes<float3> path)
+        public void AppendToolPath(ref FixedList512Bytes<float3> path)
         {
-            if (!_initialized)
-                return;
+            if (!_initialized) return;
 
             for (int i = _segmentCount - 1; i >= 0; i -= 3)
             {
-                if (path.Length >= path.Capacity)
-                    break;
-
+                if (path.Length >= path.Capacity) break;
                 Vector3 point = _positions[i];
                 path.Add(new float3(point.x, point.y, point.z));
             }
@@ -137,8 +149,7 @@ namespace Crusher
                 {
                     Vector3 delta = _positions[i + 1] - _positions[i];
                     float distance = delta.magnitude;
-                    if (distance <= 0.0001f)
-                        continue;
+                    if (distance <= 0.0001f) continue;
 
                     float error = (distance - segmentLength) / distance;
                     if (i == 0)
@@ -172,24 +183,9 @@ namespace Crusher
 
         private void SetColor(Color color)
         {
-            if (_line == null)
-                return;
-
+            if (_line == null) return;
             _line.startColor = color;
             _line.endColor = color;
         }
-
-        [System.Diagnostics.Conditional("UNITY_EDITOR")]
-        private void AssertAnchors()
-        {
-            Vector3 root = StartPosition;
-            Vector3 tool = _tool.position;
-            tool.z = root.z;
-
-            Debug.Assert((_positions[0] - root).sqrMagnitude < 0.000001f
-                && (_positions[_segmentCount] - tool).sqrMagnitude < 0.000001f,
-                "Crane cable endpoints must stay attached to the crane and tool.");
-        }
-
     }
 }

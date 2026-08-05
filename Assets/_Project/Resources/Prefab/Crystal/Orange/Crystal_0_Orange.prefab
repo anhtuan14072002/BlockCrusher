@@ -62,7 +62,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6185358022084267644, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
       propertyPath: m_Name
-      value: Crystal_0 Variant
+      value: Crystal_0_Orange
+      objectReference: {fileID: 0}
+    - target: {fileID: 6185358022084267644, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_Layer
+      value: 7
+      objectReference: {fileID: 0}
+    - target: {fileID: 1734663121712415646, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: _type
+      value: 9
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

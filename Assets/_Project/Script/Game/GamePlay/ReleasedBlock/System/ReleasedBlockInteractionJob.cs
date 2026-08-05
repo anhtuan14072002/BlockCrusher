@@ -16,7 +16,7 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
     private void Execute([EntityIndexInQuery] int sortKey, Entity entity, ref LocalTransform transform,
         ref PhysicsCollider collider, ref PhysicsVelocity velocity, ref PhysicsGravityFactor gravity,
         ref ReleasedBlockComponent block, EnabledRefRW<Simulate> simulate,
-        EnabledRefRW<SuctionTransit> suctionTransit)
+        EnabledRefRW<SuctionTransit> suctionTransit, in DynamicBuffer<ReleasedBlockAttachment> attachments)
     {
         float3 position = transform.Position;
         for (int i = 0; i < Requests.Length; i++)
@@ -81,26 +81,26 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
                         transform.Position = position;
                     }
 
-                    float3 target = pathIndex == 0
-                        ? request.SuctionPath[0]
-                        : GetSegmentFollowTarget(position, request.SuctionPath[pathIndex - 1],
-                            request.SuctionPath[pathIndex], request.PathLookAhead);
-                    float3 direction = target - position;
-                    direction.z = 0f;
-                    float distance = math.length(direction);
                     float3 waypointDelta = request.SuctionPath[pathIndex] - position;
                     waypointDelta.z = 0f;
-                    if (pathIndex < lastPathIndex && math.lengthsq(waypointDelta) <=
+                    while (pathIndex < lastPathIndex && math.lengthsq(waypointDelta) <=
                         request.WaypointRadius * request.WaypointRadius)
                     {
                         pathIndex++;
-                        block.SuctionPathIndex = (byte)pathIndex;
-                        target = GetSegmentFollowTarget(position, request.SuctionPath[pathIndex - 1],
-                            request.SuctionPath[pathIndex], request.PathLookAhead);
-                        direction = target - position;
-                        direction.z = 0f;
-                        distance = math.length(direction);
+                        position = GetClosestPointOnSegment(position, request.SuctionPath[pathIndex - 1],
+                            request.SuctionPath[pathIndex]);
+                        position.z = block.LockedZ;
+                        transform.Position = position;
+                        waypointDelta = request.SuctionPath[pathIndex] - position;
+                        waypointDelta.z = 0f;
                     }
+
+                    float3 target = pathIndex == 0
+                        ? request.SuctionPath[0]
+                        : GetPathFollowTarget(position, request.SuctionPath, pathIndex, request.PathLookAhead);
+                    float3 direction = target - position;
+                    direction.z = 0f;
+                    float distance = math.length(direction);
 
                     float3 suctionDelta = request.SuctionPath[lastPathIndex] - position;
                     suctionDelta.z = 0f;
@@ -109,6 +109,12 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
                     {
                         if (block.CollectibleType != TypeBlock.None)
                             CollectedItems.Enqueue(block.CollectibleType);
+                        for (int attachmentIndex = 0; attachmentIndex < attachments.Length; attachmentIndex++)
+                        {
+                            TypeBlock collectibleType = attachments[attachmentIndex].CollectibleType;
+                            if (collectibleType != TypeBlock.None)
+                                CollectedItems.Enqueue(collectibleType);
+                        }
                         simulate.ValueRW = false;
                         CommandBuffer.DestroyEntity(sortKey, entity);
                         return;
@@ -121,13 +127,14 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
                     block.SuctionPathIndex = (byte)pathIndex;
                     simulate.ValueRW = true;
                     gravity.Value = 0f;
-                    float3 targetVelocity = direction * math.min(request.Force * distance, request.MaxVelocity);
-                    float3 movedVelocity = MoveTowards(velocity.Linear, targetVelocity,
+                    float suctionTargetSpeed = math.min(request.Force * distance, request.MaxVelocity);
+                    float suctionCurrentSpeed = math.max(0f, math.dot(velocity.Linear, direction));
+                    float suctionMovedSpeed = MoveTowards(suctionCurrentSpeed, suctionTargetSpeed,
                         request.Acceleration * request.DeltaTime);
                     if (distance <= request.DestroyRadius * 2.5f)
-                        movedVelocity = math.lerp(movedVelocity, targetVelocity,
+                        suctionMovedSpeed = math.lerp(suctionCurrentSpeed, suctionMovedSpeed,
                             math.saturate(request.ArrivalDamping * request.DeltaTime));
-                    velocity.Linear = ClampMagnitude(movedVelocity, request.MaxVelocity);
+                    velocity.Linear = direction * math.min(suctionMovedSpeed, request.MaxVelocity);
                     break;
             }
         }
@@ -136,21 +143,35 @@ internal partial struct ReleasedBlockInteractionJob : IJobEntity
             velocity.Linear = ClampMagnitude(velocity.Linear, block.MaxPlanarSpeed);
     }
 
-    private static float3 GetSegmentFollowTarget(float3 position, float3 segmentStart, float3 segmentEnd,
+    private static float3 GetPathFollowTarget(float3 position, FixedList512Bytes<float3> path, int pathIndex,
         float lookAhead)
     {
         position.z = 0f;
-        segmentStart.z = 0f;
-        segmentEnd.z = 0f;
-        float3 segment = segmentEnd - segmentStart;
-        float segmentLengthSq = math.lengthsq(segment);
-        if (segmentLengthSq <= 0.000001f)
-            return segmentEnd;
+        for (int i = pathIndex; i < path.Length; i++)
+        {
+            float3 segmentStart = path[i - 1];
+            float3 segmentEnd = path[i];
+            segmentStart.z = 0f;
+            segmentEnd.z = 0f;
+            float3 segment = segmentEnd - segmentStart;
+            float segmentLengthSq = math.lengthsq(segment);
+            if (segmentLengthSq <= 0.000001f)
+                continue;
 
-        float progress = math.saturate(math.dot(position - segmentStart, segment) / segmentLengthSq);
-        float segmentLength = math.sqrt(segmentLengthSq);
-        float targetProgress = math.min(1f, progress + lookAhead / segmentLength);
-        return math.lerp(segmentStart, segmentEnd, targetProgress);
+            float progress = math.saturate(math.dot(position - segmentStart, segment) / segmentLengthSq);
+            float segmentLength = math.sqrt(segmentLengthSq);
+            float remainingLength = (1f - progress) * segmentLength;
+            if (lookAhead <= remainingLength)
+            {
+                float targetProgress = progress + lookAhead / segmentLength;
+                return math.lerp(segmentStart, segmentEnd, targetProgress);
+            }
+
+            lookAhead -= remainingLength;
+            position = segmentEnd;
+        }
+
+        return path[path.Length - 1];
     }
 
     private static float3 GetClosestPointOnSegment(float3 position, float3 segmentStart, float3 segmentEnd)
