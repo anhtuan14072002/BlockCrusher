@@ -1,6 +1,6 @@
 # BlockCrusher - Nhật ký công việc và cơ chế hiện tại
 
-> Cập nhật: 2026-08-04  
+> Cập nhật: 2026-08-05
 > Branch: `feature/tunadev_v3`  
 > Commit nền: `2881ec6` (`fix water`)  
 > Trạng thái worktree trước khi tạo file: sạch
@@ -60,6 +60,14 @@ File này là tài liệu bàn giao chính của project. Khi sửa gameplay, h�
 - Đã sửa: prefab mới được tạo dưới một object cha `Blocks`; các lệnh generate, randomize, recolor và erase vẫn nhận cả block mới trong container lẫn block phẳng của level cũ.
 - Đã kiểm tra: Unity compile không có error, `validate_script` không có diagnostic, và `Tools/Map Painter Self Check` pass.
 - Còn lại: mở Map Painter, paint/generate vài block rồi save level; xác nhận hierarchy hiển thị `level_x/Blocks/Block_*`.
+
+### Saw / drill tool switch and stone collision
+
+- Status: `Code and Assembly-CSharp compile checked; Unity Play Mode verification pending because the Unity MCP session became unavailable during editor transition`.
+- Drill reuses the existing `Gameplay/BlockCrane/Saw/Drill` object and cycles through `Saw -> Suction -> Drill -> Saw` from `SwitchCrane`.
+- Only the drill cutter has `_canBreakStone = 1`; saw collision includes breakable stone for target clamping but does not apply crack damage.
+- Released resources are spawned outside saw clearance and the saw push job repels overlapping resources in all radial directions.
+- Next Play Mode case: click switch twice to select drill, drill a stone until it breaks; return to saw and confirm it stops at the stone with no crack; cut dense resource around the saw and confirm the blade center stays clear.
 
 ## 2. Chức năng hiện có
 
@@ -130,7 +138,7 @@ Mỗi `TypeBlockMap` giữ các dữ liệu authoring: loại block, prefab khi 
 ## 3. Cơ chế máy cưa
 
 - Owner đầu vào: `Assets/_Project/Script/Game/GamePlay/SawBlockCutter.cs`.
-- Lưỡi cưa quay visual trong `Update`; chuyển động và cắt chạy trong `FixedUpdate`.
+- Lưỡi cưa quay visual trong `LateUpdate`; chuyển động và cắt chạy trong `FixedUpdate`.
 - Cưa chỉ bắt đầu release khi thực sự đã di chuyển sau `OnEnable`, tránh cắt nhầm lúc spawn/enable.
 - Chuyển động nhanh được chia thành nhiều mẫu theo `_cutSweepStep`, tránh bỏ lọt cell giữa hai physics frame.
 - Vùng cắt lấy trực tiếp từ `MeshFilter.sharedMesh`: bounds dùng cho broad phase, còn triangle mesh được kiểm tra overlap chính xác với ô cell.
@@ -142,7 +150,7 @@ Mỗi `TypeBlockMap` giữ các dữ liệu authoring: loại block, prefab khi 
   - Chunk liên quan được rebuild trì hoãn.
   - `SawPushJob` đẩy các block rời gần lưỡi cưa.
   - Resistance tạm thời giảm khả năng điều khiển rồi hồi phục dần.
-- Cưa va chạm obstacle qua Unity Physics/DOTS. Với obstacle thường, target được clamp và trượt theo tiếp tuyến; với đá breakable, chỉ gây damage và không đẩy cưa lệch.
+- Cưa va chạm obstacle qua Unity Physics/DOTS. Với obstacle thường, target bị chặn tại bề mặt; với đá breakable, chỉ gây damage và không đẩy cưa lệch.
 - Effect bụi cắt hiện đang tắt tạm thời như mục **Đang làm dở**.
 
 ## 4. Cơ chế cần cẩu và máy hút
@@ -190,6 +198,8 @@ Mỗi `TypeBlockMap` giữ các dữ liệu authoring: loại block, prefab khi 
 - Thêm conveyor, vùng clear, water metaball, decoration release và UI vật phẩm/nâng cấp.
 - Tách `CraneController` thành các file partial theo trách nhiệm mà không tạo thêm manager/service.
 - Thêm các self-check/context menu cho level prefab, mesh-cell overlap, breakable setup và metaball water.
+- 2026-08-05: Điều khiển theo video đã được xác nhận trong Play Mode sạch: idle giữ `Direction=(0,0)` thì saw `spinEnabled=False`, không có suction transit và `sucked=0`; chạm joystick cho `Direction=(0.47,0)`, tạo `transit=1` rồi block đi hết tube với `sucked=1`.
+- 2026-08-05: Kéo saw vào obstacle giữ đầu cưa tại khoảng `y=-6.59`; sau một lần cắt có 255 released block, vận tốc ngang trung bình `0.031` và lớn nhất `0.749`, với lực tiếp tuyến/vận tốc prefab đã giảm và damping block đã tăng.
 
 ## 6. Những gì đã hoàn tác
 

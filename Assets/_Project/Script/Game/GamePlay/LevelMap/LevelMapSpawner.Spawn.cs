@@ -45,7 +45,8 @@ public sealed partial class LevelMapSpawner
             }
         }
 
-        LevelObstacle.MaskSpawnCells(_cellSolid, _runtimeParent, _offset, _gridWidth, _gridHeight, _cellSize);
+        LevelObstacle.MaskSpawnCells(_cellSolid, _breakableCellMask, _runtimeParent, _offset,
+            _gridWidth, _gridHeight, _cellSize);
         CreateCutParticles();
         SpawnMetaballWater(waterMarkers);
         _cellSolidSnapshot = _cellSolid.ToArray();
@@ -94,6 +95,7 @@ public sealed partial class LevelMapSpawner
         _cellColors = new NativeArray<Color32>(_gridWidth * _gridHeight, Allocator.Persistent);
         _cellReleasedColors = new NativeArray<Color32>(_gridWidth * _gridHeight, Allocator.Persistent);
         _cellSolid = new NativeArray<byte>(_gridWidth * _gridHeight, Allocator.Persistent);
+        _breakableCellMask = new NativeArray<byte>(_gridWidth * _gridHeight, Allocator.Persistent);
         _cellReleasedTypes = new NativeArray<ushort>(_gridWidth * _gridHeight, Allocator.Persistent);
 
         Vector2 alignmentTolerance = _cellSize * 0.01f;
@@ -276,6 +278,8 @@ public sealed partial class LevelMapSpawner
             _cellReleasedColors.Dispose();
         if (_cellSolid.IsCreated)
             _cellSolid.Dispose();
+        if (_breakableCellMask.IsCreated)
+            _breakableCellMask.Dispose();
         _cellSolidSnapshot = null;
         if (_cellReleasedTypes.IsCreated)
             _cellReleasedTypes.Dispose();

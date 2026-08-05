@@ -89,7 +89,10 @@ public sealed class BreakableObstacle : MonoBehaviour
         if (_spawner == null || _releasedTypeIndices == null)
             Debug.LogError("Breakable obstacle was not registered with its LevelMapSpawner.", this);
         else
+        {
+            _spawner.ReleaseResourcesUnderObstacle(this);
             _spawner.SpawnBreakableFragments(this, sawDirection);
+        }
 
         gameObject.SetActive(false);
         Destroy(gameObject);

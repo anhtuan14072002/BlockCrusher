@@ -48,7 +48,8 @@ namespace Crusher
 
         private void UpdateFuel()
         {
-            if (!_fuelEnabled || _currentFuel <= 0f || _isSuctionMode || _sawCutter == null || !_sawCutter.IsCuttingBlock)
+            SawBlockCutter activeCutter = ActiveToolCutter;
+            if (!_fuelEnabled || _currentFuel <= 0f || _isSuctionMode || activeCutter == null || !activeCutter.IsCuttingBlock)
             {
                 return;
             }
@@ -67,6 +68,8 @@ namespace Crusher
         {
             if (_sawCutter != null)
                 _sawCutter.enabled = isAvailable;
+            if (_drillCutter != null)
+                _drillCutter.enabled = isAvailable;
         }
 
         private void RefreshFuelUI()

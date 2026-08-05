@@ -890,6 +890,7 @@ MonoBehaviour:
   _cableVisual: {fileID: 7111111111111111111}
   _saw: {fileID: 2697512586575510461}
   _sawCutter: {fileID: 4966511422805033284}
+  _drillCutter: {fileID: 0}
   _suctionDevice: {fileID: 9127374216349611434}
   _switchToolButton: {fileID: 0}
   _maxFuel: 100
@@ -1433,16 +1434,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1cb725ad65d125c4ca1aa24486561696, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _compressionForce: 2.5
-  _bladeTangentialForce: 32
+  _compressionForce: 1.25
+  _bladeTangentialForce: 10
   _bladeSpinDirection: 1
   _bladeSpinSpeed: 600
   _bladePushRadius: 0.55
   _maxSawVelocity: 4
   _cutSweepStep: 0.08
   _sideDampingOnContact: 0.35
-  _maxBlockVelocity: 6
+  _maxBlockVelocity: 2.5
   _obstacleDamagePerSecond: 1
+  _obstacleBounceDistance: 0.08
   _resistanceDuration: 0.18
   _resistanceRecoveryDuration: 0.3
   _sawHeadScaleStep: 0.2

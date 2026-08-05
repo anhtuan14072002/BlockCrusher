@@ -20,6 +20,7 @@ namespace Crusher
         private void ResetJoystick()
         {
             _joystick.OnPointerUp(null);
+            SetJoystickActivity(false);
         }
 
         private void ResetCranePose()

@@ -41,8 +41,8 @@ public sealed class LevelObstacle : MonoBehaviour
         DisposePhysics();
     }
 
-    internal static void MaskSpawnCells(NativeArray<byte> cellSolid, Transform gridTransform, Vector3 offset,
-        int gridWidth, int gridHeight, Vector2 cellSize)
+    internal static void MaskSpawnCells(NativeArray<byte> cellSolid, NativeArray<byte> breakableCellMask,
+        Transform gridTransform, Vector3 offset, int gridWidth, int gridHeight, Vector2 cellSize)
     {
         LevelObstacle[] obstacles =
             FindObjectsByType<LevelObstacle>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
@@ -69,6 +69,8 @@ public sealed class LevelObstacle : MonoBehaviour
                         obstacle.ContainsPoint(ToFloat3(worldCenter), rayHits))
                     {
                         cellSolid[cellIndex] = 0;
+                        if (obstacle._breakable != null)
+                            breakableCellMask[cellIndex] = 1;
                         break;
                     }
                 }
@@ -78,10 +80,12 @@ public sealed class LevelObstacle : MonoBehaviour
 
     internal static Vector3 ClampSawTarget(Vector3 from, Vector3 to,
         BlobAssetReference<ColliderBlob> sawCollider, Quaternion sawRotation,
-        float damage, Vector3 sawDirection, out bool damagedObstacle)
+        bool canBreakBreakables, float damage, Vector3 sawDirection, out bool damagedObstacle,
+        out bool hitBreakableObstacle)
     {
-        damagedObstacle = DamageBreakableSawContact(
+        damagedObstacle = canBreakBreakables && DamageBreakableSawContact(
             from, to, sawCollider, sawRotation, damage, sawDirection);
+        hitBreakableObstacle = false;
         Vector3 position = from;
         Vector3 remaining = to - from;
         for (int iteration = 0; iteration < 2; iteration++)
@@ -90,8 +94,10 @@ public sealed class LevelObstacle : MonoBehaviour
                 break;
 
             Vector3 target = position + remaining;
-            if (!TryCastSaw(position, target, sawCollider, sawRotation, out ColliderCastHit hit))
+            if (!TryCastSaw(position, target, sawCollider, sawRotation, !canBreakBreakables,
+                    out ColliderCastHit hit, out bool hitBreakable))
                 return target;
+            hitBreakableObstacle |= hitBreakable;
 
             Vector3 normal = ToVector3(hit.SurfaceNormal).normalized;
             position = Vector3.LerpUnclamped(position, target, hit.Fraction) + normal * 0.002f;
@@ -180,26 +186,31 @@ public sealed class LevelObstacle : MonoBehaviour
     }
 
     private static bool TryCastSaw(Vector3 from, Vector3 to,
-        BlobAssetReference<ColliderBlob> sawCollider, Quaternion sawRotation,
-        out ColliderCastHit closestHit)
+        BlobAssetReference<ColliderBlob> sawCollider, Quaternion sawRotation, bool includeBreakable,
+        out ColliderCastHit closestHit, out bool hitBreakableObstacle)
     {
         ColliderCastInput input = new ColliderCastInput(
             sawCollider, ToFloat3(from), ToFloat3(to), ToQuaternion(sawRotation));
         closestHit = default;
         float closestFraction = 1f;
-        return TryCastObstacle(input, ref closestHit, ref closestFraction, false);
+        bool hasHit = TryCastObstacle(input, ref closestHit, ref closestFraction, includeBreakable,
+            out LevelObstacle hitObstacle);
+        hitBreakableObstacle = hasHit && hitObstacle != null && hitObstacle._breakable != null;
+        return hasHit;
     }
 
     internal static bool TryCastTool(ColliderCastInput input,
         ref ColliderCastHit closestHit, ref float closestFraction)
     {
-        return TryCastObstacle(input, ref closestHit, ref closestFraction, true);
+        return TryCastObstacle(input, ref closestHit, ref closestFraction, true, out _);
     }
 
     private static bool TryCastObstacle(ColliderCastInput input,
-        ref ColliderCastHit closestHit, ref float closestFraction, bool includeBreakable)
+        ref ColliderCastHit closestHit, ref float closestFraction, bool includeBreakable,
+        out LevelObstacle hitObstacle)
     {
         bool hasHit = false;
+        hitObstacle = null;
 
         for (int i = 0; i < ActiveObstacles.Count; i++)
         {
@@ -214,6 +225,7 @@ public sealed class LevelObstacle : MonoBehaviour
 
             closestFraction = hit.Fraction;
             closestHit = hit;
+            hitObstacle = obstacle;
             hasHit = true;
         }
 
@@ -295,6 +307,15 @@ public sealed class LevelObstacle : MonoBehaviour
                 uniqueHitCount++;
         }
         return (uniqueHitCount & 1) != 0;
+    }
+
+    internal bool ContainsWorldPoint(Vector3 worldPoint)
+    {
+        if (!EnsureCollider())
+            return false;
+
+        using NativeList<PhysicsRaycastHit> hits = new NativeList<PhysicsRaycastHit>(16, Allocator.Temp);
+        return ContainsPoint(ToFloat3(worldPoint), hits);
     }
 
     private void EnsurePhysicsEntity(World world)

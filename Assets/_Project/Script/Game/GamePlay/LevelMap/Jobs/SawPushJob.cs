@@ -37,8 +37,9 @@ public sealed partial class LevelMapSpawner
             float3 position = transform.Position;
             float2 delta = position.xy - SawCenter.xy;
             float distanceSq = math.lengthsq(delta);
-            float radiusSq = BladeRadius * BladeRadius;
-            if (distanceSq > radiusSq || !ShouldPushBlock(delta, PressDirection.xy, PressSpeed))
+            float clearanceRadius = BladeRadius + block.Radius;
+            float radiusSq = clearanceRadius * clearanceRadius;
+            if (distanceSq > radiusSq)
                 return;
 
             solidConstraint.ValueRW = true;
@@ -46,27 +47,16 @@ public sealed partial class LevelMapSpawner
             float2 outward = distance > 0.0001f
                 ? delta / distance
                 : math.normalizesafe(PressDirection.xy, new float2(0f, 1f));
-            outward.y = math.max(0f, outward.y);
             outward = math.normalizesafe(outward, new float2(0f, 1f));
-            float radiusPush = 1f - math.saturate(distance / BladeRadius);
+            float radiusPush = 1f - math.saturate(distance / clearanceRadius);
             float spinSign = SpinDirection >= 0f ? 1f : -1f;
             float2 tangent = new float2(-outward.y, outward.x) * spinSign;
             float speedScale = 1f + math.min(PressSpeed, 4f) * 0.1f;
             float2 impulse = outward * (OutwardForce * 0.08f * speedScale * radiusPush) +
                              tangent * (TangentialForce * 0.22f * speedScale * radiusPush);
-            impulse.y = math.max(0f, impulse.y);
             float3 linear = new float3(velocity.Linear.xy + impulse, 0f);
             linear = ClampMagnitude(linear, math.min(MaxVelocity, block.MaxPlanarSpeed));
             velocity.Linear = RedirectVelocityFromSolid(position, linear);
-        }
-
-        internal static bool ShouldPushBlock(float2 delta, float2 pressDirection, float pressSpeed)
-        {
-            if (pressSpeed <= 0.0001f)
-                return false;
-
-            float2 movement = math.normalizesafe(pressDirection);
-            return math.dot(delta, movement) >= 0f;
         }
 
         private float3 RedirectVelocityFromSolid(float3 worldPosition, float3 velocity)
@@ -144,13 +134,4 @@ public sealed partial class LevelMapSpawner
         }
     }
 
-#if UNITY_EDITOR
-    [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.SubsystemRegistration)]
-    private static void ValidateSawPushDirection()
-    {
-        UnityEngine.Debug.Assert(SawPushJob.ShouldPushBlock(new float2(0f, 1f), new float2(0f, 1f), 1f));
-        UnityEngine.Debug.Assert(!SawPushJob.ShouldPushBlock(new float2(0f, -1f), new float2(0f, 1f), 1f));
-        UnityEngine.Debug.Assert(!SawPushJob.ShouldPushBlock(new float2(0f, 1f), new float2(0f, 1f), 0f));
-    }
-#endif
 }

@@ -18,6 +18,8 @@ public sealed class SawBlockCutter : MonoBehaviour
     [SerializeField, Range(0f, 1f)] private float _sideDampingOnContact = 0.35f;
     [SerializeField] private float _maxBlockVelocity = 6f;
     [SerializeField, Min(0f)] private float _obstacleDamagePerSecond = 1f;
+    [SerializeField] private bool _canBreakStone;
+    [SerializeField, Min(0f)] private float _obstacleBounceDistance = 0.08f;
 
     [Header("Feedback")]
     [SerializeField] private float _resistanceDuration = 0.18f;
@@ -33,6 +35,7 @@ public sealed class SawBlockCutter : MonoBehaviour
     private float _resistanceUntil;
     private float _lastBlockCutTime = float.NegativeInfinity;
     private bool _hasMovedSinceEnable;
+    private bool _spinEnabled;
 
     private readonly Dictionary<Collider, LevelMapChunk> _chunkCache = new(16);
     private PhysicsShapeAuthoring _physicsShape;
@@ -72,14 +75,20 @@ public sealed class SawBlockCutter : MonoBehaviour
         _pressSpeed = 0f;
         _lastBlockCutTime = float.NegativeInfinity;
         _hasMovedSinceEnable = false;
+        _spinEnabled = false;
     }
 
-    private void Update()
+    private void LateUpdate()
     {
-        if (_bladeVisual == null || _bladeSpinSpeed == 0f)
+        if (!_spinEnabled || _bladeVisual == null || _bladeSpinSpeed == 0f)
             return;
 
         _bladeVisual.Rotate(0f, 0f, _bladeSpinSpeed * Mathf.Sign(_bladeSpinDirection) * Time.deltaTime, Space.Self);
+    }
+
+    internal void SetSpinEnabled(bool enabled)
+    {
+        _spinEnabled = enabled;
     }
 
     private void FixedUpdate()
@@ -180,7 +189,13 @@ public sealed class SawBlockCutter : MonoBehaviour
 
         Vector3 sawDirection = to - from;
         Vector3 clamped = LevelObstacle.ClampSawTarget(from, to, _obstacleQueryCollider, transform.rotation,
-            _obstacleDamagePerSecond * Time.deltaTime, sawDirection, out bool damagedObstacle);
+            _canBreakStone, _obstacleDamagePerSecond * Time.deltaTime, sawDirection,
+            out bool damagedObstacle, out bool hitBreakableObstacle);
+        if (hitBreakableObstacle && !_canBreakStone && _obstacleBounceDistance > 0f &&
+            sawDirection.sqrMagnitude > 0.000001f)
+        {
+            clamped -= sawDirection.normalized * _obstacleBounceDistance;
+        }
         if (damagedObstacle)
         {
             RegisterBlockCut();

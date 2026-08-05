@@ -63,6 +63,7 @@ public sealed partial class LevelMapSpawner : MonoBehaviour
     private NativeArray<Color32> _cellColors;
     private NativeArray<Color32> _cellReleasedColors;
     private NativeArray<byte> _cellSolid;
+    private NativeArray<byte> _breakableCellMask;
     private byte[] _cellSolidSnapshot;
     private NativeArray<ushort> _cellReleasedTypes;
     private NativeArray<Vector3> _authoredMeshVertices;

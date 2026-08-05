@@ -85,7 +85,7 @@ MonoBehaviour:
   - FromDepth: 61
     ToDepth: 89
     Color: {r: 0.4056604, g: 0.051664297, b: 0.075264014, a: 1}
-  PaintType: 2
+  PaintType: 3
   PrefabSize: 1
   Scale: {x: 0.3, y: 0.3, z: 0.3}
   HasScale: 1

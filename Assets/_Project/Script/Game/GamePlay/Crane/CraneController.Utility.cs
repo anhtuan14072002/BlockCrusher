@@ -59,6 +59,18 @@ namespace Crusher
                 _sawCutter = _saw.GetComponent<SawBlockCutter>();
         }
 
+        private void CacheDrillCutter()
+        {
+            if (_drillCutter == null && _saw != null)
+            {
+                Transform drill = _saw.Find("Drill");
+                if (drill != null)
+                    _drillCutter = drill.GetComponent<SawBlockCutter>();
+            }
+        }
+
+        private SawBlockCutter ActiveToolCutter => _isDrillMode ? _drillCutter : _sawCutter;
+
         private void CacheSawInputRotationOffset()
         {
             if (_saw == null)

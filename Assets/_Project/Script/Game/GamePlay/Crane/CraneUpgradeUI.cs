@@ -58,7 +58,7 @@ namespace Crusher
 
         private void RefreshMaterials()
         {
-            // _countStone.SetText("{0}", GetSuckedItemCount(TypeBlock.Rock));
+            _countStone.SetText("{0}", GetSuckedItemCount(TypeBlock.Rock));
             _countCrystalBlue.SetText("{0}", GetSuckedItemCount(TypeBlock.Blue_ore));
             _countCrystalPurple.SetText("{0}", GetSuckedItemCount(TypeBlock.Purple_ore));
             _countCrystalOrange.SetText("{0}", GetSuckedItemCount(TypeBlock.Orange_ore));

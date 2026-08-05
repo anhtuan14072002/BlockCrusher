@@ -29,6 +29,7 @@ namespace Crusher
         [Header("Tools")]
         [SerializeField] private Transform _saw;
         [SerializeField] private SawBlockCutter _sawCutter;
+        [SerializeField] private SawBlockCutter _drillCutter;
         [SerializeField] private SuctionDevice _suctionDevice;
         [SerializeField] private Button _switchToolButton;
 
@@ -49,6 +50,8 @@ namespace Crusher
         private Vector3 _sawTarget;
 
         private bool _isSuctionMode;
+        private bool _isDrillMode;
+        private bool _hasJoystickInput;
 
         private void Awake()
         {
@@ -71,14 +74,22 @@ namespace Crusher
         private void Update()
         {
             if (_roundEnded)
+            {
+                SetJoystickActivity(false);
                 return;
+            }
 
             UpdateFuel();
             if (_roundEnded || !HasFuel)
+            {
+                SetJoystickActivity(false);
                 return;
+            }
 
             Vector2 input = _joystick != null ? _joystick.Direction : Vector2.zero;
-            if (input.sqrMagnitude <= 0.0001f)
+            bool hasInput = input.sqrMagnitude > 0.0001f;
+            SetJoystickActivity(hasInput);
+            if (!hasInput)
                 return;
 
             MoveSawTarget(input);
@@ -91,7 +102,7 @@ namespace Crusher
                 return;
 
             if (_suctionDevice != null)
-                _suctionDevice.ProcessSuction(_isSuctionMode && HasFuel);
+                _suctionDevice.ProcessSuction(_isSuctionMode && _hasJoystickInput && HasFuel);
         }
 
         public void IncreaseCableLength()
@@ -145,23 +156,56 @@ namespace Crusher
             CacheSawInputRotationOffset();
             CacheCableVisual();
             CacheSawCutter();
+            CacheDrillCutter();
             _sawTarget = GetSawPosition();
             SetToolActive(false);
         }
 
         private void ToggleTool()
         {
-            _isSuctionMode = !_isSuctionMode;
+            if (_isSuctionMode)
+            {
+                _isSuctionMode = false;
+                _isDrillMode = true;
+            }
+            else if (_isDrillMode)
+            {
+                _isDrillMode = false;
+            }
+            else
+            {
+                _isSuctionMode = true;
+            }
+
             SetToolActive(_isSuctionMode);
         }
 
         private void SetToolActive(bool isSuction)
         {
             if (_sawCutter != null)
-                _sawCutter.gameObject.SetActive(!isSuction);
+            {
+                bool isSawActive = !isSuction && !_isDrillMode;
+                _sawCutter.gameObject.SetActive(isSawActive);
+                _sawCutter.SetSpinEnabled(isSawActive && _hasJoystickInput);
+            }
+            if (_drillCutter != null)
+            {
+                bool isDrillActive = !isSuction && _isDrillMode;
+                _drillCutter.gameObject.SetActive(isDrillActive);
+                _drillCutter.SetSpinEnabled(isDrillActive && _hasJoystickInput);
+            }
             if (_suctionDevice != null)
                 _suctionDevice.gameObject.SetActive(isSuction);
             _cableVisual.SetSuctionMode(isSuction);
+        }
+
+        private void SetJoystickActivity(bool isActive)
+        {
+            _hasJoystickInput = isActive;
+            if (_sawCutter != null && _sawCutter.gameObject.activeSelf)
+                _sawCutter.SetSpinEnabled(isActive);
+            if (_drillCutter != null && _drillCutter.gameObject.activeSelf)
+                _drillCutter.SetSpinEnabled(isActive);
         }
 
         internal void AppendSuctionTubePath(ref FixedList512Bytes<float3> path)

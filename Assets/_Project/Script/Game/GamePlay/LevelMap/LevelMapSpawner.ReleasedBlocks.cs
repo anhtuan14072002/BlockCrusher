@@ -7,6 +7,37 @@ using UnityEngine;
 
 public sealed partial class LevelMapSpawner
 {
+    internal void ReleaseResourcesUnderObstacle(BreakableObstacle obstacle)
+    {
+        if (!_breakableCellMask.IsCreated || !_cellReleasedTypes.IsCreated || _runtimeParent == null)
+            return;
+
+        LevelObstacle levelObstacle = obstacle.GetComponent<LevelObstacle>();
+        if (levelObstacle == null)
+            return;
+
+        CompleteReleasedBlockJobs();
+        Vector3 obstacleCenter = obstacle.transform.position;
+        float maxVelocity = GetSafePhysicsVelocity(Mathf.Max(1f, obstacle.BreakForce * 2f));
+        for (int y = 0; y < _gridHeight; y++)
+        {
+            for (int x = 0; x < _gridWidth; x++)
+            {
+                int cellIndex = y * _gridWidth + x;
+                if (_breakableCellMask[cellIndex] == 0)
+                    continue;
+
+                Vector3 cellLocal = GetCellLocalPosition(x, y);
+                if (!levelObstacle.ContainsWorldPoint(_runtimeParent.TransformPoint(cellLocal)))
+                    continue;
+
+                _breakableCellMask[cellIndex] = 0;
+                ReleaseCell(cellIndex, x, y, cellLocal, obstacleCenter,
+                    0f, obstacle.BreakForce, 0f, 1f, 0f, 0f, maxVelocity);
+            }
+        }
+    }
+
     internal void SpawnBreakableFragments(BreakableObstacle obstacle, Vector3 sawDirection)
     {
         if (!EnsureReleasedBlockResources() || !EnsureEcsReady())
@@ -48,6 +79,8 @@ public sealed partial class LevelMapSpawner
         if (!EnsureReleasedBlockResources() || !EnsureEcsReady() || typeIndex >= _releasedBlockTypes.Count)
             return Entity.Null;
         Vector3 position = _runtimeParent.TransformPoint(localPosition);
+        ReleasedBlockRuntimeType runtimeType = _releasedBlockTypes[typeIndex];
+        position = KeepBlockOutsideSaw(position, sawCenter, bladeRadius + runtimeType.Radius);
         Vector3 outward = position - sawCenter;
         outward.z = 0f;
         float distance = outward.magnitude;
@@ -71,6 +104,19 @@ public sealed partial class LevelMapSpawner
         float angularVelocity = tangentialForce * 0.18f * speedScale * radiusPush * Mathf.Sign(spinDirection);
         return CreateReleasedBlockEntity(position, color, typeIndex, clampedVelocity, safeMaxVelocity, false, true,
             angularVelocity);
+    }
+
+    private static Vector3 KeepBlockOutsideSaw(Vector3 position, Vector3 sawCenter, float clearanceRadius)
+    {
+        Vector3 offset = position - sawCenter;
+        offset.z = 0f;
+        float distance = offset.magnitude;
+        if (distance >= clearanceRadius || clearanceRadius <= 0f)
+            return position;
+
+        Vector3 direction = distance > 0.0001f ? offset / distance : Vector3.up;
+        position += direction * (clearanceRadius - distance);
+        return position;
     }
     private Entity CreateReleasedBlockEntity(Vector3 position, Color32 color, ushort typeIndex, Vector3 velocity,
         float maxVelocity, bool renderAsMetaball, bool enableSolidConstraint, float angularVelocity = 0f,
