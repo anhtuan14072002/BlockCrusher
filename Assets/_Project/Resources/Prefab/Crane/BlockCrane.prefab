@@ -1362,7 +1362,7 @@ Transform:
   m_GameObject: {fileID: 5318974516778464816}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: 0.08}
   m_LocalScale: {x: 0.43, y: 0.43, z: 0.43}
   m_ConstrainProportionsScale: 1
   m_Children: []
@@ -1444,7 +1444,7 @@ MonoBehaviour:
   _sideDampingOnContact: 0.35
   _maxBlockVelocity: 2.5
   _obstacleDamagePerSecond: 1
-  _obstacleBounceDistance: 0.08
+  _obstacleBounceDistance: 0.25
   _resistanceDuration: 0.18
   _resistanceRecoveryDuration: 0.3
   _sawHeadScaleStep: 0.2

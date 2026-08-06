@@ -67,6 +67,9 @@ namespace Crusher
                 if (drill != null)
                     _drillCutter = drill.GetComponent<SawBlockCutter>();
             }
+
+            if (_drillCutter != null)
+                _drillLocalRotation = _drillCutter.transform.localRotation;
         }
 
         private SawBlockCutter ActiveToolCutter => _isDrillMode ? _drillCutter : _sawCutter;

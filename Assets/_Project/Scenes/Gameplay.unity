@@ -7604,6 +7604,37 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 675723247}
   m_CullTransparentMesh: 0
+--- !u!1 &690727166
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 690727167}
+  m_Layer: 0
+  m_Name: Pos
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &690727167
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 690727166}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0.565}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2834538000516026222}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &731441426
 GameObject:
   m_ObjectHideFlags: 0
@@ -11005,7 +11036,7 @@ Transform:
   m_GameObject: {fileID: 2144457621}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: -0.7071068, z: 0, w: 0.7071068}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: 0.08}
   m_LocalScale: {x: 2, y: 2, z: 2}
   m_ConstrainProportionsScale: 1
   m_Children: []
@@ -11182,8 +11213,8 @@ MonoBehaviour:
   _sideDampingOnContact: 0.35
   _maxBlockVelocity: 2.5
   _obstacleDamagePerSecond: 1
-  _obstacleBounceDistance: 0.08
   _canBreakStone: 1
+  _obstacleBounceDistance: 0.08
   _resistanceDuration: 0.18
   _resistanceRecoveryDuration: 0.3
   _sawHeadScaleStep: 0.2
@@ -11608,7 +11639,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2697512586575510461, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 0.04
+      value: 0.1
       objectReference: {fileID: 0}
     - target: {fileID: 2949695441736163718, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: m_Layer
@@ -11631,6 +11662,10 @@ PrefabInstance:
       value: BlockCrane
       objectReference: {fileID: 0}
     - target: {fileID: 4796949928601710294, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
+      propertyPath: m_SortingOrder
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4796949928601710294, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: m_Parameters.widthMultiplier
       value: 0.24
       objectReference: {fileID: 0}
@@ -11649,7 +11684,7 @@ PrefabInstance:
     - target: {fileID: 7111111111111111111, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: _point
       value: 
-      objectReference: {fileID: 2834538000516026222}
+      objectReference: {fileID: 690727167}
     - target: {fileID: 7111111111111111111, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: _width
       value: 0.24
@@ -11707,9 +11742,17 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 1552859851}
     - target: {fileID: 8972793132794875421, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
+      propertyPath: _drillCutter
+      value: 
+      objectReference: {fileID: 2144457624}
+    - target: {fileID: 8972793132794875421, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: _fuelFillMask
       value: 
       objectReference: {fileID: 29147327}
+    - target: {fileID: 8972793132794875421, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
+      propertyPath: _sawMoveSpeed
+      value: 1.2
+      objectReference: {fileID: 0}
     - target: {fileID: 8972793132794875421, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: _movementCamera
       value: 
@@ -11723,10 +11766,6 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 1459862940}
     - target: {fileID: 8972793132794875421, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
-      propertyPath: _drillCutter
-      value:
-      objectReference: {fileID: 2144457624}
-    - target: {fileID: 8972793132794875421, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: _sawContactMoveMultiplier
       value: 0.45
       objectReference: {fileID: 0}
@@ -11738,6 +11777,9 @@ PrefabInstance:
     - {fileID: 2356886719385984100, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
     - {fileID: 3492526705618709182, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
     m_AddedGameObjects:
+    - targetCorrespondingSourceObject: {fileID: 7118576392509342572, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 690727167}
     - targetCorrespondingSourceObject: {fileID: 2697512586575510461, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       insertIndex: 1
       addedObject: {fileID: 2144457622}

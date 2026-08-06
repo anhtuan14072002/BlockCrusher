@@ -194,7 +194,11 @@ public sealed class SawBlockCutter : MonoBehaviour
         if (hitBreakableObstacle && !_canBreakStone && _obstacleBounceDistance > 0f &&
             sawDirection.sqrMagnitude > 0.000001f)
         {
+            // The obstacle query already places the blade just outside the stone. Move the
+            // target further back so a saw impact visibly recoils instead of sticking to the
+            // collider while the joystick is held against it.
             clamped -= sawDirection.normalized * _obstacleBounceDistance;
+            RegisterResistance();
         }
         if (damagedObstacle)
         {

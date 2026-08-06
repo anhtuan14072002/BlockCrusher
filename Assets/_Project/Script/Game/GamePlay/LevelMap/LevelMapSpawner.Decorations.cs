@@ -263,7 +263,8 @@ public sealed partial class LevelMapSpawner
             for (int x = Mathf.Max(0, centerX - 2); x <= Mathf.Min(_gridWidth - 1, centerX + 2); x++)
             {
                 int cell = y * _gridWidth + x;
-                if (_cellSolid[cell] == 0)
+                bool isMaskedByBreakableObstacle = _breakableCellMask.IsCreated && _breakableCellMask[cell] != 0;
+                if (_cellSolid[cell] == 0 && !isMaskedByBreakableObstacle)
                     continue;
                 Vector3 delta = GetCellLocalPosition(x, y) - localPosition;
                 float distance = delta.x * delta.x + delta.y * delta.y;

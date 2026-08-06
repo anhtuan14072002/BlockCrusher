@@ -44,6 +44,7 @@ namespace Crusher
         [SerializeField] private TMP_Text _fuelPercentText;
 
         private Quaternion _sawInputRotationOffset = Quaternion.identity;
+        private Quaternion _drillLocalRotation = Quaternion.identity;
         private Transform _movementCameraTransform;
 
         private Vector3 _lastSawMoveDirection;
@@ -197,6 +198,7 @@ namespace Crusher
             if (_suctionDevice != null)
                 _suctionDevice.gameObject.SetActive(isSuction);
             _cableVisual.SetSuctionMode(isSuction);
+            ApplyDrillRotation();
         }
 
         private void SetJoystickActivity(bool isActive)
@@ -237,7 +239,20 @@ namespace Crusher
             else
             {
                 _saw.rotation = GetToolRotation(_lastSawMoveDirection) * _sawInputRotationOffset;
+                ApplyDrillRotation();
             }
+        }
+
+        private void ApplyDrillRotation()
+        {
+            if (_drillCutter == null || _saw == null)
+                return;
+
+            // The imported drill mesh faces the opposite way in the XY gameplay plane.
+            // Keep its authored 3D orientation, but flip its screen-facing direction when
+            // it is the active tool so the tip follows the joystick movement.
+            Quaternion directionFlip = _isDrillMode ? Quaternion.Euler(0f, 0f, 180f) : Quaternion.identity;
+            _drillCutter.transform.rotation = _saw.rotation * directionFlip * _drillLocalRotation;
         }
     }
 }

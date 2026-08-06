@@ -22,6 +22,8 @@ public sealed partial class LevelMapSpawner
 
     private void BuildAuthoredMeshLibrary()
     {
+        // The map render uses the authored block mesh. Keep every face here so the generated
+        // chunk preserves the block's depth instead of becoming a front-only card.
         DisposeAuthoredMeshLibrary();
         int vertexCount = 0;
         int indexCount = 0;
@@ -29,16 +31,7 @@ public sealed partial class LevelMapSpawner
         {
             Mesh mesh = _releasedBlockTypes[i].Mesh;
             vertexCount += mesh.vertexCount;
-            Vector3[] vertices = mesh.vertices;
-            int[] indices = mesh.triangles;
-            float frontZ = mesh.bounds.min.z;
-            for (int index = 0; index < indices.Length; index += 3)
-            {
-                if (Mathf.Abs(vertices[indices[index]].z - frontZ) < 0.0001f &&
-                    Mathf.Abs(vertices[indices[index + 1]].z - frontZ) < 0.0001f &&
-                    Mathf.Abs(vertices[indices[index + 2]].z - frontZ) < 0.0001f)
-                    indexCount += 3;
-            }
+            indexCount += mesh.triangles.Length;
         }
 
         _authoredMeshVertices = new NativeArray<Vector3>(vertexCount, Allocator.Persistent);
@@ -54,21 +47,12 @@ public sealed partial class LevelMapSpawner
             Vector3[] vertices = mesh.vertices;
             Vector2[] uvs = mesh.uv;
             int[] indices = mesh.triangles;
-            float frontZ = mesh.bounds.min.z;
-            int frontIndexCount = 0;
-            for (int index = 0; index < indices.Length; index += 3)
-            {
-                if (Mathf.Abs(vertices[indices[index]].z - frontZ) < 0.0001f &&
-                    Mathf.Abs(vertices[indices[index + 1]].z - frontZ) < 0.0001f &&
-                    Mathf.Abs(vertices[indices[index + 2]].z - frontZ) < 0.0001f)
-                    frontIndexCount += 3;
-            }
             _authoredMeshRanges[i] = new AuthoredMeshRange
             {
                 VertexStart = vertexStart,
                 VertexCount = vertices.Length,
                 IndexStart = indexStart,
-                IndexCount = frontIndexCount
+                IndexCount = indices.Length
             };
             for (int vertex = 0; vertex < vertices.Length; vertex++)
             {
@@ -78,16 +62,12 @@ public sealed partial class LevelMapSpawner
             int writeIndex = indexStart;
             for (int index = 0; index < indices.Length; index += 3)
             {
-                if (Mathf.Abs(vertices[indices[index]].z - frontZ) >= 0.0001f ||
-                    Mathf.Abs(vertices[indices[index + 1]].z - frontZ) >= 0.0001f ||
-                    Mathf.Abs(vertices[indices[index + 2]].z - frontZ) >= 0.0001f)
-                    continue;
                 _authoredMeshIndices[writeIndex++] = indices[index];
                 _authoredMeshIndices[writeIndex++] = indices[index + 1];
                 _authoredMeshIndices[writeIndex++] = indices[index + 2];
             }
             vertexStart += vertices.Length;
-            indexStart += frontIndexCount;
+            indexStart += indices.Length;
         }
     }
 
