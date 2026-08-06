@@ -1,6 +1,6 @@
 # BlockCrusher - Nhật ký công việc và cơ chế hiện tại
 
-> Cập nhật: 2026-08-05
+> Cập nhật: 2026-08-06
 > Branch: `feature/tunadev_v3`  
 > Commit nền: `2881ec6` (`fix water`)  
 > Trạng thái worktree trước khi tạo file: sạch
@@ -187,6 +187,9 @@ Mỗi `TypeBlockMap` giữ các dữ liệu authoring: loại block, prefab khi 
 
 ## 5. Những việc đã làm
 
+- 2026-08-06: thay mosaic `BlockShape` không kín bằng 12 mesh `TerrainFragment_00..11` mới trong `Assets/_Project/Resources/Mesh/TerrainTileable`. Pattern 4x3 dùng chung chính xác bốn vertex trên mỗi cạnh và lặp tuần hoàn cả X/Y; context check trả `seams=True`. `Gameplay/LevelMapSpawner` đã được gắn đủ 12 mesh, static chunk và released ECS dùng cùng mesh/type cùng world-cell scale. Play Mode level 3 hiển thị terrain liền, không còn đường kẻ ô; kéo saw từ `(0,-3,107.08)` xuống `(0,-4.8,107.08)` tạo rãnh có biên bất quy tắc, giảm solid từ 1320 xuống 1292 và sinh đúng 28 Dirt entity từ 9 fragment type, 28/28 có collider. Released block dùng box collider đã bake `renderScale`, inset còn 78% XY và bevel 20% cạnh ngắn để tránh các biên fragment móc nhau nhưng vẫn cho phép xoay quanh Z. Stress Play Mode thả 561 cell tạo thành đống có mặt trên gồ ghề; snapshot có 657 Dirt entity, `657 Box`, 657 rotation enabled, 609 đã xoay, không có state NaN và Console sạch. Build C# đạt 0 error với 13 warning MSB3277 nền.
+- 2026-08-06 (đã được thay thế): `Gameplay/LevelMapSpawner` từng được setup `BlockShape_01..12`. Static và released dùng cùng mesh/scale nhưng topology giữa các BlockShape không chia sẻ cạnh nên map vẫn lộ seam; dữ liệu type/vertex khớp không đủ chứng minh tessellation.
+- 2026-08-06 (đã được thay thế): bản trung gian từng render terrain bằng box greedy-merge và chỉ dùng `BlockShape` cho debris. Bản này compile/Play Mode đạt 0 error nhưng không bảo đảm hình mảnh khớp biên lỗ, nên đã được thay bằng fitted-fragment flow ở dòng trên.
 - Chuyển terrain từ nhiều block GameObject sang grid/chunk mesh và released-block ECS để giảm GameObject, draw call và chi phí physics.
 - Tạo level-prefab/Map Painter workflow để author block, obstacle, decoration và nước trong Editor.
 - Thêm các loại Dirt, ba loại ore, Rock và Water cùng bộ đếm vật phẩm hút được.
@@ -202,6 +205,11 @@ Mỗi `TypeBlockMap` giữ các dữ liệu authoring: loại block, prefab khi 
 - 2026-08-05: Kéo saw vào obstacle giữ đầu cưa tại khoảng `y=-6.59`; sau một lần cắt có 255 released block, vận tốc ngang trung bình `0.031` và lớn nhất `0.749`, với lực tiếp tuyến/vận tốc prefab đã giảm và damping block đã tăng.
 
 ## 6. Những gì đã hoàn tác
+
+### Vùng collider tròn cố định quanh tâm saw/drill
+
+- Người dùng yêu cầu hoàn tác thử nghiệm ngày 2026-08-06; đã gỡ persistent saw clearance, projection vị trí và post-physics circle constraint.
+- Giữ nguyên cơ chế `SawPushJob` cũ chỉ đẩy block khi cắt, cùng toàn bộ terrain tileable và box collider xoay của released block.
 
 ### Thử nghiệm ép mảnh đá về cùng một mặt phẳng/layer
 

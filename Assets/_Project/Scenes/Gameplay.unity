@@ -8048,9 +8048,22 @@ MonoBehaviour:
   - {fileID: 1749666366606836664, guid: 52227f16793b5504c8bcffe1e08048e5, type: 3}
   - {fileID: 1749666366606836664, guid: 3cd71752da4a5b44297d7930c16d8003, type: 3}
   - {fileID: 5455250794730262600, guid: a8520bbb74eea5248acd5f14fa1ebd03, type: 3}
-  _startLevel: 3
+  _startLevel: 2
   _container: {fileID: 925441448}
   _chunkMaterial: {fileID: 2100000, guid: 27e4bb3294908924e9d6a58207d8f342, type: 2}
+  _terrainFragmentMeshes:
+  - {fileID: 4300000, guid: 3c015c1dc3e16a54a89f6bbf486e6d4b, type: 2}
+  - {fileID: 4300000, guid: 45ea98dfd4ed6e846acb86595daa4146, type: 2}
+  - {fileID: 4300000, guid: b033daf7f6331d349a6974563884a27f, type: 2}
+  - {fileID: 4300000, guid: 6367a797ab520554ba8a81217f74c0d7, type: 2}
+  - {fileID: 4300000, guid: 55ea56f8d857a89438724b3b50a6cb6a, type: 2}
+  - {fileID: 4300000, guid: 439797edfc48a644fa951d6522cc5764, type: 2}
+  - {fileID: 4300000, guid: 909cefe10c4a3ff42b16f7bbccfd349b, type: 2}
+  - {fileID: 4300000, guid: 6a188e3b0fc436042975d0ade820029c, type: 2}
+  - {fileID: 4300000, guid: a6c00d1b309e738489aad450eb58aa61, type: 2}
+  - {fileID: 4300000, guid: e03bf9eda6e9ba54a9084a750c736b83, type: 2}
+  - {fileID: 4300000, guid: df36ea6c2e11be3448567fb09cac2649, type: 2}
+  - {fileID: 4300000, guid: 150c9ed91c4431f43b5245d2ccdfdf9f, type: 2}
   _spawnOnAwake: 1
   _chunkSize: 16
   _maxChunkRebuildsPerFrame: 2
@@ -11751,7 +11764,7 @@ PrefabInstance:
       objectReference: {fileID: 29147327}
     - target: {fileID: 8972793132794875421, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: _sawMoveSpeed
-      value: 1.2
+      value: 2
       objectReference: {fileID: 0}
     - target: {fileID: 8972793132794875421, guid: e43622d35838081439d92cfeb80ffb98, type: 3}
       propertyPath: _movementCamera

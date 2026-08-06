@@ -24,6 +24,7 @@ public sealed partial class LevelMapSpawner : MonoBehaviour
     [SerializeField, Min(1)] private int _startLevel = 1;
     [SerializeField] private Transform _container;
     [SerializeField] private RenderMaterial _chunkMaterial;
+    [SerializeField] private Mesh[] _terrainFragmentMeshes;
     [SerializeField] private bool _spawnOnAwake = true;
 
     [Header("Chunk Rendering")]

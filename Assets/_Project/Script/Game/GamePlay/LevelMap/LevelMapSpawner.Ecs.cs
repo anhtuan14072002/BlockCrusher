@@ -83,13 +83,16 @@ public sealed partial class LevelMapSpawner
             _authoredMeshRanges.Dispose();
     }
 
-    private int GetOrCreateReleasedBlockType(TypeBlockMap blockMap)
+    private int GetOrCreateReleasedBlockType(TypeBlockMap blockMap, Mesh fragmentMesh)
     {
-        MeshFilter meshFilter = blockMap.GetComponent<MeshFilter>();
-        float shortestCellSide = Mathf.Min(_cellSize.x, _cellSize.y);
-        Vector3 renderScale = new(_cellSize.x / shortestCellSide, _cellSize.y / shortestCellSide, 1f);
-        return GetOrCreateReleasedBlockType(blockMap.ReleasedPrefab, blockMap.ReleasedScale, renderScale,
-            blockMap.BlockType, blockMap, meshFilter != null ? meshFilter.sharedMesh : null);
+        float worldX = _runtimeParent.TransformVector(Vector3.right * _cellSize.x).magnitude;
+        float worldY = _runtimeParent.TransformVector(Vector3.up * _cellSize.y).magnitude;
+        float worldZ = _runtimeParent.TransformVector(Vector3.forward * Mathf.Min(_cellSize.x, _cellSize.y)).magnitude;
+        float shortestWorldSide = Mathf.Min(worldX, worldY);
+        Vector3 renderScale = new(worldX / shortestWorldSide, worldY / shortestWorldSide,
+            worldZ / shortestWorldSide);
+        return GetOrCreateReleasedBlockType(blockMap.ReleasedPrefab, shortestWorldSide, renderScale,
+            blockMap.BlockType, blockMap, fragmentMesh);
     }
 
     private int GetOrCreateReleasedBlockType(LevelDecoration decoration)
@@ -151,12 +154,30 @@ public sealed partial class LevelMapSpawner
         _releasedBlockPropertyBlock ??= new MaterialPropertyBlock();
         int batchCapacity = Mathf.CeilToInt(_maxReleasedPhysicsBlocks / (float)MaxInstancesPerBatch);
         Bounds bounds = sourceMesh.bounds;
-        float radius = Mathf.Min(bounds.size.x, bounds.size.y) * 0.48f;
-        BlobAssetReference<Collider> collider = Unity.Physics.SphereCollider.Create(new SphereGeometry
+        Vector3 scaledSize = Vector3.Scale(bounds.size, new Vector3(
+            Mathf.Abs(renderScale.x), Mathf.Abs(renderScale.y), Mathf.Abs(renderScale.z)));
+        Vector3 scaledCenter = Vector3.Scale(bounds.center, renderScale);
+        float radius = Mathf.Min(scaledSize.x, scaledSize.y) * 0.48f;
+        BlobAssetReference<Collider> collider;
+        if (source is TypeBlockMap)
         {
-            Center = new float3(bounds.center.x, bounds.center.y, 0f),
-            Radius = radius
-        }, CollisionFilter.Default, CreatePhysicsMaterial());
+            Vector3 colliderSize = Vector3.Scale(scaledSize, new Vector3(0.78f, 0.78f, 0.9f));
+            collider = Unity.Physics.BoxCollider.Create(new BoxGeometry
+            {
+                Center = new float3(scaledCenter.x, scaledCenter.y, scaledCenter.z),
+                Size = new float3(colliderSize.x, colliderSize.y, colliderSize.z),
+                Orientation = quaternion.identity,
+                BevelRadius = Mathf.Min(colliderSize.x, Mathf.Min(colliderSize.y, colliderSize.z)) * 0.2f
+            }, CollisionFilter.Default, CreatePhysicsMaterial());
+        }
+        else
+        {
+            collider = Unity.Physics.SphereCollider.Create(new SphereGeometry
+            {
+                Center = new float3(scaledCenter.x, scaledCenter.y, scaledCenter.z),
+                Radius = radius
+            }, CollisionFilter.Default, CreatePhysicsMaterial());
+        }
         RenderMaterial material = new RenderMaterial(sourceMaterial) { enableInstancing = true };
         ReleasedBlockRuntimeType runtimeType = new ReleasedBlockRuntimeType
         {
@@ -182,6 +203,7 @@ public sealed partial class LevelMapSpawner
         EnsureRenderFrameResources();
         return _releasedBlockTypes.Count - 1;
     }
+
     private bool EnsureEcsReady()
     {
         World world = World.DefaultGameObjectInjectionWorld;

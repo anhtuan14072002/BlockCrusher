@@ -5,6 +5,10 @@ using UnityEngine;
 
 public sealed partial class LevelMapSpawner
 {
+    private const int TerrainFragmentColumns = 4;
+    private const int TerrainFragmentRows = 3;
+    private const int TerrainFragmentMeshCount = TerrainFragmentColumns * TerrainFragmentRows;
+
     [ContextMenu("Spawn")]
     public void Spawn()
     {
@@ -97,19 +101,18 @@ public sealed partial class LevelMapSpawner
         _cellSolid = new NativeArray<byte>(_gridWidth * _gridHeight, Allocator.Persistent);
         _breakableCellMask = new NativeArray<byte>(_gridWidth * _gridHeight, Allocator.Persistent);
         _cellReleasedTypes = new NativeArray<ushort>(_gridWidth * _gridHeight, Allocator.Persistent);
+        if (!HasValidTerrainFragmentMeshes())
+        {
+            Debug.LogError($"LevelMapSpawner needs {TerrainFragmentMeshCount} terrain fragment meshes.", this);
+            DisposeCells();
+            return false;
+        }
 
         Vector2 alignmentTolerance = _cellSize * 0.01f;
         for (int i = 0; i < blocks.Length; i++)
         {
             TypeBlockMap blockMap = blocks[i];
             MeshRenderer renderer = blockMap.GetComponent<MeshRenderer>();
-            int typeIndex = GetOrCreateReleasedBlockType(blockMap);
-            if (typeIndex < 0)
-            {
-                DisposeCells();
-                return false;
-            }
-
             Vector3 localPosition = _runtimeParent.InverseTransformPoint(blockMap.transform.position);
             int x = Mathf.RoundToInt((localPosition.x - _offset.x) / _cellSize.x);
             int y = Mathf.RoundToInt((localPosition.y - _offset.y) / _cellSize.y);
@@ -122,10 +125,18 @@ public sealed partial class LevelMapSpawner
                 return false;
             }
 
+            Mesh fragmentMesh = _terrainFragmentMeshes[GetTerrainFragmentMeshIndex(x, y)];
+            int typeIndex = GetOrCreateReleasedBlockType(blockMap, fragmentMesh);
+            if (typeIndex < 0)
+            {
+                DisposeCells();
+                return false;
+            }
+
             int cell = y * _gridWidth + x;
             if (_cellSolid[cell] != 0)
             {
-                    Debug.LogError($"Level prefab has duplicate blocks at cell ({x}, {y}).", renderer);
+                Debug.LogError($"Level prefab has duplicate blocks at cell ({x}, {y}).", renderer);
                 DisposeCells();
                 return false;
             }
@@ -148,6 +159,71 @@ public sealed partial class LevelMapSpawner
 
         BuildAuthoredMeshLibrary();
         return true;
+    }
+
+    private bool HasValidTerrainFragmentMeshes()
+    {
+        if (_terrainFragmentMeshes == null || _terrainFragmentMeshes.Length != TerrainFragmentMeshCount)
+            return false;
+
+        for (int i = 0; i < _terrainFragmentMeshes.Length; i++)
+        {
+            if (_terrainFragmentMeshes[i] == null)
+                return false;
+        }
+
+        return true;
+    }
+
+    private static int GetTerrainFragmentMeshIndex(int x, int y)
+    {
+        int column = (x % TerrainFragmentColumns + TerrainFragmentColumns) % TerrainFragmentColumns;
+        int row = (y % TerrainFragmentRows + TerrainFragmentRows) % TerrainFragmentRows;
+        return row * TerrainFragmentColumns + column;
+    }
+
+    private bool TerrainFragmentMeshesShareEdges()
+    {
+        if (!HasValidTerrainFragmentMeshes())
+            return false;
+
+        int[] rightEdge = { 3, 4, 5, 6 };
+        int[] leftEdge = { 0, 11, 10, 9 };
+        int[] topEdge = { 9, 8, 7, 6 };
+        int[] bottomEdge = { 0, 1, 2, 3 };
+        const float tolerance = 0.000001f;
+
+        for (int y = 0; y < TerrainFragmentRows; y++)
+        {
+            for (int x = 0; x < TerrainFragmentColumns; x++)
+            {
+                Vector3[] vertices = _terrainFragmentMeshes[GetTerrainFragmentMeshIndex(x, y)].vertices;
+                Vector3[] rightVertices = _terrainFragmentMeshes[GetTerrainFragmentMeshIndex(x + 1, y)].vertices;
+                Vector3[] topVertices = _terrainFragmentMeshes[GetTerrainFragmentMeshIndex(x, y + 1)].vertices;
+                if (vertices.Length < 12 || rightVertices.Length < 12 || topVertices.Length < 12)
+                    return false;
+
+                for (int edgeVertex = 0; edgeVertex < 4; edgeVertex++)
+                {
+                    Vector3 rightPoint = vertices[rightEdge[edgeVertex]] + new Vector3(x, y, 0f);
+                    Vector3 leftPoint = rightVertices[leftEdge[edgeVertex]] + new Vector3(x + 1, y, 0f);
+                    Vector3 topPoint = vertices[topEdge[edgeVertex]] + new Vector3(x, y, 0f);
+                    Vector3 bottomPoint = topVertices[bottomEdge[edgeVertex]] + new Vector3(x, y + 1, 0f);
+                    if ((rightPoint - leftPoint).sqrMagnitude > tolerance * tolerance ||
+                        (topPoint - bottomPoint).sqrMagnitude > tolerance * tolerance)
+                        return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    [ContextMenu("Validate Terrain Fragment Seams")]
+    private void ValidateTerrainFragmentSeams()
+    {
+        Debug.Assert(TerrainFragmentMeshesShareEdges(),
+            "Terrain fragment meshes do not share identical edges.", this);
     }
 
     private void IncludeGridPosition(Vector3 worldPosition, ref Vector3 min, ref Vector3 max)
@@ -207,6 +283,16 @@ public sealed partial class LevelMapSpawner
             "Level prefab block size is invalid.", firstBlock);
         if (cellSize.x <= 0.0001f || cellSize.y <= 0.0001f)
             return;
+
+        Debug.Assert(HasValidTerrainFragmentMeshes(),
+            $"LevelMapSpawner needs {TerrainFragmentMeshCount} terrain fragment meshes.", this);
+        Debug.Assert(GetTerrainFragmentMeshIndex(0, 0) == 0 &&
+                     GetTerrainFragmentMeshIndex(3, 2) == 11 &&
+                     GetTerrainFragmentMeshIndex(4, 3) == 0 &&
+                     GetTerrainFragmentMeshIndex(-1, -1) == 11,
+            "Terrain fragment mosaic indexing failed.", this);
+        Debug.Assert(TerrainFragmentMeshesShareEdges(),
+            "Terrain fragment meshes do not share identical edges.", this);
 
         HashSet<Vector2Int> occupiedCells = new HashSet<Vector2Int>();
         for (int i = 0; i < blocks.Length; i++)

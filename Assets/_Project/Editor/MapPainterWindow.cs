@@ -865,7 +865,7 @@ public sealed class MapPainterWindow : EditorWindow
     private GameObject GetGridPrefabForCell(int x, int y)
     {
         if (_gridPrefabs.Count == 12)
-            return _gridPrefabs[PositiveModulo(y, 4) * 3 + PositiveModulo(x, 3)];
+            return _gridPrefabs[PositiveModulo(y, 3) * 4 + PositiveModulo(x, 4)];
 
         return GetRandomPrefab(_gridPrefabs);
     }
@@ -1417,7 +1417,7 @@ public sealed class MapPainterWindow : EditorWindow
                      randomOffset.z == 0f &&
                      randomScale >= RandomOverlayScaleMin && randomScale <= RandomOverlayScaleMax,
             "Map Painter overlay random size and position failed.");
-        Debug.Assert(PositiveModulo(-1, 3) == 2 && PositiveModulo(4, 3) == 1,
+        Debug.Assert(PositiveModulo(-1, 4) == 3 && PositiveModulo(5, 4) == 1,
             "Map Painter mosaic indexing failed.");
         List<MapPainterGridColorLayer> colorLayers = new()
         {
