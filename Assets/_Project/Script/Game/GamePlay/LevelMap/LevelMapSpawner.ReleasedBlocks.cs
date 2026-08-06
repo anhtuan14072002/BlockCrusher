@@ -79,8 +79,6 @@ public sealed partial class LevelMapSpawner
         if (!EnsureReleasedBlockResources() || !EnsureEcsReady() || typeIndex >= _releasedBlockTypes.Count)
             return Entity.Null;
         Vector3 position = _runtimeParent.TransformPoint(localPosition);
-        ReleasedBlockRuntimeType runtimeType = _releasedBlockTypes[typeIndex];
-        position = KeepBlockOutsideSaw(position, sawCenter, bladeRadius + runtimeType.Radius);
         Vector3 outward = position - sawCenter;
         outward.z = 0f;
         float distance = outward.magnitude;
@@ -106,18 +104,6 @@ public sealed partial class LevelMapSpawner
             angularVelocity);
     }
 
-    private static Vector3 KeepBlockOutsideSaw(Vector3 position, Vector3 sawCenter, float clearanceRadius)
-    {
-        Vector3 offset = position - sawCenter;
-        offset.z = 0f;
-        float distance = offset.magnitude;
-        if (distance >= clearanceRadius || clearanceRadius <= 0f)
-            return position;
-
-        Vector3 direction = distance > 0.0001f ? offset / distance : Vector3.up;
-        position += direction * (clearanceRadius - distance);
-        return position;
-    }
     private Entity CreateReleasedBlockEntity(Vector3 position, Color32 color, ushort typeIndex, Vector3 velocity,
         float maxVelocity, bool renderAsMetaball, bool enableSolidConstraint, float angularVelocity = 0f,
         bool usesGravity = true)
