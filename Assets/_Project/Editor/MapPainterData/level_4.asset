@@ -1,0 +1,75 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7b3d8fb1d7521324ea11c41998fd220b, type: 3}
+  m_Name: level_4
+  m_EditorClassIdentifier: 
+  PaintPrefabs:
+  - {fileID: 612727279210085569, guid: 3f4ebe89b85f2a147bdba89bc394f76d, type: 3}
+  SelectedPaintPrefabs: 01
+  ObstaclePrefabs:
+  - {fileID: 3224242862274245264, guid: a42fe9ae94f6ca742ab80279fed913b1, type: 3}
+  - {fileID: 3858047283572957541, guid: 7322505dd101ca245b87af390840d3f9, type: 3}
+  - {fileID: 420772988789535723, guid: a4011efb5af85e946a416bc15cf25a22, type: 3}
+  - {fileID: 4377372095242228172, guid: 7680c44a0b0efb94abc960730dd89eb4, type: 3}
+  - {fileID: 2373744388869953939, guid: 07666b8eaeb141445874ed7592c1d861, type: 3}
+  - {fileID: 7312955918299356777, guid: 1879908a1b3f0284c95a22cf10170c9e, type: 3}
+  - {fileID: 1880420211551099131, guid: 7dc9532162384484d8fa77bde92a99e1, type: 3}
+  - {fileID: 162046238135951508, guid: de24d188bdbfca249b381dc166773011, type: 3}
+  - {fileID: 6179986367876549492, guid: b67434dc78caa7f44a642ffdf00f241d, type: 3}
+  - {fileID: 6157010812642190867, guid: 1b1ed2c1c99167c4dace3f0d6a953522, type: 3}
+  - {fileID: 8072481563294250013, guid: e8c8d6f82a80fc64ca6433a71e40c6c9, type: 3}
+  - {fileID: 4785190232492298934, guid: 32980f88ab4c0bc4e9e626b9ccdb285e, type: 3}
+  - {fileID: 7611344850084336024, guid: ee6e8159cd8c65b45920c4d698462f1e, type: 3}
+  - {fileID: 2778442941689689010, guid: 1d88be3e590650c4590616f554cd815a, type: 3}
+  - {fileID: 7919354158814669986, guid: 5e5c8630121f71449b978357ac3c27c1, type: 3}
+  SelectedObstaclePrefabs: 000000010101010101010101010101
+  SpecialMaterialPrefabs:
+  - {fileID: 3567369757448790777, guid: fa9e079026d6ea74c8991501d7bd3e2a, type: 3}
+  SelectedSpecialMaterialPrefabs: 01
+  OverlayPrefabs:
+  - {fileID: 4915179277221544483, guid: 8d687ddd55aefad4d806ccaadbae1b45, type: 3}
+  - {fileID: 3224242862274245264, guid: a42fe9ae94f6ca742ab80279fed913b1, type: 3}
+  - {fileID: 3858047283572957541, guid: 7322505dd101ca245b87af390840d3f9, type: 3}
+  - {fileID: 420772988789535723, guid: a4011efb5af85e946a416bc15cf25a22, type: 3}
+  - {fileID: 4970482013353890756, guid: a8e8b324213dc4c49b9e9ccbd88833cb, type: 3}
+  - {fileID: 6185358022084267644, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+  - {fileID: 5886897174249047021, guid: c2af108b90fc0704784f0b3e10c14d33, type: 3}
+  - {fileID: 5752300303716107331, guid: c436734b13cda4342ae15b844423e408, type: 3}
+  - {fileID: 5831705302585161779, guid: 5e05129c948092b489c0e9fa83ae1bab, type: 3}
+  - {fileID: 3488254414830135800, guid: cbaaf1c5569a167419968e1381692ff6, type: 3}
+  SelectedOverlayPrefabs: 00000000010101000000
+  OverlayScaleMultiplier: 1
+  OverlayLocalZ: -0.31
+  HasOverlayLocalZ: 1
+  RandomizeOverlaySizeAndPosition: 1
+  GridPrefabs:
+  - {fileID: 612727279210085569, guid: 3f4ebe89b85f2a147bdba89bc394f76d, type: 3}
+  GridColorLayers:
+  - FromDepth: 0
+    ToDepth: 20
+    Color: {r: 0.4056604, g: 0.293038, b: 0.23918656, a: 1}
+  - FromDepth: 21
+    ToDepth: 40
+    Color: {r: 0.3962264, g: 0.28215945, b: 0.2224101, a: 1}
+  - FromDepth: 41
+    ToDepth: 60
+    Color: {r: 0.40392157, g: 0.17254902, b: 0.15686275, a: 1}
+  - FromDepth: 61
+    ToDepth: 89
+    Color: {r: 0.4056604, g: 0.051664297, b: 0.075264014, a: 1}
+  PaintType: 0
+  PrefabSize: 1
+  Scale: {x: 1, y: 1, z: 1}
+  HasScale: 1
+  Spacing: 0
+  GridWidth: 15
+  GridHeight: 90

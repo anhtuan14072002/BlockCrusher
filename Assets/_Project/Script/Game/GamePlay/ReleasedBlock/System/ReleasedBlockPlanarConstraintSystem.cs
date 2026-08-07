@@ -12,6 +12,7 @@ public partial struct ReleasedBlockPostPhysicsConstraintSystem : ISystem
 {
     private EntityQuery _query;
     private EntityQuery _continuousCollisionQuery;
+    private EntityQuery _unconstrainedContinuousCollisionQuery;
 
     public void OnCreate(ref SystemState state)
     {
@@ -25,8 +26,14 @@ public partial struct ReleasedBlockPostPhysicsConstraintSystem : ISystem
             .WithAllRW<LocalTransform>()
             .WithAllRW<PhysicsVelocity>()
             .WithAll<PhysicsCollider>()
-            .WithAll<ReleasedBlockComponent, Simulate>()
+            .WithAll<ReleasedBlockComponent, ReleasedBlockSolidConstraint, Simulate>()
             .WithDisabled<SuctionTransit>()
+            .Build();
+        _unconstrainedContinuousCollisionQuery = SystemAPI.QueryBuilder()
+            .WithAllRW<LocalTransform>()
+            .WithAllRW<PhysicsVelocity>()
+            .WithAll<PhysicsCollider, ReleasedBlockComponent, Simulate>()
+            .WithDisabled<ReleasedBlockSolidConstraint, SuctionTransit>()
             .Build();
         state.RequireForUpdate<PhysicsWorldSingleton>();
     }
@@ -35,19 +42,25 @@ public partial struct ReleasedBlockPostPhysicsConstraintSystem : ISystem
     {
         JobHandle dependency = new ReleasedBlockContinuousCollisionJob
         {
-            CollisionWorld = SystemAPI.GetSingleton<PhysicsWorldSingleton>().CollisionWorld
+            CollisionWorld = SystemAPI.GetSingleton<PhysicsWorldSingleton>().CollisionWorld,
+            CommitStepStartPosition = 0
         }.ScheduleParallel(_continuousCollisionQuery, state.Dependency);
-        for (int i = LevelMapSpawner.ActiveSpawnerCount - 1; i >= 0; i--)
+        dependency = new ReleasedBlockContinuousCollisionJob
         {
-            LevelMapSpawner spawner = LevelMapSpawner.GetActiveSpawner(i);
+            CollisionWorld = SystemAPI.GetSingleton<PhysicsWorldSingleton>().CollisionWorld,
+            CommitStepStartPosition = 1
+        }.ScheduleParallel(_unconstrainedContinuousCollisionQuery, dependency);
+        for (int i = LevelMapAuthoring.ActiveSpawnerCount - 1; i >= 0; i--)
+        {
+            LevelMapAuthoring spawner = LevelMapAuthoring.GetActiveSpawner(i);
             if (spawner == null)
             {
-                LevelMapSpawner.RemoveActiveSpawnerAt(i);
+                LevelMapAuthoring.RemoveActiveSpawnerAt(i);
                 continue;
             }
 
             if (spawner.TryCreateSolidConstraintJob(true,
-                    out LevelMapSpawner.ReleasedBlockSolidConstraintJob solidConstraintJob))
+                    out LevelMapAuthoring.ReleasedBlockSolidConstraintJob solidConstraintJob))
             {
                 dependency = solidConstraintJob.ScheduleParallel(_query, dependency);
             }

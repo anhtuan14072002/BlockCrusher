@@ -3,6 +3,7 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
+using Unity.Physics;
 using Unity.Transforms;
 
 [BurstCompile(FloatMode = FloatMode.Fast, FloatPrecision = FloatPrecision.Low)]
@@ -63,19 +64,19 @@ public partial struct ReleasedBlockRenderPreparationSystem : ISystem
     public void OnCreate(ref SystemState state)
     {
         _query = SystemAPI.QueryBuilder()
-            .WithAll<LocalTransform, ReleasedBlockComponent, ReleasedBlockAttachment>()
+            .WithAll<LocalTransform, ReleasedBlockComponent, ReleasedBlockAttachment, Simulate>()
             .Build();
     }
 
     public void OnUpdate(ref SystemState state)
     {
         JobHandle dependency = state.Dependency;
-        for (int i = LevelMapSpawner.ActiveSpawnerCount - 1; i >= 0; i--)
+        for (int i = LevelMapAuthoring.ActiveSpawnerCount - 1; i >= 0; i--)
         {
-            LevelMapSpawner spawner = LevelMapSpawner.GetActiveSpawner(i);
+            LevelMapAuthoring spawner = LevelMapAuthoring.GetActiveSpawner(i);
             if (spawner == null)
             {
-                LevelMapSpawner.RemoveActiveSpawnerAt(i);
+                LevelMapAuthoring.RemoveActiveSpawnerAt(i);
                 continue;
             }
             if (!spawner.TryCreateRenderPreparationJob(out PrepareRenderFrameJob job))

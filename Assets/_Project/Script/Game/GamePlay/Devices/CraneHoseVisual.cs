@@ -1,6 +1,3 @@
-using System;
-using Unity.Collections;
-using Unity.Mathematics;
 using UnityEngine;
 
 namespace Crusher
@@ -105,16 +102,19 @@ namespace Crusher
             SetColor(_isSuctionMode ? _suctionColor : _cutColor);
         }
 
-        public void AppendToolPath(ref FixedList512Bytes<float3> path)
+        public int CopyToolToRootPath(Vector3[] destination)
         {
-            if (!_initialized) return;
+            if (!_initialized || destination == null || destination.Length == 0)
+                return 0;
 
-            for (int i = _segmentCount - 1; i >= 0; i -= 3)
+            int count = 0;
+            for (int i = _segmentCount; i >= 0 && count < destination.Length; i--)
             {
-                if (path.Length >= path.Capacity) break;
-                Vector3 point = _positions[i];
-                path.Add(new float3(point.x, point.y, point.z));
+                destination[count] = _positions[i];
+                count++;
             }
+
+            return count;
         }
 
         private void Simulate(float deltaTime)

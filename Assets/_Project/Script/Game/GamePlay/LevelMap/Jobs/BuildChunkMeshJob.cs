@@ -12,7 +12,7 @@ internal struct BuildChunkMeshJob : IJob
     [ReadOnly] public NativeArray<Vector3> AuthoredMeshVertices;
     [ReadOnly] public NativeArray<Vector2> AuthoredMeshUvs;
     [ReadOnly] public NativeArray<int> AuthoredMeshIndices;
-    [ReadOnly] public NativeArray<LevelMapSpawner.AuthoredMeshRange> AuthoredMeshRanges;
+    [ReadOnly] public NativeArray<LevelMapAuthoring.AuthoredMeshRange> AuthoredMeshRanges;
 
     public NativeArray<byte> Visited;
     public NativeList<Vector3> Vertices;
@@ -37,7 +37,7 @@ internal struct BuildChunkMeshJob : IJob
 
     public void Execute()
     {
-        new LevelMapSpawner.LevelMapMeshBuilder
+        new LevelMapAuthoring.LevelMapMeshBuilder
         {
             CellColors = CellColors,
             CellSolid = CellSolid,

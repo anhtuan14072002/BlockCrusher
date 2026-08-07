@@ -5,7 +5,7 @@ using Unity.Mathematics;
 using Unity.Physics;
 using Unity.Transforms;
 
-public sealed partial class LevelMapSpawner
+public sealed partial class LevelMapAuthoring
 {
     [BurstCompile(FloatMode = FloatMode.Fast, FloatPrecision = FloatPrecision.Low)]
     internal partial struct ReleasedBlockSolidConstraintJob : IJobEntity

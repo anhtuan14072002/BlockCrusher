@@ -9,6 +9,7 @@ using Unity.Transforms;
 internal partial struct ReleasedBlockContinuousCollisionJob : IJobEntity
 {
     [ReadOnly] public CollisionWorld CollisionWorld;
+    public byte CommitStepStartPosition;
 
     private void Execute(Entity entity, ref LocalTransform transform, ref PhysicsVelocity velocity,
         in PhysicsCollider collider, ref ReleasedBlockComponent block)
@@ -24,7 +25,7 @@ internal partial struct ReleasedBlockContinuousCollisionJob : IJobEntity
         float travelLength = math.length(travel.xy);
         if (travelLength <= 0.0001f)
         {
-            block.PhysicsStepStartPosition = end;
+            CommitStepStart(ref block, end);
             return;
         }
 
@@ -33,7 +34,7 @@ internal partial struct ReleasedBlockContinuousCollisionJob : IJobEntity
         ClosestOtherHitCollector collector = new ClosestOtherHitCollector(entity);
         if (!CollisionWorld.CastCollider(input, ref collector) || collector.NumHits == 0)
         {
-            block.PhysicsStepStartPosition = end;
+            CommitStepStart(ref block, end);
             return;
         }
 
@@ -47,7 +48,13 @@ internal partial struct ReleasedBlockContinuousCollisionJob : IJobEntity
         float inwardSpeed = math.dot(velocity.Linear, normal);
         if (inwardSpeed < 0f)
             velocity.Linear -= normal * inwardSpeed;
-        block.PhysicsStepStartPosition = transform.Position;
+        CommitStepStart(ref block, transform.Position);
+    }
+
+    private void CommitStepStart(ref ReleasedBlockComponent block, float3 position)
+    {
+        if (CommitStepStartPosition != 0)
+            block.PhysicsStepStartPosition = position;
     }
 
     private struct ClosestOtherHitCollector : ICollector<ColliderCastHit>

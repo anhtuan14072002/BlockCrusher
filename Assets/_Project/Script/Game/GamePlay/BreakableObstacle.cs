@@ -25,7 +25,7 @@ public sealed class BreakableObstacle : MonoBehaviour
     private MeshFilter _meshFilter;
     private MeshRenderer _meshRenderer;
     private MaterialPropertyBlock _propertyBlock;
-    private LevelMapSpawner _spawner;
+    private LevelMapAuthoring _spawner;
     private ushort[] _releasedTypeIndices;
     private float _damage;
     private int _visibleCrackStage;
@@ -78,7 +78,7 @@ public sealed class BreakableObstacle : MonoBehaviour
         return _releasedTypeIndices[shardIndex % _releasedTypeIndices.Length];
     }
 
-    internal void InitializeReleasedTypes(LevelMapSpawner spawner, ushort[] releasedTypeIndices)
+    internal void InitializeReleasedTypes(LevelMapAuthoring spawner, ushort[] releasedTypeIndices)
     {
         _spawner = spawner;
         _releasedTypeIndices = releasedTypeIndices;
@@ -87,11 +87,10 @@ public sealed class BreakableObstacle : MonoBehaviour
     private void Break(Vector3 sawDirection)
     {
         if (_spawner == null || _releasedTypeIndices == null)
-            Debug.LogError("Breakable obstacle was not registered with its LevelMapSpawner.", this);
+            Debug.LogError("Breakable obstacle was not registered with its LevelMapAuthoring.", this);
         else
         {
             _spawner.ReleaseResourcesUnderObstacle(this);
-            _spawner.SpawnBreakableFragments(this, sawDirection);
         }
 
         gameObject.SetActive(false);

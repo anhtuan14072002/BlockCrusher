@@ -31,8 +31,11 @@ Shader "BlockCrusher/VoxelExactColor"
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_instancing
+            #pragma multi_compile_fwdbase
 
             #include "UnityCG.cginc"
+            #include "Lighting.cginc"
+            #include "AutoLight.cginc"
 
             fixed4 _EdgeColor;
             half _EdgeStrength;
@@ -55,6 +58,7 @@ Shader "BlockCrusher/VoxelExactColor"
                 float4 vertex : POSITION;
                 fixed4 color : COLOR;
                 float2 uv : TEXCOORD0;
+                float3 normal : NORMAL;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -65,6 +69,8 @@ Shader "BlockCrusher/VoxelExactColor"
                 float2 uv : TEXCOORD0;
                 float2 soilUv : TEXCOORD1;
                 float2 crackUv : TEXCOORD2;
+                float3 worldNormal : TEXCOORD3;
+                SHADOW_COORDS(4)
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -78,6 +84,8 @@ Shader "BlockCrusher/VoxelExactColor"
                 o.uv = v.uv;
                 o.soilUv = mul(unity_ObjectToWorld, v.vertex).xy * _SoilTiling;
                 o.crackUv = v.vertex.xy * _CrackScale;
+                o.worldNormal = UnityObjectToWorldNormal(v.normal);
+                TRANSFER_SHADOW(o);
                 return o;
             }
 
@@ -124,13 +132,11 @@ Shader "BlockCrusher/VoxelExactColor"
                 UNITY_SETUP_INSTANCE_ID(i);
                 half useVertexColor = UNITY_ACCESS_INSTANCED_PROP(Props, _UseVertexColor);
                 fixed4 tint = UNITY_ACCESS_INSTANCED_PROP(Props, _Color);
+                fixed4 color;
                 if (useVertexColor < 0.5)
-                {
-                    tint.a = 1;
-                    return tint;
-                }
-
-                fixed4 color = i.color * tint;
+                    color = tint;
+                else
+                    color = i.color * tint;
                 color.a = 1;
 
                 #ifndef UNITY_COLORSPACE_GAMMA
@@ -153,9 +159,22 @@ Shader "BlockCrusher/VoxelExactColor"
                 float crackReveal = step(crack.y, saturate(crackAmount * 1.15));
                 color.rgb = lerp(color.rgb, _CrackColor.rgb, crackLine * crackReveal);
 
+                float3 normal = normalize(i.worldNormal);
+                float3 lightDirection = normalize(_WorldSpaceLightPos0.xyz);
+                half diffuse = saturate(dot(normal, lightDirection));
+                half3 ambient = ShadeSH9(float4(normal, 1.0)).rgb;
+                half3 lighting = max(ambient, 0.5h) + _LightColor0.rgb * (0.15h + 0.25h * diffuse * SHADOW_ATTENUATION(i));
+                color.rgb *= saturate(lighting);
+
+                half maxChannel = max(color.r, max(color.g, color.b));
+                half minChannel = min(color.r, min(color.g, color.b));
+                color.rgb *= lerp(1.0h, 1.35h, saturate((maxChannel - minChannel) * 2.0h));
+
                 return color;
             }
             ENDCG
         }
     }
+
+    Fallback "Diffuse"
 }

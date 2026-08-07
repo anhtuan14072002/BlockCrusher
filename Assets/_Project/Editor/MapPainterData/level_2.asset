@@ -63,10 +63,6 @@ MonoBehaviour:
   HasOverlayLocalZ: 1
   RandomizeOverlaySizeAndPosition: 1
   GridPrefabs:
-  - {fileID: 4377372095242228172, guid: 7680c44a0b0efb94abc960730dd89eb4, type: 3}
-  - {fileID: 2373744388869953939, guid: 07666b8eaeb141445874ed7592c1d861, type: 3}
-  - {fileID: 7312955918299356777, guid: 1879908a1b3f0284c95a22cf10170c9e, type: 3}
-  - {fileID: 1880420211551099131, guid: 7dc9532162384484d8fa77bde92a99e1, type: 3}
   - {fileID: 162046238135951508, guid: de24d188bdbfca249b381dc166773011, type: 3}
   - {fileID: 6179986367876549492, guid: b67434dc78caa7f44a642ffdf00f241d, type: 3}
   - {fileID: 6157010812642190867, guid: 1b1ed2c1c99167c4dace3f0d6a953522, type: 3}
