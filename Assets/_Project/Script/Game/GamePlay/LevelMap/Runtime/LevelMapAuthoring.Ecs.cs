@@ -216,7 +216,15 @@ public sealed partial class LevelMapAuthoring
 
     private bool EnsureEcsReady()
     {
-        World world = GetOrCreateDefaultWorld();
+        // Cleanup can run after Unity has already torn down the default ECS world.
+        // Never initialize a new world from here: doing so during scene unload creates
+        // a new GameObject after the scene has started closing.
+        World world = _ecsWorld != null && _ecsWorld.IsCreated
+            ? _ecsWorld
+            : World.DefaultGameObjectInjectionWorld;
+        if (world == null || !world.IsCreated)
+            return false;
+
         if (_ecsWorld != world || !_hasReleasedBlockQuery)
         {
             DisposeReleasedBlockWalls();

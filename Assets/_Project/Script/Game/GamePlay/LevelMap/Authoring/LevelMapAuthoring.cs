@@ -27,6 +27,12 @@ public sealed partial class LevelMapAuthoring : MonoBehaviour
     [SerializeField] private Mesh[] _terrainFragmentMeshes;
     [SerializeField] private bool _spawnOnAwake = true;
 
+    [Header("Soil Visual")]
+    [SerializeField] private bool _overrideDirtPalette = true;
+    // Vertex colours are consumed as linear values by the terrain shader. These low
+    // channel values display as the dark chocolate-brown used by the reference game.
+    [SerializeField] private Color _soilBaseColor = new Color32(18, 10, 8, 255);
+
     [Header("Chunk Rendering")]
     [SerializeField, Range(8, 64)] private int _chunkSize = 24;
     [SerializeField, Range(1, 8)] private int _maxChunkRebuildsPerFrame = 2;

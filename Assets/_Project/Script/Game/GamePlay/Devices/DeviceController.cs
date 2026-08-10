@@ -50,7 +50,7 @@ namespace Crusher
         private EntityQuery _drillQuery;
         private EntityQuery _suctionQuery;
         private bool _queriesCreated;
-        private ToolMode _toolMode = ToolMode.Suction;
+        private ToolMode _toolMode = ToolMode.Saw;
         private bool _hasInput;
         private Vector2 _stonePushDirection;
         private float _stonePushRemaining;

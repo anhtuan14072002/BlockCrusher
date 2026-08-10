@@ -34,7 +34,7 @@ MonoBehaviour:
   SelectedObstaclePrefabs: 000000010101010101010101010101
   SpecialMaterialPrefabs:
   - {fileID: 3567369757448790777, guid: fa9e079026d6ea74c8991501d7bd3e2a, type: 3}
-  SelectedSpecialMaterialPrefabs: 01
+  SelectedSpecialMaterialPrefabs: 00
   OverlayPrefabs:
   - {fileID: 4915179277221544483, guid: 8d687ddd55aefad4d806ccaadbae1b45, type: 3}
   - {fileID: 3224242862274245264, guid: a42fe9ae94f6ca742ab80279fed913b1, type: 3}
@@ -46,7 +46,7 @@ MonoBehaviour:
   - {fileID: 5752300303716107331, guid: c436734b13cda4342ae15b844423e408, type: 3}
   - {fileID: 5831705302585161779, guid: 5e05129c948092b489c0e9fa83ae1bab, type: 3}
   - {fileID: 3488254414830135800, guid: cbaaf1c5569a167419968e1381692ff6, type: 3}
-  SelectedOverlayPrefabs: 00000000010101000000
+  SelectedOverlayPrefabs: 01000000000000000000
   OverlayScaleMultiplier: 1
   OverlayLocalZ: -0.31
   HasOverlayLocalZ: 1
@@ -66,7 +66,7 @@ MonoBehaviour:
   - FromDepth: 61
     ToDepth: 89
     Color: {r: 0.4056604, g: 0.051664297, b: 0.075264014, a: 1}
-  PaintType: 0
+  PaintType: 3
   PrefabSize: 1
   Scale: {x: 1, y: 1, z: 1}
   HasScale: 1

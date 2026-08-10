@@ -143,7 +143,7 @@ public sealed partial class LevelMapAuthoring
 
             _cellSolid[cell] = 1;
             _cellReleasedTypes[cell] = (ushort)typeIndex;
-            _cellColors[cell] = blockMap.MapColor;
+            _cellColors[cell] = GetSurfaceColor(blockMap);
             _cellReleasedColors[cell] = blockMap.ReleasedColor;
         }
 
@@ -159,6 +159,20 @@ public sealed partial class LevelMapAuthoring
 
         BuildAuthoredMeshLibrary();
         return true;
+    }
+
+    private Color32 GetSurfaceColor(TypeBlockMap blockMap)
+    {
+        if (!_overrideDirtPalette || blockMap.BlockType != TypeBlock.Dirt)
+            return blockMap.MapColor;
+
+        // Dirt must read as one continuous surface. Variation is generated from world
+        // position in the shader; per-cell tint would reveal the hidden destruction grid.
+        Color soilColor = _soilBaseColor;
+        // Alpha is an internal surface-class marker. The opaque shader restores output
+        // alpha to one, so this does not make dirt transparent.
+        soilColor.a = 0f;
+        return soilColor;
     }
 
     private bool HasValidTerrainFragmentMeshes()

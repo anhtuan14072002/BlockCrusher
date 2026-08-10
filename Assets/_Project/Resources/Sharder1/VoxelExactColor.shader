@@ -10,13 +10,6 @@ Shader "BlockCrusher/VoxelExactColor"
         _SoilTex ("Soil Texture", 2D) = "gray" {}
         _SoilStrength ("Soil Strength", Range(0,0.35)) = 0.12
         _SoilTiling ("Soil Tiling", Float) = 0.65
-        _SoilFineStrength ("Fine Soil Strength", Range(0,0.35)) = 0.12
-        _SoilFineTiling ("Fine Soil Tiling", Float) = 3.2
-        _SoilLayerStrength ("Soil Layer Strength", Range(0,0.25)) = 0.08
-        _SoilLayerScale ("Soil Layer Scale", Float) = 1.1
-        _GrainColor ("Soil Grain Color", Color) = (0.16,0.085,0.055,1)
-        _GrainAmount ("Soil Grain Amount", Range(0,1)) = 0.32
-        _GrainScale ("Soil Grain Scale", Float) = 8
         _CrackColor ("Crack Color", Color) = (0.08,0.08,0.08,1)
         _CrackAmount ("Crack Amount", Range(0,1)) = 0
         _CrackScale ("Crack Scale", Float) = 5
@@ -50,13 +43,6 @@ Shader "BlockCrusher/VoxelExactColor"
             sampler2D _SoilTex;
             half _SoilStrength;
             half _SoilTiling;
-            half _SoilFineStrength;
-            half _SoilFineTiling;
-            half _SoilLayerStrength;
-            half _SoilLayerScale;
-            fixed4 _GrainColor;
-            half _GrainAmount;
-            half _GrainScale;
             fixed4 _CrackColor;
             half _CrackScale;
             half _CrackWidth;
@@ -84,7 +70,6 @@ Shader "BlockCrusher/VoxelExactColor"
                 float2 soilUv : TEXCOORD1;
                 float2 crackUv : TEXCOORD2;
                 float3 worldNormal : TEXCOORD3;
-                float3 worldPosition : TEXCOORD5;
                 SHADOW_COORDS(4)
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
@@ -97,8 +82,7 @@ Shader "BlockCrusher/VoxelExactColor"
                 o.vertex = UnityObjectToClipPos(v.vertex);
                 o.color = v.color;
                 o.uv = v.uv;
-                o.worldPosition = mul(unity_ObjectToWorld, v.vertex).xyz;
-                o.soilUv = o.worldPosition.xy * _SoilTiling;
+                o.soilUv = mul(unity_ObjectToWorld, v.vertex).xy * _SoilTiling;
                 o.crackUv = v.vertex.xy * _CrackScale;
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
                 TRANSFER_SHADOW(o);
@@ -110,21 +94,6 @@ Shader "BlockCrusher/VoxelExactColor"
                 float3 p3 = frac(float3(p.xyx) * float3(0.1031, 0.1030, 0.0973));
                 p3 += dot(p3, p3.yzx + 33.33);
                 return frac((p3.xx + p3.yz) * p3.zy);
-            }
-
-            float SoilGrain(float2 worldPosition)
-            {
-                float2 p = worldPosition * _GrainScale;
-                float2 cell = floor(p);
-                float2 local = frac(p) - 0.5;
-                float2 feature = (Hash22(cell) - 0.5) * 0.72;
-                float2 delta = local - feature;
-                // A diamond-like metric reads as a tiny angular stone rather than a round dot.
-                float distanceToGrain = abs(delta.x) + abs(delta.y);
-                float grainSize = lerp(0.055, 0.16, Hash22(cell + 19.31).x);
-                float feather = max(fwidth(distanceToGrain), 0.012);
-                float enabled = step(Hash22(cell + 7.73).y, 0.42);
-                return (1 - smoothstep(grainSize, grainSize + feather, distanceToGrain)) * enabled;
             }
 
             float2 VoronoiEdge(float2 p)
@@ -168,29 +137,16 @@ Shader "BlockCrusher/VoxelExactColor"
                     color = tint;
                 else
                     color = i.color * tint;
-                // Chunk dirt uses vertex alpha zero as a surface-class marker. Output stays
-                // opaque; the marker lets us hide cell geometry without flattening rocks.
-                half isSoil = step(0.5h, useVertexColor) * (1 - step(0.5h, i.color.a));
                 color.a = 1;
 
                 float2 edgeUv = min(i.uv, 1 - i.uv);
                 float edgeDistance = min(edgeUv.x, edgeUv.y);
                 float edgeFeather = max(fwidth(edgeDistance), 0.0001);
                 float edgeMask = 1 - smoothstep(_EdgeWidth, _EdgeWidth + edgeFeather, edgeDistance);
-                color.rgb = lerp(color.rgb, _EdgeColor.rgb,
-                    edgeMask * _EdgeStrength * (1 - isSoil));
+                color.rgb = lerp(color.rgb, _EdgeColor.rgb, edgeMask * _EdgeStrength);
 
-                half coarseSoil = tex2D(_SoilTex, i.soilUv).r;
-                half fineSoil = tex2D(_SoilTex,
-                    i.worldPosition.xy * (_SoilTiling * _SoilFineTiling) + 0.317).r;
-                half layerNoise = sin(i.worldPosition.y * _SoilLayerScale + coarseSoil * 5.4h) * 0.5h + 0.5h;
-                half soilVariation = (coarseSoil * 2 - 1) * _SoilStrength +
-                                     (fineSoil * 2 - 1) * _SoilFineStrength +
-                                     (layerNoise * 2 - 1) * _SoilLayerStrength;
-                color.rgb *= 1 + soilVariation * isSoil;
-
-                half grain = SoilGrain(i.worldPosition.xy) * _GrainAmount * isSoil;
-                color.rgb = lerp(color.rgb, color.rgb * _GrainColor.rgb, grain);
+                half soil = tex2D(_SoilTex, i.soilUv).r;
+                color.rgb *= lerp(1 - _SoilStrength, 1 + _SoilStrength, soil);
 
                 half crackAmount = UNITY_ACCESS_INSTANCED_PROP(Props, _CrackAmount);
                 float2 crack = VoronoiEdge(i.crackUv);
@@ -207,11 +163,7 @@ Shader "BlockCrusher/VoxelExactColor"
                 // gamma-to-linear conversion here; it crushes dark voxel colors.
                 half3 lighting = max(ambient, 0.65h) + _LightColor0.rgb *
                     (0.15h + 0.25h * diffuse * SHADOW_ATTENUATION(i));
-                // The authored dirt fragments have intentionally faceted normals. Let the
-                // physics/grid keep those meshes, but shade dirt as one flat surface so their
-                // boundaries cannot appear. Dynamic shadows are still retained.
-                half soilLighting = lerp(0.82h, 1.0h, SHADOW_ATTENUATION(i));
-                color.rgb *= lerp(min(lighting, 1.15h), soilLighting, isSoil);
+                color.rgb *= min(lighting, 1.15h);
 
                 half maxChannel = max(color.r, max(color.g, color.b));
                 half minChannel = min(color.r, min(color.g, color.b));

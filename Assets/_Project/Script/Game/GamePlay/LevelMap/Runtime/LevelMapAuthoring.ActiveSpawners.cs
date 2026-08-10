@@ -8,14 +8,6 @@ public sealed partial class LevelMapAuthoring
 {
     private const float ToolCollisionSkin = 0.0002f;
 
-    internal static World GetOrCreateDefaultWorld()
-    {
-        World world = World.DefaultGameObjectInjectionWorld;
-        return world != null && world.IsCreated
-            ? world
-            : DefaultWorldInitialization.Initialize("Default World", false);
-    }
-
     internal static int ActiveSpawnerCount => ActiveSpawners.Count;
     internal static LevelMapAuthoring GetActiveSpawner(int index) => ActiveSpawners[index];
     internal static void RemoveActiveSpawnerAt(int index) => ActiveSpawners.RemoveAt(index);

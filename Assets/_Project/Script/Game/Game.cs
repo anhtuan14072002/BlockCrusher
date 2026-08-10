@@ -1,21 +1,3 @@
-﻿using UnityEngine;
-using UnityEngine.SceneManagement;
-
-namespace Core
-{
-    public class Game : MonoBehaviour
-    {
-        private static Game _instance;
-        public static Game Instance => _instance;
-        public static GameConfig Config;
-
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
-        private static void Bootstrap()
-        {
-            Scene gameScene = SceneManager.CreateScene("Core", new CreateSceneParameters(LocalPhysicsMode.None));
-            _instance = new GameObject("Core").AddComponent<Game>();
-            SceneManager.MoveGameObjectToScene(_instance.gameObject, gameScene);
-            Config = new GameConfig();
-        }
-    }
-}
+// Core.Game and its runtime bootstrap are owned by the com.tuna.core package.
+// A second project-local copy would make both initializers create a scene named
+// "Core", which throws as soon as the package cache is restored on a clean machine.
