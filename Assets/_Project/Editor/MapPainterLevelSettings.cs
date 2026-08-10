@@ -41,6 +41,7 @@ public sealed class MapPainterLevelSettings : ScriptableObject
     public float OverlayLocalZ = -0.31f;
     public bool HasOverlayLocalZ;
     public bool RandomizeOverlaySizeAndPosition;
+    public bool FreeOverlayPlacement = true;
     public List<GameObject> GridPrefabs = new();
     public List<MapPainterGridColorLayer> GridColorLayers = new();
     public int PaintType;

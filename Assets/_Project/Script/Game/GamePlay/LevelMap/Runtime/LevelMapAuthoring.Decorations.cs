@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using Crusher;
 using Unity.Entities;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -8,7 +7,6 @@ public sealed partial class LevelMapAuthoring
 {
     private readonly List<DecorationRuntime> _levelDecorations = new(256);
     private List<int>[] _decorationChunksByCell;
-    private List<int>[] _decorationsByCell;
     private List<int>[] _separateDecorationsByCell;
 
     private sealed class DecorationRuntime
@@ -22,10 +20,9 @@ public sealed partial class LevelMapAuthoring
         public Color32 ReleasedColor;
         public int[] TriangleCells;
         public ushort ReleasedTypeIndex;
-        public TypeBlock ReleasedCollectibleType;
-        public Vector3 ReleasedLocalPosition;
-        public Quaternion ReleasedLocalRotation;
-        public Vector3 ReleasedVisualScale;
+        public Vector3 ReleasedGridLocalPosition;
+        public int ReleasedCount;
+        public bool Released;
     }
 
     private struct DecorationVertex
@@ -43,7 +40,6 @@ public sealed partial class LevelMapAuthoring
 
         List<int>[] chunkDecorations = new List<int>[_chunks.Count];
         _decorationChunksByCell = new List<int>[_cellSolid.Length];
-        _decorationsByCell = new List<int>[_cellSolid.Length];
         _separateDecorationsByCell = new List<int>[_cellSolid.Length];
         Matrix4x4 worldToGrid = _runtimeParent.worldToLocalMatrix;
         for (int i = 0; i < decorations.Length; i++)
@@ -72,7 +68,6 @@ public sealed partial class LevelMapAuthoring
 
             int chunkIndex = cellY / _chunkSize * _chunkColumns + cellX / _chunkSize;
             Matrix4x4 matrix = worldToGrid * decoration.transform.localToWorldMatrix;
-            Vector3 cellWorldPosition = _runtimeParent.TransformPoint(GetCellLocalPosition(cellX, cellY));
             BuildSegmentedDecorationGeometry(sourceMesh, matrix, cellIndex,
                 out Vector3[] vertices, out Vector2[] uvs, out Color32[] colors,
                 out int[] triangles, out int[] triangleCells, out HashSet<int> coveredCells);
@@ -91,10 +86,8 @@ public sealed partial class LevelMapAuthoring
                 ReleasedColor = decoration.ReleasedColor,
                 TriangleCells = triangleCells,
                 ReleasedTypeIndex = releasedTypeIndex >= 0 ? (ushort)releasedTypeIndex : ushort.MaxValue,
-                ReleasedCollectibleType = decoration.BlockType,
-                ReleasedLocalPosition = decoration.transform.position - cellWorldPosition,
-                ReleasedLocalRotation = decoration.transform.rotation,
-                ReleasedVisualScale = decoration.transform.lossyScale
+                ReleasedGridLocalPosition = localPosition,
+                ReleasedCount = decoration.ReleasedCount
             };
             int decorationIndex = _levelDecorations.Count;
             _levelDecorations.Add(runtime);
@@ -109,9 +102,10 @@ public sealed partial class LevelMapAuthoring
                 if (runtime.ReleasedTypeIndex == ushort.MaxValue)
                     continue;
 
-                List<int>[] decorationsByCell = IsDirtAttachedDecoration(runtime.ReleasedCollectibleType)
-                    ? _decorationsByCell
-                    : _separateDecorationsByCell;
+                // Dirt is rendered as one continuous surface and no longer becomes a large
+                // released entity. Every authored resource therefore releases as its own
+                // smaller collectible shard.
+                List<int>[] decorationsByCell = _separateDecorationsByCell;
                 decorationsByCell[coveredCell] ??= new List<int>(1);
                 decorationsByCell[coveredCell].Add(decorationIndex);
             }
@@ -293,6 +287,9 @@ public sealed partial class LevelMapAuthoring
         for (int i = 0; i < chunk.DecorationIndices.Length; i++)
         {
             DecorationRuntime decoration = _levelDecorations[chunk.DecorationIndices[i]];
+            if (decoration.Released)
+                continue;
+
             int vertexOffset = vertices.Count;
             for (int vertexIndex = 0; vertexIndex < decoration.Vertices.Length; vertexIndex++)
             {
@@ -333,38 +330,7 @@ public sealed partial class LevelMapAuthoring
         chunk.DecorationRenderer.enabled = true;
     }
 
-    private void AttachReleasedDecorationsAtCell(int cellIndex, Entity releasedEntity)
-    {
-        if (releasedEntity == Entity.Null || !_entityManager.Exists(releasedEntity) ||
-            _decorationsByCell == null || (uint)cellIndex >= (uint)_decorationsByCell.Length)
-            return;
-
-        List<int> decorationIndices = _decorationsByCell[cellIndex];
-        if (decorationIndices == null)
-            return;
-
-        DynamicBuffer<ReleasedBlockAttachment> attachments = _entityManager.GetBuffer<ReleasedBlockAttachment>(releasedEntity);
-        for (int i = 0; i < decorationIndices.Count; i++)
-        {
-            DecorationRuntime decoration = _levelDecorations[decorationIndices[i]];
-            if (decoration.ReleasedTypeIndex == ushort.MaxValue)
-                continue;
-
-            attachments.Add(new ReleasedBlockAttachment
-            {
-                TypeIndex = decoration.ReleasedTypeIndex,
-                CollectibleType = decoration.ReleasedCollectibleType,
-                LocalPosition = ToFloat3(decoration.ReleasedLocalPosition),
-                LocalRotation = ToQuaternion(decoration.ReleasedLocalRotation),
-                Scale = ToFloat3(decoration.ReleasedVisualScale),
-                Color = ToFloat4(decoration.ReleasedColor)
-            });
-        }
-    }
-
-    private void SpawnSeparateReleasedDecorationsAtCell(int cellIndex, Vector3 localPosition, Vector3 sawCenter,
-        float pressSpeed, float outwardForce, float tangentialForce, float spinDirection, float bladeRadius,
-        float sideDamping, float maxVelocity, bool useColliderPhysics)
+    private void SpawnSeparateReleasedDecorationsAtCell(int cellIndex, Vector3 sawCenter, float maxVelocity)
     {
         if (_separateDecorationsByCell == null || (uint)cellIndex >= (uint)_separateDecorationsByCell.Length)
             return;
@@ -376,20 +342,32 @@ public sealed partial class LevelMapAuthoring
         for (int i = 0; i < decorationIndices.Count; i++)
         {
             DecorationRuntime decoration = _levelDecorations[decorationIndices[i]];
-            if (decoration.ReleasedTypeIndex == ushort.MaxValue)
+            if (decoration.Released || decoration.ReleasedTypeIndex == ushort.MaxValue)
                 continue;
 
-            Vector3 releasedLocalPosition = localPosition +
-                                            _runtimeParent.InverseTransformVector(decoration.ReleasedLocalPosition);
-            QueueReleasedBlockSpawn(releasedLocalPosition, decoration.ReleasedColor, decoration.ReleasedTypeIndex,
-                sawCenter, pressSpeed, outwardForce, tangentialForce, spinDirection, bladeRadius,
-                sideDamping, maxVelocity, useColliderPhysics);
-        }
-    }
+            float worldCellSize = GetWorldCellSize();
+            float outwardForce = Mathf.Max(5f, maxVelocity * 1.4f);
+            float tangentialForce = outwardForce * 0.65f;
+            float bladeRadius = worldCellSize * 1.25f;
+            bool spawned = false;
+            for (int shardIndex = 0; shardIndex < decoration.ReleasedCount; shardIndex++)
+            {
+                Vector2 scatter = Random.insideUnitCircle * Mathf.Min(_cellSize.x, _cellSize.y) * 0.08f;
+                Vector3 releasedLocalPosition = decoration.ReleasedGridLocalPosition +
+                                                new Vector3(scatter.x, scatter.y, 0f);
+                float spinDirection = ((i + shardIndex) & 1) == 0 ? 1f : -1f;
+                Entity entity = QueueReleasedBlockSpawn(
+                    releasedLocalPosition, decoration.ReleasedColor, decoration.ReleasedTypeIndex,
+                    sawCenter, 1f, outwardForce, tangentialForce, spinDirection, bladeRadius,
+                    0.25f, maxVelocity);
+                spawned |= entity != Entity.Null;
+            }
 
-    private static bool IsDirtAttachedDecoration(TypeBlock type)
-    {
-        return type == TypeBlock.Purple_ore || type == TypeBlock.Blue_ore || type == TypeBlock.Orange_ore;
+            // A decoration can cover several hidden dirt cells. Once any covered cell is cut,
+            // release it exactly once and remove the complete embedded visual.
+            if (spawned)
+                decoration.Released = true;
+        }
     }
 
     private void MarkDecorationChunksDirty(int cellIndex)
@@ -440,7 +418,6 @@ public sealed partial class LevelMapAuthoring
         }
         _levelDecorations.Clear();
         _decorationChunksByCell = null;
-        _decorationsByCell = null;
         _separateDecorationsByCell = null;
     }
 }

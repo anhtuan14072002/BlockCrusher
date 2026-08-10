@@ -38,6 +38,7 @@ public sealed class MapPainterWindow : EditorWindow
     [SerializeField] private float _overlayScaleMultiplier = 1f;
     [SerializeField] private float _overlayLocalZ = DefaultOverlayLocalZ;
     [SerializeField] private bool _randomizeOverlaySizeAndPosition;
+    [SerializeField] private bool _freeOverlayPlacement = true;
     [SerializeField] private List<GameObject> _gridPrefabs = new();
     [SerializeField] private List<MapPainterGridColorLayer> _gridColorLayers = new();
     [SerializeField] private Transform _mapRoot;
@@ -195,6 +196,13 @@ public sealed class MapPainterWindow : EditorWindow
             0.01f, EditorGUILayout.FloatField("Overlay Scale Multiplier", _overlayScaleMultiplier));
         _randomizeOverlaySizeAndPosition = EditorGUILayout.Toggle(
             "Randomize Size & Position", _randomizeOverlaySizeAndPosition);
+        _freeOverlayPlacement = EditorGUILayout.Toggle(
+            "Free Overlay Placement", _freeOverlayPlacement);
+        EditorGUILayout.LabelField(
+            _freeOverlayPlacement
+                ? "Crystal/ore overlays follow the cursor; multiple resources may share one dirt cell."
+                : "Crystal/ore overlays snap to the destruction grid.",
+            EditorStyles.miniLabel);
         EditorGUILayout.EndScrollView();
     }
 
@@ -463,7 +471,9 @@ public sealed class MapPainterWindow : EditorWindow
         cell = new Vector2Int(
             Mathf.RoundToInt(rawLocal.x / cellStep.x),
             Mathf.RoundToInt(rawLocal.y / cellStep.y));
-        localPosition = new Vector3(cell.x * cellStep.x, cell.y * cellStep.y, 0f);
+        localPosition = _paintType == PaintType.Overlay && _freeOverlayPlacement
+            ? new Vector3(rawLocal.x, rawLocal.y, 0f)
+            : new Vector3(cell.x * cellStep.x, cell.y * cellStep.y, 0f);
         return true;
     }
 
@@ -489,7 +499,7 @@ public sealed class MapPainterWindow : EditorWindow
             prefab = GetGridPrefabForCell(cell.x, cell.y);
 
         bool isWater = prefab.GetComponentInChildren<BlockWater>(true) != null;
-        if ((_paintType == PaintType.Overlay && FindOverlayInCell(localPosition) != null) ||
+        if ((_paintType == PaintType.Overlay && FindOverlayAt(localPosition) != null) ||
             (isWater && HasComponentAt<BlockWater>(localPosition)) ||
             (!isWater && _paintType == PaintType.Block && HasBlockAt(localPosition)))
             return;
@@ -705,7 +715,7 @@ public sealed class MapPainterWindow : EditorWindow
     private void EraseAt(Vector3 localPosition)
     {
         Transform block = _paintType == PaintType.Overlay
-            ? FindOverlayInCell(localPosition)
+            ? FindOverlayAt(localPosition)
             : FindBlockAt(localPosition);
         if (block != null)
             Undo.DestroyObjectImmediate(block.gameObject);
@@ -728,6 +738,38 @@ public sealed class MapPainterWindow : EditorWindow
         }
 
         return null;
+    }
+
+    private Transform FindOverlayAt(Vector3 localPosition)
+    {
+        if (!_freeOverlayPlacement)
+            return FindOverlayInCell(localPosition);
+        if (_mapRoot == null)
+            return null;
+
+        float radius = Mathf.Min(GetCellStep(_scale, _spacing).x,
+            GetCellStep(_scale, _spacing).y) * 0.12f;
+        float radiusSquared = radius * radius;
+        CollectPaintedInstances();
+        Transform nearest = null;
+        float nearestDistance = float.MaxValue;
+        for (int i = _paintedInstances.Count - 1; i >= 0; i--)
+        {
+            Transform child = _paintedInstances[i];
+            if (!Mathf.Approximately(child.localPosition.z, _overlayLocalZ) ||
+                child.GetComponentInChildren<LevelDecoration>(true) == null)
+                continue;
+
+            Vector2 offset = child.localPosition - localPosition;
+            float distance = offset.sqrMagnitude;
+            if (distance > radiusSquared || distance >= nearestDistance)
+                continue;
+
+            nearest = child;
+            nearestDistance = distance;
+        }
+
+        return nearest;
     }
 
     private bool HasBlockAt(Vector3 localPosition)
@@ -1265,6 +1307,7 @@ public sealed class MapPainterWindow : EditorWindow
         settings.OverlayLocalZ = _overlayLocalZ;
         settings.HasOverlayLocalZ = true;
         settings.RandomizeOverlaySizeAndPosition = _randomizeOverlaySizeAndPosition;
+        settings.FreeOverlayPlacement = _freeOverlayPlacement;
         settings.GridPrefabs.Clear();
         settings.GridPrefabs.AddRange(_gridPrefabs);
         settings.GridColorLayers.Clear();
@@ -1306,6 +1349,7 @@ public sealed class MapPainterWindow : EditorWindow
         _overlayScaleMultiplier = Mathf.Max(0.01f, settings.OverlayScaleMultiplier);
         _overlayLocalZ = settings.HasOverlayLocalZ ? settings.OverlayLocalZ : DefaultOverlayLocalZ;
         _randomizeOverlaySizeAndPosition = settings.RandomizeOverlaySizeAndPosition;
+        _freeOverlayPlacement = settings.FreeOverlayPlacement;
         _gridPrefabs.Clear();
         _gridPrefabs.AddRange(settings.GridPrefabs);
         _gridColorLayers.Clear();

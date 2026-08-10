@@ -61,7 +61,7 @@ public sealed partial class LevelMapAuthoring
 
                 if (!releasedAny)
                     CompleteReleasedBlockJobs();
-                ReleaseCell(cellIndex, x, y, cellLocal, sawCenter);
+                ReleaseCell(cellIndex, x, y, cellLocal, sawCenter, maxVelocity);
                 releasedAny = true;
             }
         }
@@ -158,7 +158,8 @@ public sealed partial class LevelMapAuthoring
     }
 #endif
 
-    private void ReleaseCell(int cellIndex, int cellX, int cellY, Vector3 cellLocal, Vector3 sawCenter)
+    private void ReleaseCell(int cellIndex, int cellX, int cellY, Vector3 cellLocal, Vector3 sawCenter,
+        float maxVelocity = 8f)
     {
         Color32 surfaceColor = _cellColors[cellIndex];
         _cellSolid[cellIndex] = 0;
@@ -166,6 +167,7 @@ public sealed partial class LevelMapAuthoring
             _cellSolidSnapshot[cellIndex] = 0;
         Vector3 releasedWorldPosition = _runtimeParent.TransformPoint(cellLocal);
         EmitCutParticles(releasedWorldPosition, surfaceColor, releasedWorldPosition - sawCenter);
+        SpawnSeparateReleasedDecorationsAtCell(cellIndex, sawCenter, maxVelocity);
         MarkCellChunkDirty(cellX, cellY);
     }
     private void MarkCellChunkDirty(int cellX, int cellY)

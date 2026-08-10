@@ -8,12 +8,14 @@ public sealed class LevelDecoration : MonoBehaviour
     [SerializeField] private TypeBlock _type;
     [SerializeField] private GameObject _releasedPrefab;
     [SerializeField, Min(0.0001f)] private float _releasedScale = 0.12f;
+    [SerializeField, Range(1, 8)] private int _releasedCount = 1;
     [SerializeField] private Color _releasedColor = Color.white;
 
     public Color32 Tint => _color;
     public TypeBlock BlockType => _type;
     public GameObject ReleasedPrefab => _releasedPrefab;
     public float ReleasedScale => _releasedScale;
+    public int ReleasedCount => Mathf.Max(1, _releasedCount);
     public Color32 ReleasedColor => _releasedColor;
     public bool ReleasesCollectible => _releasedPrefab != null && _type != TypeBlock.None;
 }
