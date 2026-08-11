@@ -25,7 +25,6 @@ public sealed partial class LevelMapAuthoring
         if (!EnsureEcsReady())
         {
             _releasedBlockEntities.Clear();
-            _pendingReleasedBlocks.Clear();
             return;
         }
         for (int i = _releasedBlockEntities.Count - 1; i >= 0; i--)
@@ -37,7 +36,6 @@ public sealed partial class LevelMapAuthoring
         for (int i = 0; i < entities.Length; i++)
             if (blocks[i].OwnerId == _ownerId && _entityManager.Exists(entities[i]))
                 _entityManager.DestroyEntity(entities[i]);
-        _pendingReleasedBlocks.Clear();
     }
 
     private void DestroyReleasedBlockEntityAt(int index)
@@ -54,7 +52,6 @@ public sealed partial class LevelMapAuthoring
     {
         ClearReleasedBlockEntities();
         _releasedBlockEntities.Clear();
-        _pendingReleasedBlocks.Clear();
         _metaballWaterEntities.Clear();
         _metaballWaterSizes.Clear();
     }

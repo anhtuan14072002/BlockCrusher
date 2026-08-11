@@ -339,6 +339,7 @@ public sealed partial class LevelMapAuthoring
     [ContextMenu("Clear")]
     public void Clear()
     {
+        _cutDebris?.ResetDebris();
         CompleteReleasedBlockJobs();
         ClearMetaballWater();
         DisposeDecorations();

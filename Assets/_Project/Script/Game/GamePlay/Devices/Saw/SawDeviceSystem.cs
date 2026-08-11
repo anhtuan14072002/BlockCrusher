@@ -95,13 +95,17 @@ namespace Crusher
             int steps = Mathf.Max(1, Mathf.CeilToInt(distance / Mathf.Max(saw.CutSweepStep, 0.01f)));
             Quaternion worldRotation = new(rotation.value.x, rotation.value.y, rotation.value.z, rotation.value.w);
             Vector3 scale = new(saw.Scale.x, saw.Scale.y, saw.Scale.z);
+            Vector3 pushDirection = fromPosition - toPosition;
+            pushDirection.z = 0f;
+            if (pushDirection.sqrMagnitude > 0.000001f)
+                pushDirection.Normalize();
             for (int i = 1; i <= steps; i++)
             {
                 Vector3 position = Vector3.Lerp(fromPosition, toPosition, i / (float)steps);
                 Matrix4x4 localToWorld = Matrix4x4.TRS(position, worldRotation, scale);
                 LevelMapAuthoring.ReleaseInBoxForActiveSpawners(
                     localToWorld, cache.Bounds, cache.Vertices, cache.Triangles,
-                    saw.MaxReleasedBlockVelocity);
+                    pushDirection, saw.MaxReleasedBlockVelocity);
             }
         }
     }

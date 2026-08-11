@@ -8,124 +8,165 @@ using Unity.Transforms;
 
 namespace Crusher
 {
-    [UpdateInGroup(typeof(BeforePhysicsSystemGroup))]
-    [UpdateAfter(typeof(SawDeviceSystem))]
-    public partial struct SuctionSystem : ISystem
+    [BurstCompile]
+    [UpdateInGroup(typeof(AfterPhysicsSystemGroup))]
+    public partial struct SuctionContactSystem : ISystem
     {
-        private EntityQuery _blocks;
+        private ComponentLookup<SuctionDeviceTag> _suctionLookup;
+        private ComponentLookup<CutDebrisComponent> _debrisLookup;
 
-        [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            _blocks = SystemAPI.QueryBuilder()
-                .WithAllRW<LocalTransform>()
-                .WithAllRW<PhysicsCollider>()
-                .WithAllRW<PhysicsVelocity>()
-                .WithAllRW<PhysicsGravityFactor>()
-                .WithAllRW<ReleasedBlockComponent>()
-                .WithAllRW<Simulate>()
-                .WithAllRW<SuctionTransit>()
-                .WithOptions(EntityQueryOptions.IgnoreComponentEnabledState)
-                .Build();
+            _suctionLookup = state.GetComponentLookup<SuctionDeviceTag>(true);
+            _debrisLookup = state.GetComponentLookup<CutDebrisComponent>(true);
+            state.RequireForUpdate<SimulationSingleton>();
             state.RequireForUpdate<SuctionComponent>();
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            SuctionComponent suction = SystemAPI.GetSingleton<SuctionComponent>();
-            if (suction.Active == 0)
+            if (SystemAPI.GetSingleton<SuctionComponent>().Active == 0)
                 return;
 
-            DynamicBuffer<SuctionPathPoint> pathBuffer = SystemAPI.GetSingletonBuffer<SuctionPathPoint>(true);
-            if (pathBuffer.Length < 2)
-                return;
-
-            EntityCommandBuffer.ParallelWriter commandBuffer = SystemAPI
+            _suctionLookup.Update(ref state);
+            _debrisLookup.Update(ref state);
+            EntityCommandBuffer commandBuffer = SystemAPI
                 .GetSingleton<EndFixedStepSimulationEntityCommandBufferSystem.Singleton>()
-                .CreateCommandBuffer(state.WorldUnmanaged)
-                .AsParallelWriter();
-            state.Dependency = new SuctionJob
+                .CreateCommandBuffer(state.WorldUnmanaged);
+            state.Dependency = new TriggerJob
             {
-                Path = pathBuffer.AsNativeArray(),
-                Speed = suction.Speed,
-                DeltaTime = SystemAPI.Time.DeltaTime,
+                SuctionLookup = _suctionLookup,
+                DebrisLookup = _debrisLookup,
                 CommandBuffer = commandBuffer
-            }.ScheduleParallel(_blocks, state.Dependency);
+            }.Schedule(SystemAPI.GetSingleton<SimulationSingleton>(), state.Dependency);
         }
 
-        private static void AdvanceAlongPath(NativeArray<SuctionPathPoint> path,
-            float lockedZ, ref float3 position, ref int pathIndex, float distanceToMove)
+        [BurstCompile]
+        private struct TriggerJob : ITriggerEventsJob
         {
-            while (distanceToMove > 0f && pathIndex < path.Length)
+            [ReadOnly] public ComponentLookup<SuctionDeviceTag> SuctionLookup;
+            [ReadOnly] public ComponentLookup<CutDebrisComponent> DebrisLookup;
+            public EntityCommandBuffer CommandBuffer;
+
+            public void Execute(TriggerEvent triggerEvent)
             {
-                float3 target = path[pathIndex].Value;
-                target.z = lockedZ;
-                float3 delta = target - position;
-                float distance = math.length(delta);
-                if (distance > distanceToMove && distance > 0.0001f)
+                Entity debris = Entity.Null;
+                if (SuctionLookup.HasComponent(triggerEvent.EntityA) &&
+                    DebrisLookup.HasComponent(triggerEvent.EntityB))
                 {
-                    position += delta * (distanceToMove / distance);
-                    return;
+                    debris = triggerEvent.EntityB;
+                }
+                else if (SuctionLookup.HasComponent(triggerEvent.EntityB) &&
+                         DebrisLookup.HasComponent(triggerEvent.EntityA))
+                {
+                    debris = triggerEvent.EntityA;
                 }
 
-                position = target;
-                distanceToMove -= distance;
-                pathIndex++;
+                if (debris == Entity.Null)
+                    return;
+
+                CommandBuffer.SetComponentEnabled<CutDebrisSuctionTransit>(debris, true);
+                CommandBuffer.SetComponentEnabled<Simulate>(debris, false);
             }
+        }
+    }
+
+    [BurstCompile]
+    [UpdateInGroup(typeof(SimulationSystemGroup))]
+    public partial struct SuctionSystem : ISystem
+    {
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
+        {
+            state.RequireForUpdate<SuctionComponent>();
+        }
+
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
+        {
+            DynamicBuffer<SuctionPathPoint> path = SystemAPI.GetSingletonBuffer<SuctionPathPoint>(true);
+            if (path.Length < 2)
+                return;
+
+            SuctionComponent suction = SystemAPI.GetSingleton<SuctionComponent>();
+            EntityCommandBuffer.ParallelWriter commandBuffer = SystemAPI
+                .GetSingleton<EndSimulationEntityCommandBufferSystem.Singleton>()
+                .CreateCommandBuffer(state.WorldUnmanaged)
+                .AsParallelWriter();
+            state.Dependency = new TransitJob
+            {
+                Path = path.AsNativeArray(),
+                Speed = suction.Speed,
+                TargetScale = suction.TargetScale,
+                ShrinkSpeed = suction.ShrinkSpeed,
+                DeltaTime = SystemAPI.Time.DeltaTime,
+                CommandBuffer = commandBuffer
+            }.ScheduleParallel(state.Dependency);
+        }
+
+        private static float3 SamplePath(NativeArray<SuctionPathPoint> path,
+            float distance, float lockedZ, out bool reachedRoot)
+        {
+            for (int i = 1; i < path.Length; i++)
+            {
+                float3 from = path[i - 1].Value;
+                float3 to = path[i].Value;
+                from.z = lockedZ;
+                to.z = lockedZ;
+                float segmentLength = math.distance(from, to);
+                if (distance <= segmentLength && segmentLength > 0.0001f)
+                {
+                    reachedRoot = false;
+                    return math.lerp(from, to, distance / segmentLength);
+                }
+
+                distance -= segmentLength;
+            }
+
+            reachedRoot = true;
+            float3 root = path[path.Length - 1].Value;
+            root.z = lockedZ;
+            return root;
         }
 
 #if UNITY_EDITOR
         [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ValidatePathAdvance()
+        private static void ValidatePathSampling()
         {
-            NativeArray<SuctionPathPoint> path = new(2, Allocator.Temp);
+            NativeArray<SuctionPathPoint> path = new(3, Allocator.Temp);
             path[0] = new SuctionPathPoint { Value = float3.zero };
-            path[1] = new SuctionPathPoint { Value = new float3(0f, 2f, 0f) };
-            float3 position = new(-1f, 0f, 0f);
-            int pathIndex = 0;
-            AdvanceAlongPath(path, 0f, ref position, ref pathIndex, 2f);
-            UnityEngine.Debug.Assert(pathIndex == 1 && math.distance(position, new float3(0f, 1f, 0f)) < 0.001f,
-                "Suction path advance regression.");
+            path[1] = new SuctionPathPoint { Value = new float3(1f, 0f, 0f) };
+            path[2] = new SuctionPathPoint { Value = new float3(1f, 2f, 0f) };
+            float3 position = SamplePath(path, 2f, 0f, out bool reachedRoot);
+            UnityEngine.Debug.Assert(!reachedRoot && math.distance(position, new float3(1f, 1f, 0f)) < 0.001f,
+                "Suction path sampling regression.");
             path.Dispose();
         }
 #endif
 
         [BurstCompile(FloatMode = FloatMode.Fast, FloatPrecision = FloatPrecision.Low)]
-        private partial struct SuctionJob : IJobEntity
+        private partial struct TransitJob : IJobEntity
         {
             [ReadOnly] public NativeArray<SuctionPathPoint> Path;
             public float Speed;
+            public float TargetScale;
+            public float ShrinkSpeed;
             public float DeltaTime;
             public EntityCommandBuffer.ParallelWriter CommandBuffer;
 
             private void Execute([EntityIndexInQuery] int sortKey, Entity entity,
-                ref LocalTransform transform, ref PhysicsCollider collider, ref PhysicsVelocity velocity,
-                ref PhysicsGravityFactor gravity, ref ReleasedBlockComponent block,
-                EnabledRefRW<Simulate> simulate, EnabledRefRW<SuctionTransit> transit)
+                ref LocalTransform transform, ref CutDebrisComponent debris,
+                in CutDebrisSuctionTransit transit)
             {
-                if (!transit.ValueRO)
-                {
-                    transit.ValueRW = true;
-                    simulate.ValueRW = false;
-                    collider.Value = default;
-                    velocity = PhysicsVelocity.Zero;
-                    gravity.Value = 0f;
-                    block.SuctionPathIndex = 0;
-                }
-
-                int pathIndex = block.SuctionPathIndex;
-                float3 position = transform.Position;
-                AdvanceAlongPath(Path, block.LockedZ, ref position, ref pathIndex, Speed * DeltaTime);
-
-                if (pathIndex >= Path.Length)
-                {
+                debris.SuctionDistance += Speed * DeltaTime;
+                transform.Position = SamplePath(
+                    Path, debris.SuctionDistance, debris.LockedZ, out bool reachedRoot);
+                transform.Scale = math.lerp(
+                    transform.Scale, debris.BaseScale * TargetScale,
+                    math.saturate(ShrinkSpeed * DeltaTime));
+                if (reachedRoot)
                     CommandBuffer.DestroyEntity(sortKey, entity);
-                    return;
-                }
-
-                block.SuctionPathIndex = (byte)pathIndex;
-                transform.Position = position;
             }
         }
     }

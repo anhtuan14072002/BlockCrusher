@@ -3,7 +3,6 @@ using Unity.Mathematics;
 using Unity.Physics;
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro;
 
 namespace Crusher
 {
@@ -38,7 +37,9 @@ namespace Crusher
         [SerializeField] private SawAuthoring _sawCutter;
         [SerializeField] private SawAuthoring _drillCutter;
         [SerializeField] private SuctionAuthoring _suctionDevice;
-        [SerializeField] private Button _switchToolButton;
+        [SerializeField] private Button _sawButton;
+        [SerializeField] private Button _suctionButton;
+        [SerializeField] private Button _drillButton;
         [SerializeField] private Button _increaseCableLengthButton;
 
         private readonly Vector3[] _suctionPath = new Vector3[32];
@@ -74,8 +75,12 @@ namespace Crusher
                 _suctionDevice.gameObject.SetActive(true);
             if (_joystick != null)
                 _joystick.gameObject.SetActive(true);
-            if (_switchToolButton != null)
-                _switchToolButton.onClick.AddListener(ToggleMode);
+            if (_sawButton != null)
+                _sawButton.onClick.AddListener(SelectSaw);
+            if (_suctionButton != null)
+                _suctionButton.onClick.AddListener(SelectSuction);
+            if (_drillButton != null)
+                _drillButton.onClick.AddListener(SelectDrill);
             if (_increaseCableLengthButton != null)
                 _increaseCableLengthButton.onClick.AddListener(IncreaseCableLength);
 
@@ -89,8 +94,12 @@ namespace Crusher
 
         private void OnDestroy()
         {
-            if (_switchToolButton != null)
-                _switchToolButton.onClick.RemoveListener(ToggleMode);
+            if (_sawButton != null)
+                _sawButton.onClick.RemoveListener(SelectSaw);
+            if (_suctionButton != null)
+                _suctionButton.onClick.RemoveListener(SelectSuction);
+            if (_drillButton != null)
+                _drillButton.onClick.RemoveListener(SelectDrill);
             if (_increaseCableLengthButton != null)
                 _increaseCableLengthButton.onClick.RemoveListener(IncreaseCableLength);
             DisposeQueries();
@@ -132,33 +141,30 @@ namespace Crusher
             SyncSuction(entityManager);
         }
 
-        private void ToggleMode()
+        private void SelectSaw()
         {
-            _toolMode = GetNextToolMode(_toolMode);
+            SelectMode(ToolMode.Saw);
+        }
+
+        private void SelectSuction()
+        {
+            SelectMode(ToolMode.Suction);
+        }
+
+        private void SelectDrill()
+        {
+            SelectMode(ToolMode.Drill);
+        }
+
+        private void SelectMode(ToolMode mode)
+        {
+            if (_toolMode == mode)
+                return;
+
+            _toolMode = mode;
             ResetStoneResponse();
             ApplyModeVisuals();
         }
-
-        private static ToolMode GetNextToolMode(ToolMode toolMode)
-        {
-            return toolMode switch
-            {
-                ToolMode.Saw => ToolMode.Suction,
-                ToolMode.Suction => ToolMode.Drill,
-                _ => ToolMode.Saw
-            };
-        }
-
-#if UNITY_EDITOR
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ValidateToolCycle()
-        {
-            Debug.Assert(GetNextToolMode(ToolMode.Saw) == ToolMode.Suction &&
-                         GetNextToolMode(ToolMode.Suction) == ToolMode.Drill &&
-                         GetNextToolMode(ToolMode.Drill) == ToolMode.Saw,
-                "Device tool cycle must remain Saw -> Suction -> Drill -> Saw.");
-        }
-#endif
 
         public void IncreaseCableLength()
         {
@@ -177,11 +183,12 @@ namespace Crusher
             if (_cableVisual != null)
                 _cableVisual.SetSuctionMode(_toolMode == ToolMode.Suction);
 
-            TMP_Text label = _switchToolButton != null
-                ? _switchToolButton.GetComponentInChildren<TMP_Text>(true)
-                : null;
-            if (label != null)
-                label.text = _toolMode.ToString().ToUpperInvariant();
+            if (_sawButton != null)
+                _sawButton.interactable = _toolMode != ToolMode.Saw;
+            if (_suctionButton != null)
+                _suctionButton.interactable = _toolMode != ToolMode.Suction;
+            if (_drillButton != null)
+                _drillButton.interactable = _toolMode != ToolMode.Drill;
         }
 
         private void MoveTool(Vector2 input)

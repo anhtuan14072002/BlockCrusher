@@ -10,7 +10,8 @@ namespace Crusher
 {
     internal static class DeviceMeshCollider
     {
-        public static bool TryCreate(Mesh mesh, Vector3 scale, out BlobAssetReference<Collider> collider)
+        public static bool TryCreate(Mesh mesh, Vector3 scale,
+            CollisionResponsePolicy collisionResponse, out BlobAssetReference<Collider> collider)
         {
             collider = default;
             if (mesh == null || !mesh.isReadable)
@@ -29,8 +30,10 @@ namespace Crusher
             for (int i = 0; i < sourceTriangles.Length; i += 3)
                 triangles.Add(new int3(sourceTriangles[i], sourceTriangles[i + 1], sourceTriangles[i + 2]));
 
+            PhysicsMaterial material = PhysicsMaterial.Default;
+            material.CollisionResponse = collisionResponse;
             collider = Unity.Physics.MeshCollider.Create(
-                vertices.AsArray(), triangles.AsArray(), CollisionFilter.Default, PhysicsMaterial.Default);
+                vertices.AsArray(), triangles.AsArray(), CollisionFilter.Default, material);
             return collider.IsCreated;
         }
     }

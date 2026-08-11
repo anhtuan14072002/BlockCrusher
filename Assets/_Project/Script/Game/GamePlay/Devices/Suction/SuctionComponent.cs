@@ -6,6 +6,8 @@ namespace Crusher
     public struct SuctionComponent : IComponentData
     {
         public float Speed;
+        public float TargetScale;
+        public float ShrinkSpeed;
         public byte Active;
     }
 

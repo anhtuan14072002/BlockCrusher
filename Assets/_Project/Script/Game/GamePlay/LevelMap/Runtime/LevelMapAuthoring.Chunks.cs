@@ -168,22 +168,7 @@ public sealed partial class LevelMapAuthoring
     }
     private void ActivateReleasedBlocksForChunk(int chunkIndex)
     {
-        for (int i = _pendingReleasedBlocks.Count - 1; i >= 0; i--)
-        {
-            PendingReleasedBlock pending = _pendingReleasedBlocks[i];
-            if (pending.ChunkIndex != chunkIndex)
-                continue;
-
-            if (_entityManager.Exists(pending.Entity))
-            {
-                _entityManager.SetComponentEnabled<Simulate>(pending.Entity, true);
-#if UNITY_EDITOR
-                Debug.Assert(_entityManager.IsComponentEnabled<Simulate>(pending.Entity),
-                    "A released block must enter physics after its chunk collider rebuild.");
-#endif
-            }
-            _pendingReleasedBlocks.RemoveAt(i);
-        }
+        _cutDebris?.NotifyChunkRebuilt(chunkIndex);
     }
     private void ApplyChunkMesh(ref ChunkRuntime chunk)
     {

@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using Unity.Entities;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -330,7 +329,7 @@ public sealed partial class LevelMapAuthoring
         chunk.DecorationRenderer.enabled = true;
     }
 
-    private void SpawnSeparateReleasedDecorationsAtCell(int cellIndex, Vector3 sawCenter, float maxVelocity)
+    private void RemoveSeparateDecorationsAtCell(int cellIndex)
     {
         if (_separateDecorationsByCell == null || (uint)cellIndex >= (uint)_separateDecorationsByCell.Length)
             return;
@@ -341,32 +340,7 @@ public sealed partial class LevelMapAuthoring
 
         for (int i = 0; i < decorationIndices.Count; i++)
         {
-            DecorationRuntime decoration = _levelDecorations[decorationIndices[i]];
-            if (decoration.Released || decoration.ReleasedTypeIndex == ushort.MaxValue)
-                continue;
-
-            float worldCellSize = GetWorldCellSize();
-            float outwardForce = Mathf.Max(5f, maxVelocity * 1.4f);
-            float tangentialForce = outwardForce * 0.65f;
-            float bladeRadius = worldCellSize * 1.25f;
-            bool spawned = false;
-            for (int shardIndex = 0; shardIndex < decoration.ReleasedCount; shardIndex++)
-            {
-                Vector2 scatter = Random.insideUnitCircle * Mathf.Min(_cellSize.x, _cellSize.y) * 0.08f;
-                Vector3 releasedLocalPosition = decoration.ReleasedGridLocalPosition +
-                                                new Vector3(scatter.x, scatter.y, 0f);
-                float spinDirection = ((i + shardIndex) & 1) == 0 ? 1f : -1f;
-                Entity entity = QueueReleasedBlockSpawn(
-                    releasedLocalPosition, decoration.ReleasedColor, decoration.ReleasedTypeIndex,
-                    sawCenter, 1f, outwardForce, tangentialForce, spinDirection, bladeRadius,
-                    0.25f, maxVelocity);
-                spawned |= entity != Entity.Null;
-            }
-
-            // A decoration can cover several hidden dirt cells. Once any covered cell is cut,
-            // release it exactly once and remove the complete embedded visual.
-            if (spawned)
-                decoration.Released = true;
+            _levelDecorations[decorationIndices[i]].Released = true;
         }
     }
 

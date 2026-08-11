@@ -100,7 +100,11 @@ namespace Crusher
                 return;
 
             Mesh mesh = GetComponent<MeshFilter>().sharedMesh;
-            if (!DeviceMeshCollider.TryCreate(mesh, transform.lossyScale, out _runtimeCollider))
+            CollisionResponsePolicy collisionResponse = _deviceKind == CuttingDeviceKind.Saw
+                ? CollisionResponsePolicy.Collide
+                : CollisionResponsePolicy.RaiseTriggerEvents;
+            if (!DeviceMeshCollider.TryCreate(mesh, transform.lossyScale,
+                    collisionResponse, out _runtimeCollider))
             {
                 Debug.LogError("Saw mesh must be readable so its DOTS mesh collider can be created.", this);
                 return;
@@ -141,7 +145,8 @@ namespace Crusher
 
             _obstacleQueryScale = scale;
             return DeviceMeshCollider.TryCreate(
-                GetComponent<MeshFilter>().sharedMesh, scale, out _obstacleQueryCollider);
+                GetComponent<MeshFilter>().sharedMesh, scale,
+                CollisionResponsePolicy.RaiseTriggerEvents, out _obstacleQueryCollider);
         }
 
         private SawComponent CreateComponent(Mesh mesh, Transform sourceTransform)

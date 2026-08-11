@@ -13,6 +13,8 @@ namespace Crusher
     public sealed class SuctionAuthoring : MonoBehaviour
     {
         [SerializeField, Min(0.1f)] private float _suctionSpeed = 8f;
+        [SerializeField, Min(0.01f)] private float _targetScale = 0.25f;
+        [SerializeField, Min(0.1f)] private float _shrinkSpeed = 12f;
 
         private World _runtimeWorld;
         private Entity _runtimeEntity;
@@ -57,7 +59,8 @@ namespace Crusher
                 return;
 
             Mesh mesh = GetComponent<MeshFilter>().sharedMesh;
-            if (!DeviceMeshCollider.TryCreate(mesh, transform.lossyScale, out _runtimeCollider))
+            if (!DeviceMeshCollider.TryCreate(mesh, transform.lossyScale,
+                    CollisionResponsePolicy.RaiseTriggerEvents, out _runtimeCollider))
             {
                 Debug.LogError("Suction mesh must be readable so its DOTS mesh collider can be created.", this);
                 return;
@@ -70,7 +73,7 @@ namespace Crusher
                 typeof(PhysicsGravityFactor), typeof(Simulate), typeof(SuctionDeviceTag));
             entityManager.SetComponentData(_runtimeEntity,
                 LocalTransform.FromPositionRotationScale(transform.position, transform.rotation, 1f));
-            entityManager.SetComponentData(_runtimeEntity, new SuctionComponent { Speed = _suctionSpeed });
+            entityManager.SetComponentData(_runtimeEntity, CreateComponent());
             entityManager.SetComponentData(_runtimeEntity, CreateBodyComponent(transform));
             entityManager.SetComponentData(_runtimeEntity, new PhysicsCollider { Value = _runtimeCollider });
             entityManager.SetComponentData(_runtimeEntity,
@@ -94,12 +97,22 @@ namespace Crusher
             };
         }
 
+        private SuctionComponent CreateComponent()
+        {
+            return new SuctionComponent
+            {
+                Speed = _suctionSpeed,
+                TargetScale = _targetScale,
+                ShrinkSpeed = _shrinkSpeed
+            };
+        }
+
         private sealed class SuctionBaker : Baker<SuctionAuthoring>
         {
             public override void Bake(SuctionAuthoring authoring)
             {
                 Entity entity = GetEntity(TransformUsageFlags.Dynamic);
-                AddComponent(entity, new SuctionComponent { Speed = authoring._suctionSpeed });
+                AddComponent(entity, authoring.CreateComponent());
                 AddComponent(entity, CreateBodyComponent(authoring.transform));
                 AddComponent<SuctionDeviceTag>(entity);
                 AddBuffer<SuctionPathPoint>(entity);

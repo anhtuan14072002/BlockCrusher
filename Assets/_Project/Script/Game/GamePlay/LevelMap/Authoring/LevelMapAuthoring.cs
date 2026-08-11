@@ -27,6 +27,9 @@ public sealed partial class LevelMapAuthoring : MonoBehaviour
     [SerializeField] private Mesh[] _terrainFragmentMeshes;
     [SerializeField] private bool _spawnOnAwake = true;
 
+    [Header("Cut Debris")]
+    [SerializeField] private CutDebrisAuthoring _cutDebris;
+
     [Header("Soil Visual")]
     [SerializeField] private bool _overrideDirtPalette = true;
     // Vertex colours are consumed as linear values by the terrain shader. These low
@@ -38,7 +41,6 @@ public sealed partial class LevelMapAuthoring : MonoBehaviour
     [SerializeField, Range(1, 8)] private int _maxChunkRebuildsPerFrame = 2;
 
     [Header("Released Blocks")]
-    [SerializeField, Min(0f)] private float _releasedBlockLiftSpeed = 1.5f;
     [SerializeField, Range(0f, 20f)] private float _releasedBlockDamping = 2.5f;
     [SerializeField, Range(0f, 20f)] private float _releasedBlockAngularDamping = 4f;
     [SerializeField, Range(0.01f, 10f)] private float _releasedBlockMass = 0.1f;
@@ -60,7 +62,6 @@ public sealed partial class LevelMapAuthoring : MonoBehaviour
     private readonly List<JobHandle> _scheduledChunkHandles = new(8);
 
     private readonly List<Entity> _releasedBlockEntities = new(1024);
-    private readonly List<PendingReleasedBlock> _pendingReleasedBlocks = new(64);
     private readonly List<Entity> _metaballWaterEntities = new(64);
     private readonly List<Entity> _releasedBlockWallEntities = new(4);
     private readonly List<BlobAssetReference<Collider>> _releasedBlockWallColliders = new(4);
@@ -149,6 +150,7 @@ public sealed partial class LevelMapAuthoring : MonoBehaviour
 
     private void Awake()
     {
+        _cutDebris ??= GetComponent<CutDebrisAuthoring>();
         _currentLevel = Mathf.Clamp(_startLevel, 1, Mathf.Max(1, _levelPrefabs?.Length ?? 0));
         _spawnRequested = _spawnOnAwake;
     }
@@ -165,12 +167,7 @@ public sealed partial class LevelMapAuthoring : MonoBehaviour
         DisposeReleasedBlockResources();
         DisposeCells();
         DisposeEcsQuery();
-    }
-
-    private struct PendingReleasedBlock
-    {
-        public Entity Entity;
-        public int ChunkIndex;
+        _cutDebris?.ResetDebris();
     }
 
     internal void UpdateMap()
