@@ -109,23 +109,6 @@ public sealed partial class LevelMapAuthoring
             decoration.BlockType, decoration);
     }
 
-    private bool RegisterBreakableObstacle(BreakableObstacle obstacle)
-    {
-        ushort[] typeIndices = new ushort[BreakableObstacle.ShardMeshCount];
-        for (int i = 0; i < typeIndices.Length; i++)
-        {
-            int typeIndex = GetOrCreateReleasedBlockType(obstacle.ReleasedPrefab, obstacle.ReleasedScale, Vector3.one,
-                obstacle.CollectibleType, obstacle, obstacle.GetShardMesh(i));
-            if (typeIndex < 0 || typeIndex > ushort.MaxValue)
-                return false;
-
-            typeIndices[i] = (ushort)typeIndex;
-        }
-
-        obstacle.InitializeReleasedTypes(this, typeIndices);
-        return true;
-    }
-
     private int GetOrCreateReleasedBlockType(GameObject prefab, float scale, Vector3 renderScale,
         TypeBlock collectibleType, Component source, Mesh authoredMesh = null)
     {
@@ -235,7 +218,7 @@ public sealed partial class LevelMapAuthoring
                 typeof(LocalTransform), typeof(PhysicsCollider), typeof(PhysicsMass), typeof(PhysicsVelocity),
                 typeof(PhysicsDamping), typeof(PhysicsGravityFactor), typeof(Simulate),
                 typeof(ReleasedBlockComponent), typeof(ReleasedBlockSolidConstraint), typeof(SuctionTransit),
-                typeof(ReleasedBlockAttachment), typeof(PhysicsWorldIndex));
+                typeof(PhysicsWorldIndex));
             _releasedBlockQuery = _entityManager.CreateEntityQuery(
                 ComponentType.ReadOnly<ReleasedBlockComponent>(),
                 ComponentType.ReadOnly<LocalTransform>(),

@@ -9,16 +9,13 @@ using Unity.Transforms;
 [BurstCompile(FloatMode = FloatMode.Fast, FloatPrecision = FloatPrecision.Low)]
 internal partial struct PrepareRenderFrameJob : IJobEntity
 {
-    private const float AttachmentRenderOffset = -0.005f;
-
     [WriteOnly] public NativeArray<float4x4> Matrices;
     [WriteOnly] public NativeArray<float4> Colors;
     [WriteOnly] public NativeArray<ushort> Types;
     public NativeReference<int> Count;
     public int OwnerId;
 
-    private void Execute(Entity entity, in LocalTransform transformData, in ReleasedBlockComponent block,
-        in DynamicBuffer<ReleasedBlockAttachment> attachments)
+    private void Execute(Entity entity, in LocalTransform transformData, in ReleasedBlockComponent block)
     {
         if (block.OwnerId != OwnerId || block.RenderAsMetaball != 0)
             return;
@@ -29,17 +26,6 @@ internal partial struct PrepareRenderFrameJob : IJobEntity
             return;
 
         Count.Value = index + 1;
-        for (int i = 0; i < attachments.Length; i++)
-        {
-            ReleasedBlockAttachment attachment = attachments[i];
-            index = Count.Value;
-            float3 renderPosition = transformData.Position + math.rotate(transformData.Rotation, attachment.LocalPosition);
-            quaternion renderRotation = math.mul(transformData.Rotation, attachment.LocalRotation);
-            if (!TryWriteRecord(entity, index, attachment.TypeIndex, attachment.Color, renderPosition,
-                    renderRotation, attachment.Scale, AttachmentRenderOffset))
-                return;
-            Count.Value = index + 1;
-        }
     }
 
     private bool TryWriteRecord(Entity entity, int index, ushort typeIndex, float4 color, float3 renderPosition,
@@ -64,7 +50,7 @@ public partial struct ReleasedBlockRenderPreparationSystem : ISystem
     public void OnCreate(ref SystemState state)
     {
         _query = SystemAPI.QueryBuilder()
-            .WithAll<LocalTransform, ReleasedBlockComponent, ReleasedBlockAttachment, Simulate>()
+            .WithAll<LocalTransform, ReleasedBlockComponent, Simulate>()
             .Build();
     }
 

@@ -95,6 +95,7 @@ public sealed partial class LevelMapAuthoring : MonoBehaviour
     private int _gridWidth;
     private int _gridHeight;
     private int _chunkColumns;
+    private int _currentLevel;
     private Vector2 _cellSize;
     private float _chunkColliderDepth;
 
@@ -105,8 +106,6 @@ public sealed partial class LevelMapAuthoring : MonoBehaviour
     private bool _spawnRequested;
     private int _displayRenderFrame = -1;
     private int _scheduledRenderFrame = -1;
-    private World _levelMapWorld;
-    private Entity _levelMapEntity;
     private bool _isDestroying;
 
     internal struct AuthoredMeshRange
@@ -134,9 +133,6 @@ public sealed partial class LevelMapAuthoring : MonoBehaviour
         public int RenderCount;
     }
 
-    public int CurrentLevel { get; private set; }
-    public int LevelCount => _levelPrefabs?.Length ?? 0;
-
     private void OnEnable()
     {
         if (_ownerId == 0)
@@ -144,34 +140,17 @@ public sealed partial class LevelMapAuthoring : MonoBehaviour
 
         if (!ActiveSpawners.Contains(this))
             ActiveSpawners.Add(this);
-
-        CreateLevelMapEntity();
     }
 
     private void OnDisable()
     {
         ActiveSpawners.Remove(this);
-        DestroyLevelMapEntity();
     }
 
     private void Awake()
     {
-        CurrentLevel = Mathf.Clamp(_startLevel, 1, Mathf.Max(1, LevelCount));
+        _currentLevel = Mathf.Clamp(_startLevel, 1, Mathf.Max(1, _levelPrefabs?.Length ?? 0));
         _spawnRequested = _spawnOnAwake;
-        CreateLevelMapEntity();
-    }
-
-    public void LoadLevel(int levelNumber)
-    {
-        if (levelNumber < 1 || levelNumber > LevelCount)
-        {
-            Debug.LogError($"Level {levelNumber} is outside the configured range 1-{LevelCount}.", this);
-            return;
-        }
-
-        CurrentLevel = levelNumber;
-        _spawnRequested = true;
-        WriteLevelMapComponent();
     }
 
     private void OnDestroy()
@@ -186,7 +165,6 @@ public sealed partial class LevelMapAuthoring : MonoBehaviour
         DisposeReleasedBlockResources();
         DisposeCells();
         DisposeEcsQuery();
-        DestroyLevelMapEntity();
     }
 
     private struct PendingReleasedBlock
@@ -197,12 +175,10 @@ public sealed partial class LevelMapAuthoring : MonoBehaviour
 
     internal void UpdateMap()
     {
-        CreateLevelMapEntity();
         if (_spawnRequested)
         {
             _spawnRequested = false;
             Spawn();
-            WriteLevelMapComponent();
         }
 
         if (!_cellSolid.IsCreated)
@@ -230,46 +206,5 @@ public sealed partial class LevelMapAuthoring : MonoBehaviour
         }
 
         ScheduleAndApplyChunkRebuilds();
-    }
-
-    private void CreateLevelMapEntity()
-    {
-        World world = World.DefaultGameObjectInjectionWorld;
-        if (world == null || !world.IsCreated)
-            return;
-        if (_levelMapWorld == world && _levelMapEntity != Entity.Null &&
-            world.EntityManager.Exists(_levelMapEntity))
-            return;
-
-        _levelMapWorld = world;
-        _levelMapEntity = world.EntityManager.CreateEntity(typeof(LevelMapComponent));
-        world.EntityManager.SetName(_levelMapEntity, $"Level Map {GetInstanceID()}");
-        WriteLevelMapComponent();
-    }
-
-    private void WriteLevelMapComponent()
-    {
-        if (_levelMapWorld == null || !_levelMapWorld.IsCreated || _levelMapEntity == Entity.Null ||
-            !_levelMapWorld.EntityManager.Exists(_levelMapEntity))
-            return;
-
-        _levelMapWorld.EntityManager.SetComponentData(_levelMapEntity, new LevelMapComponent
-        {
-            OwnerId = _ownerId,
-            CurrentLevel = CurrentLevel,
-            Spawned = _cellSolid.IsCreated ? (byte)1 : (byte)0
-        });
-    }
-
-    private void DestroyLevelMapEntity()
-    {
-        if (_levelMapWorld != null && _levelMapWorld.IsCreated && _levelMapEntity != Entity.Null &&
-            _levelMapWorld.EntityManager.Exists(_levelMapEntity))
-        {
-            _levelMapWorld.EntityManager.DestroyEntity(_levelMapEntity);
-        }
-
-        _levelMapEntity = Entity.Null;
-        _levelMapWorld = null;
     }
 }

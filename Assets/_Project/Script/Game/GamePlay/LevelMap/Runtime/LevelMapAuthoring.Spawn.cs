@@ -23,7 +23,7 @@ public sealed partial class LevelMapAuthoring
         GameObject levelPrefab = GetCurrentLevelPrefab();
         if (levelPrefab == null)
         {
-            Debug.LogError($"LevelMapAuthoring needs a prefab for level {CurrentLevel}.", this);
+            Debug.LogError($"LevelMapAuthoring needs a prefab for level {_currentLevel}.", this);
             return;
         }
 
@@ -149,13 +149,7 @@ public sealed partial class LevelMapAuthoring
 
         BreakableObstacle[] breakableObstacles = level.GetComponentsInChildren<BreakableObstacle>(true);
         for (int i = 0; i < breakableObstacles.Length; i++)
-        {
-            if (RegisterBreakableObstacle(breakableObstacles[i]))
-                continue;
-
-            DisposeCells();
-            return false;
-        }
+            breakableObstacles[i].Initialize(this);
 
         BuildAuthoredMeshLibrary();
         return true;
@@ -281,7 +275,7 @@ public sealed partial class LevelMapAuthoring
     private void ValidateLevelPrefab()
     {
         GameObject levelPrefab = GetCurrentLevelPrefab();
-        Debug.Assert(levelPrefab != null, $"LevelMapAuthoring needs a prefab for level {CurrentLevel}.", this);
+        Debug.Assert(levelPrefab != null, $"LevelMapAuthoring needs a prefab for level {_currentLevel}.", this);
         if (levelPrefab == null)
             return;
 
@@ -338,7 +332,7 @@ public sealed partial class LevelMapAuthoring
         if (_levelPrefabs == null || _levelPrefabs.Length == 0)
             return null;
 
-        int level = CurrentLevel > 0 ? CurrentLevel : _startLevel;
+        int level = _currentLevel > 0 ? _currentLevel : _startLevel;
         return _levelPrefabs[Mathf.Clamp(level - 1, 0, _levelPrefabs.Length - 1)];
     }
 

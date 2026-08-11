@@ -80,11 +80,11 @@ public sealed class LevelObstacle : MonoBehaviour
 
     internal static Vector3 ClampSawTarget(Vector3 from, Vector3 to,
         BlobAssetReference<ColliderBlob> sawCollider, Quaternion sawRotation,
-        bool canBreakBreakables, float damage, Vector3 sawDirection, out bool damagedObstacle,
+        bool canBreakBreakables, float damage, out bool damagedObstacle,
         out bool hitBreakableObstacle)
     {
         damagedObstacle = canBreakBreakables && DamageBreakableSawContact(
-            from, to, sawCollider, sawRotation, damage, sawDirection);
+            from, to, sawCollider, sawRotation, damage);
         hitBreakableObstacle = false;
         Vector3 position = from;
         Vector3 remaining = to - from;
@@ -112,7 +112,7 @@ public sealed class LevelObstacle : MonoBehaviour
     }
 
     private static bool DamageBreakableSawContact(Vector3 from, Vector3 to,
-        BlobAssetReference<ColliderBlob> sawCollider, Quaternion sawRotation, float damage, Vector3 sawDirection)
+        BlobAssetReference<ColliderBlob> sawCollider, Quaternion sawRotation, float damage)
     {
         ColliderCastInput castInput = new ColliderCastInput(
             sawCollider, ToFloat3(from), ToFloat3(to), ToQuaternion(sawRotation));
@@ -129,57 +129,8 @@ public sealed class LevelObstacle : MonoBehaviour
                 !obstacle._rigidBody.CalculateDistance(distanceInput))
                 continue;
 
-            obstacle._breakable.ApplySawDamage(damage, sawDirection);
+            obstacle._breakable.ApplySawDamage(damage);
             return true;
-        }
-
-        return false;
-    }
-
-    internal static bool TryGetJointChainContact(
-        Vector3[] points, int segmentCount, float radius, out Vector3 contactNormal)
-    {
-        contactNormal = Vector3.zero;
-        if (radius <= 0f)
-            return false;
-
-        for (int obstacleIndex = 0; obstacleIndex < ActiveObstacles.Count; obstacleIndex++)
-        {
-            LevelObstacle obstacle = ActiveObstacles[obstacleIndex];
-            if (obstacle == null || !obstacle.EnsureCollider())
-                continue;
-
-            for (int segmentIndex = 0; segmentIndex < segmentCount; segmentIndex++)
-            {
-                if (obstacle._rigidBody.CheckCapsule(
-                        ToFloat3(points[segmentIndex]),
-                        ToFloat3(points[segmentIndex + 1]),
-                        radius,
-                        CollisionFilter.Default))
-                {
-                    NativeList<DistanceHit> hits = new NativeList<DistanceHit>(4, Allocator.Temp);
-                    obstacle._rigidBody.OverlapCapsule(
-                        ToFloat3(points[segmentIndex]),
-                        ToFloat3(points[segmentIndex + 1]),
-                        radius,
-                        ref hits,
-                        CollisionFilter.Default);
-
-                    float deepestDistance = float.MaxValue;
-                    for (int hitIndex = 0; hitIndex < hits.Length; hitIndex++)
-                    {
-                        DistanceHit hit = hits[hitIndex];
-                        if (hit.Distance >= deepestDistance)
-                            continue;
-
-                        deepestDistance = hit.Distance;
-                        contactNormal = ToVector3(hit.SurfaceNormal).normalized;
-                    }
-
-                    hits.Dispose();
-                    return true;
-                }
-            }
         }
 
         return false;
@@ -197,12 +148,6 @@ public sealed class LevelObstacle : MonoBehaviour
             out LevelObstacle hitObstacle);
         hitBreakableObstacle = hasHit && hitObstacle != null && hitObstacle._breakable != null;
         return hasHit;
-    }
-
-    internal static bool TryCastTool(ColliderCastInput input,
-        ref ColliderCastHit closestHit, ref float closestFraction)
-    {
-        return TryCastObstacle(input, ref closestHit, ref closestFraction, true, out _);
     }
 
     private static bool TryCastObstacle(ColliderCastInput input,

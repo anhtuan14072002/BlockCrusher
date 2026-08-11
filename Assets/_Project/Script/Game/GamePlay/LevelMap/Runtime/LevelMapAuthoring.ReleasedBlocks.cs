@@ -1,4 +1,3 @@
-using Crusher;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics;
@@ -33,40 +32,6 @@ public sealed partial class LevelMapAuthoring
                 _breakableCellMask[cellIndex] = 0;
                 ReleaseCell(cellIndex, x, y, cellLocal, obstacleCenter);
             }
-        }
-    }
-
-    internal void SpawnBreakableFragments(BreakableObstacle obstacle, Vector3 sawDirection)
-    {
-        if (!EnsureReleasedBlockResources() || !EnsureEcsReady())
-            return;
-
-        Mesh sourceMesh = obstacle.GetComponent<MeshFilter>().sharedMesh;
-        Bounds bounds = sourceMesh.bounds;
-        Vector3 center = obstacle.transform.TransformPoint(bounds.center);
-        Vector3 pushDirection = sawDirection;
-        pushDirection.z = 0f;
-        pushDirection = pushDirection.sqrMagnitude > 0.0001f ? pushDirection.normalized : Vector3.down;
-        float maxVelocity = GetSafePhysicsVelocity(Mathf.Max(1f, obstacle.BreakForce * 2f));
-        var random = new System.Random(obstacle.GetInstanceID());
-
-        for (int i = 0; i < obstacle.ShardCount; i++)
-        {
-            Vector3 localPosition = new(
-                Mathf.Lerp(bounds.min.x, bounds.max.x, (float)random.NextDouble()),
-                Mathf.Lerp(bounds.min.y, bounds.max.y, (float)random.NextDouble()),
-                Mathf.Lerp(bounds.min.z, bounds.max.z, (float)random.NextDouble()));
-            Vector3 position = obstacle.transform.TransformPoint(localPosition);
-            Vector3 outward = position - center;
-            outward.z = 0f;
-            outward = outward.sqrMagnitude > 0.0001f ? outward.normalized : Vector3.up;
-            Vector3 velocity = pushDirection * (obstacle.BreakForce * 0.55f) +
-                               outward * (obstacle.BreakForce * 0.35f) + Vector3.up * 0.4f;
-            velocity.y = Mathf.Max(0f, velocity.y);
-            velocity = Vector3.ClampMagnitude(velocity, maxVelocity);
-            float angularVelocity = ((float)random.NextDouble() * 2f - 1f) * 10f;
-            CreateReleasedBlockEntity(position, obstacle.ReleasedColor, obstacle.GetReleasedTypeIndex(i),
-                velocity, maxVelocity, false, true, angularVelocity, true);
         }
     }
 
@@ -153,7 +118,6 @@ public sealed partial class LevelMapAuthoring
             Radius = runtimeType.Radius,
             PhysicsStepStartPosition = new float3(position.x, position.y, position.z),
             TypeIndex = typeIndex,
-            CollectibleType = renderAsMetaball ? TypeBlock.Water : runtimeType.CollectibleType,
             SuctionPathIndex = byte.MaxValue,
             RenderAsMetaball = renderAsMetaball ? (byte)1 : (byte)0,
             UsesGravity = usesGravity ? (byte)1 : (byte)0

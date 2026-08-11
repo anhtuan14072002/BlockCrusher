@@ -74,7 +74,7 @@ namespace Crusher
             Vector3 cutterTo = cutterFrom + movement;
             Vector3 clampedCutter = LevelObstacle.ClampSawTarget(
                 cutterFrom, cutterTo, _obstacleQueryCollider, transform.rotation,
-                _canBreakStone, _obstacleDamagePerSecond * deltaTime, movement,
+                _canBreakStone, _obstacleDamagePerSecond * deltaTime,
                 out bool damagedObstacle, out bool hitBreakableObstacle);
             hitStone = damagedObstacle || hitBreakableObstacle;
             Vector3 clampedRoot = rootTo + clampedCutter - cutterTo;
