@@ -1861,7 +1861,45 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 7698904760816957404}
+  - {fileID: 4575326908289407266}
   m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &7011814901730164495
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 4575326908289407266}
+  m_Layer: 0
+  m_Name: Loot
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &4575326908289407266
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7011814901730164495}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 7978826260989902143}
+  - {fileID: 8529239513614409641}
+  - {fileID: 5924067374848105975}
+  - {fileID: 7945015943928727377}
+  - {fileID: 1719625345433860336}
+  - {fileID: 2902253771119063308}
+  m_Father: {fileID: 946361186721193579}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &4596294537654998
 PrefabInstance:
@@ -9860,6 +9898,68 @@ PrefabInstance:
 Transform:
   m_CorrespondingSourceObject: {fileID: 514400300549192000, guid: 3f4ebe89b85f2a147bdba89bc394f76d, type: 3}
   m_PrefabInstance: {fileID: 506426351935075761}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &508362430055722243
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 4575326908289407266}
+    m_Modifications:
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 10.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 30
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -0.31
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.8660254
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6185358022084267644, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_Name
+      value: Orange Loot 06
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+--- !u!4 &2902253771119063308 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+  m_PrefabInstance: {fileID: 508362430055722243}
   m_PrefabAsset: {fileID: 0}
 --- !u!1001 &531763425205819470
 PrefabInstance:
@@ -70405,6 +70505,68 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 514400300549192000, guid: 3f4ebe89b85f2a147bdba89bc394f76d, type: 3}
   m_PrefabInstance: {fileID: 4076715696336435115}
   m_PrefabAsset: {fileID: 0}
+--- !u!1001 &4077348271064950015
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 4575326908289407266}
+    m_Modifications:
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 5.25
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 34
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -0.31
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.9848078
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0.1736482
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6185358022084267644, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_Name
+      value: Orange Loot 05
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+--- !u!4 &1719625345433860336 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+  m_PrefabInstance: {fileID: 4077348271064950015}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &4081116975208000970
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -82273,6 +82435,68 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 514400300549192000, guid: 3f4ebe89b85f2a147bdba89bc394f76d, type: 3}
   m_PrefabInstance: {fileID: 4677737494799241456}
   m_PrefabAsset: {fileID: 0}
+--- !u!1001 &4686749034345995102
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 4575326908289407266}
+    m_Modifications:
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 8.25
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 36
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -0.31
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.7071068
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0.7071068
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6185358022084267644, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_Name
+      value: Orange Loot 04
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+--- !u!4 &7945015943928727377 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+  m_PrefabInstance: {fileID: 4686749034345995102}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &4698582416680520194
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -83820,6 +84044,68 @@ PrefabInstance:
 Transform:
   m_CorrespondingSourceObject: {fileID: 514400300549192000, guid: 3f4ebe89b85f2a147bdba89bc394f76d, type: 3}
   m_PrefabInstance: {fileID: 4749759461261429706}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &4752015277354033456
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 4575326908289407266}
+    m_Modifications:
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 6.75
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 42
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -0.31
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6185358022084267644, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_Name
+      value: Orange Loot 01
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+--- !u!4 &7978826260989902143 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+  m_PrefabInstance: {fileID: 4752015277354033456}
   m_PrefabAsset: {fileID: 0}
 --- !u!1001 &4753193053418231044
 PrefabInstance:
@@ -111254,6 +111540,68 @@ PrefabInstance:
 Transform:
   m_CorrespondingSourceObject: {fileID: 514400300549192000, guid: 3f4ebe89b85f2a147bdba89bc394f76d, type: 3}
   m_PrefabInstance: {fileID: 6415832685567129183}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &6419039762484593574
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 4575326908289407266}
+    m_Modifications:
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 9
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 40
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -0.31
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.9238795
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0.38268346
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6185358022084267644, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_Name
+      value: Orange Loot 02
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+--- !u!4 &8529239513614409641 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+  m_PrefabInstance: {fileID: 6419039762484593574}
   m_PrefabAsset: {fileID: 0}
 --- !u!1001 &6419331445903021902
 PrefabInstance:
@@ -154512,6 +154860,68 @@ PrefabInstance:
 Transform:
   m_CorrespondingSourceObject: {fileID: 514400300549192000, guid: 3f4ebe89b85f2a147bdba89bc394f76d, type: 3}
   m_PrefabInstance: {fileID: 9040044634172050766}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &9042791965216440824
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 4575326908289407266}
+    m_Modifications:
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 4.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 38
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -0.31
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.9659259
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0.25881907
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6185358022084267644, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+      propertyPath: m_Name
+      value: Orange Loot 03
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+--- !u!4 &5924067374848105975 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 3407237560839625743, guid: 6f4929ee00853424bbfa820bb2f3ec35, type: 3}
+  m_PrefabInstance: {fileID: 9042791965216440824}
   m_PrefabAsset: {fileID: 0}
 --- !u!1001 &9044015745793529441
 PrefabInstance:

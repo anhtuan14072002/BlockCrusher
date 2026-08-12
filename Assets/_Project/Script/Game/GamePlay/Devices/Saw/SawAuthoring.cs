@@ -4,6 +4,7 @@ using Unity.Physics;
 using Unity.Physics.Authoring;
 using Unity.Transforms;
 using UnityEngine;
+using UnityEngine.Serialization;
 using PhysicsColliderBlob = Unity.Physics.Collider;
 
 namespace Crusher
@@ -17,11 +18,13 @@ namespace Crusher
         [SerializeField] private float _bladeSpinSpeed = 600f;
         [SerializeField] private Vector3 _bladeSpinAxis = Vector3.forward;
         [SerializeField, Min(0.01f)] private float _cutSweepStep = 0.08f;
-        [SerializeField, Min(0f)] private float _maxBlockVelocity = 6f;
+        [FormerlySerializedAs("_maxBlockVelocity")]
+        [SerializeField, Min(0f)] private float _blockEjectSpeed = 6f;
         [SerializeField, Min(0f)] private float _obstacleDamagePerSecond = 1f;
         [SerializeField] private bool _canBreakStone;
         [SerializeField, Min(0f)] private float _obstacleBounceDistance = 0.08f;
         [SerializeField] private Transform _bladeVisual;
+        [SerializeField, Min(0)] private int _bladeSubMeshIndex = 1;
 
         private BlobAssetReference<PhysicsColliderBlob> _runtimeCollider;
         private BlobAssetReference<PhysicsColliderBlob> _obstacleQueryCollider;
@@ -100,13 +103,21 @@ namespace Crusher
                 return;
 
             Mesh mesh = GetComponent<MeshFilter>().sharedMesh;
+            int cutSubMeshIndex = GetCutSubMeshIndex();
             CollisionResponsePolicy collisionResponse = _deviceKind == CuttingDeviceKind.Saw
                 ? CollisionResponsePolicy.Collide
                 : CollisionResponsePolicy.RaiseTriggerEvents;
+            CollisionFilter collisionFilter = _deviceKind == CuttingDeviceKind.Saw
+                ? new CollisionFilter
+                {
+                    BelongsTo = DeviceMeshCollider.SawCategory,
+                    CollidesWith = uint.MaxValue
+                }
+                : CollisionFilter.Default;
             if (!DeviceMeshCollider.TryCreate(mesh, transform.lossyScale,
-                    collisionResponse, out _runtimeCollider))
+                    collisionResponse, collisionFilter, out _runtimeCollider, cutSubMeshIndex))
             {
-                Debug.LogError("Saw mesh must be readable so its DOTS mesh collider can be created.", this);
+                Debug.LogError("Cut submesh could not be read from the device mesh.", this);
                 return;
             }
 
@@ -146,7 +157,8 @@ namespace Crusher
             _obstacleQueryScale = scale;
             return DeviceMeshCollider.TryCreate(
                 GetComponent<MeshFilter>().sharedMesh, scale,
-                CollisionResponsePolicy.RaiseTriggerEvents, out _obstacleQueryCollider);
+                CollisionResponsePolicy.RaiseTriggerEvents, out _obstacleQueryCollider,
+                GetCutSubMeshIndex());
         }
 
         private SawComponent CreateComponent(Mesh mesh, Transform sourceTransform)
@@ -155,10 +167,16 @@ namespace Crusher
             return new SawComponent
             {
                 CutMesh = mesh,
+                CutSubMeshIndex = GetCutSubMeshIndex(),
                 Scale = new float3(scale.x, scale.y, scale.z),
                 CutSweepStep = _cutSweepStep,
-                MaxReleasedBlockVelocity = _maxBlockVelocity
+                BlockEjectSpeed = _blockEjectSpeed
             };
+        }
+
+        private int GetCutSubMeshIndex()
+        {
+            return _deviceKind == CuttingDeviceKind.Saw ? _bladeSubMeshIndex : -1;
         }
 
         private static DeviceBodyComponent CreateBodyComponent(Transform sourceTransform)

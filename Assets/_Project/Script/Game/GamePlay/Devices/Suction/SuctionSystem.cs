@@ -14,11 +14,13 @@ namespace Crusher
     {
         private ComponentLookup<SuctionDeviceTag> _suctionLookup;
         private ComponentLookup<CutDebrisComponent> _debrisLookup;
+        private ComponentLookup<ReleasedBlockComponent> _releasedBlockLookup;
 
         public void OnCreate(ref SystemState state)
         {
             _suctionLookup = state.GetComponentLookup<SuctionDeviceTag>(true);
             _debrisLookup = state.GetComponentLookup<CutDebrisComponent>(true);
+            _releasedBlockLookup = state.GetComponentLookup<ReleasedBlockComponent>(true);
             state.RequireForUpdate<SimulationSingleton>();
             state.RequireForUpdate<SuctionComponent>();
         }
@@ -31,6 +33,7 @@ namespace Crusher
 
             _suctionLookup.Update(ref state);
             _debrisLookup.Update(ref state);
+            _releasedBlockLookup.Update(ref state);
             EntityCommandBuffer commandBuffer = SystemAPI
                 .GetSingleton<EndFixedStepSimulationEntityCommandBufferSystem.Singleton>()
                 .CreateCommandBuffer(state.WorldUnmanaged);
@@ -38,6 +41,7 @@ namespace Crusher
             {
                 SuctionLookup = _suctionLookup,
                 DebrisLookup = _debrisLookup,
+                ReleasedBlockLookup = _releasedBlockLookup,
                 CommandBuffer = commandBuffer
             }.Schedule(SystemAPI.GetSingleton<SimulationSingleton>(), state.Dependency);
         }
@@ -47,6 +51,7 @@ namespace Crusher
         {
             [ReadOnly] public ComponentLookup<SuctionDeviceTag> SuctionLookup;
             [ReadOnly] public ComponentLookup<CutDebrisComponent> DebrisLookup;
+            [ReadOnly] public ComponentLookup<ReleasedBlockComponent> ReleasedBlockLookup;
             public EntityCommandBuffer CommandBuffer;
 
             public void Execute(TriggerEvent triggerEvent)
@@ -64,7 +69,28 @@ namespace Crusher
                 }
 
                 if (debris == Entity.Null)
+                {
+                    Entity releasedBlock = Entity.Null;
+                    if (SuctionLookup.HasComponent(triggerEvent.EntityA) &&
+                        ReleasedBlockLookup.HasComponent(triggerEvent.EntityB))
+                    {
+                        releasedBlock = triggerEvent.EntityB;
+                    }
+                    else if (SuctionLookup.HasComponent(triggerEvent.EntityB) &&
+                             ReleasedBlockLookup.HasComponent(triggerEvent.EntityA))
+                    {
+                        releasedBlock = triggerEvent.EntityA;
+                    }
+
+                    if (releasedBlock == Entity.Null)
+                        return;
+
+                    CommandBuffer.SetComponent(releasedBlock, new SuctionTransit { Distance = 0f });
+                    CommandBuffer.SetComponentEnabled<SuctionTransit>(releasedBlock, true);
+                    CommandBuffer.SetComponentEnabled<ReleasedBlockSolidConstraint>(releasedBlock, false);
+                    CommandBuffer.SetComponentEnabled<Simulate>(releasedBlock, false);
                     return;
+                }
 
                 CommandBuffer.SetComponentEnabled<CutDebrisSuctionTransit>(debris, true);
                 CommandBuffer.SetComponentEnabled<Simulate>(debris, false);
@@ -99,6 +125,14 @@ namespace Crusher
                 Path = path.AsNativeArray(),
                 Speed = suction.Speed,
                 TargetScale = suction.TargetScale,
+                ShrinkSpeed = suction.ShrinkSpeed,
+                DeltaTime = SystemAPI.Time.DeltaTime,
+                CommandBuffer = commandBuffer
+            }.ScheduleParallel(state.Dependency);
+            state.Dependency = new ReleasedBlockTransitJob
+            {
+                Path = path.AsNativeArray(),
+                Speed = suction.Speed,
                 ShrinkSpeed = suction.ShrinkSpeed,
                 DeltaTime = SystemAPI.Time.DeltaTime,
                 CommandBuffer = commandBuffer
@@ -165,6 +199,29 @@ namespace Crusher
                 transform.Scale = math.lerp(
                     transform.Scale, debris.BaseScale * TargetScale,
                     math.saturate(ShrinkSpeed * DeltaTime));
+                if (reachedRoot)
+                    CommandBuffer.DestroyEntity(sortKey, entity);
+            }
+        }
+
+        [BurstCompile(FloatMode = FloatMode.Fast, FloatPrecision = FloatPrecision.Low)]
+        private partial struct ReleasedBlockTransitJob : IJobEntity
+        {
+            [ReadOnly] public NativeArray<SuctionPathPoint> Path;
+            public float Speed;
+            public float ShrinkSpeed;
+            public float DeltaTime;
+            public EntityCommandBuffer.ParallelWriter CommandBuffer;
+
+            private void Execute([EntityIndexInQuery] int sortKey, Entity entity,
+                ref LocalTransform transform, ref SuctionTransit transit,
+                in ReleasedBlockComponent block)
+            {
+                transit.Distance += Speed * DeltaTime;
+                transform.Position = SamplePath(
+                    Path, transit.Distance, block.LockedZ, out bool reachedRoot);
+                transform.Scale = math.lerp(
+                    transform.Scale, 0f, math.saturate(ShrinkSpeed * DeltaTime));
                 if (reachedRoot)
                     CommandBuffer.DestroyEntity(sortKey, entity);
             }

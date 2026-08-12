@@ -4,7 +4,7 @@ using UnityEngine;
 public sealed partial class LevelMapAuthoring
 {
     public bool ReleaseInBox(Matrix4x4 cutLocalToWorld, Bounds cutLocalBounds,
-        Vector3[] cutVertices, int[] cutTriangles, Vector3 pushDirection, float maxVelocity)
+        Vector3[] cutVertices, int[] cutTriangles, float blockEjectSpeed)
     {
         if (!_cellSolid.IsCreated || _runtimeParent == null)
             return false;
@@ -61,7 +61,7 @@ public sealed partial class LevelMapAuthoring
 
                 if (!releasedAny)
                     CompleteReleasedBlockJobs();
-                ReleaseCell(cellIndex, x, y, cellLocal, sawCenter, pushDirection, maxVelocity);
+                ReleaseCell(cellIndex, x, y, cellLocal, sawCenter, blockEjectSpeed);
                 releasedAny = true;
             }
         }
@@ -159,7 +159,7 @@ public sealed partial class LevelMapAuthoring
 #endif
 
     private void ReleaseCell(int cellIndex, int cellX, int cellY, Vector3 cellLocal, Vector3 sawCenter,
-        Vector3 pushDirection, float pushSpeed)
+        float blockEjectSpeed)
     {
         Color32 surfaceColor = _cellColors[cellIndex];
         _cellSolid[cellIndex] = 0;
@@ -167,21 +167,20 @@ public sealed partial class LevelMapAuthoring
             _cellSolidSnapshot[cellIndex] = 0;
         Vector3 releasedWorldPosition = _runtimeParent.TransformPoint(cellLocal);
         EmitCutParticles(releasedWorldPosition, surfaceColor, releasedWorldPosition - sawCenter);
-        Color32 debrisColor = _cellReleasedColors.IsCreated ? _cellReleasedColors[cellIndex] : surfaceColor;
         ushort typeIndex = _cellReleasedTypes[cellIndex];
         if (_cutDebris != null && typeIndex < _releasedBlockTypes.Count)
         {
             ReleasedBlockRuntimeType sourceBlock = _releasedBlockTypes[typeIndex];
-            pushDirection.z = 0f;
-            if (pushDirection.sqrMagnitude <= 0.000001f)
-                pushDirection = releasedWorldPosition - sawCenter;
-            if (pushDirection.sqrMagnitude > 0.000001f)
-                pushDirection.Normalize();
+            Color32 debrisColor = sourceBlock.CollectibleType == Crusher.TypeBlock.Dirt ||
+                                  !_cellReleasedColors.IsCreated
+                ? surfaceColor
+                : _cellReleasedColors[cellIndex];
             _cutDebris.QueueSpawn(releasedWorldPosition, debrisColor, sourceBlock.Mesh,
-                sourceBlock.Scale, sourceBlock.RenderScale, pushDirection * pushSpeed,
+                sourceBlock.Scale, sourceBlock.RenderScale, Vector3.up * blockEjectSpeed,
                 GetCellChunkIndex(cellX, cellY));
         }
-        RemoveSeparateDecorationsAtCell(cellIndex);
+        ReleaseSeparateDecorationsAtCell(
+            cellIndex, sawCenter, Vector3.up, blockEjectSpeed);
         MarkCellChunkDirty(cellX, cellY);
     }
     private void MarkCellChunkDirty(int cellX, int cellY)

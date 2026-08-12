@@ -14,6 +14,7 @@ namespace Crusher
         private sealed class CutMeshCache
         {
             public Mesh Mesh;
+            public int SubMeshIndex;
             public Bounds Bounds;
             public Vector3[] Vertices;
             public int[] Triangles;
@@ -74,17 +75,20 @@ namespace Crusher
             if (mesh == null)
                 return;
 
-            if (!_cutMeshes.TryGetValue(entity, out CutMeshCache cache) || cache.Mesh != mesh)
+            if (!_cutMeshes.TryGetValue(entity, out CutMeshCache cache) || cache.Mesh != mesh ||
+                cache.SubMeshIndex != saw.CutSubMeshIndex)
             {
-                if (!mesh.isReadable)
+                if (!DeviceMeshCollider.TryGetGeometry(mesh, saw.CutSubMeshIndex,
+                        out Bounds bounds, out Vector3[] vertices, out int[] triangles))
                     return;
 
                 cache = new CutMeshCache
                 {
                     Mesh = mesh,
-                    Bounds = mesh.bounds,
-                    Vertices = mesh.vertices,
-                    Triangles = mesh.triangles
+                    SubMeshIndex = saw.CutSubMeshIndex,
+                    Bounds = bounds,
+                    Vertices = vertices,
+                    Triangles = triangles
                 };
                 _cutMeshes[entity] = cache;
             }
@@ -95,17 +99,13 @@ namespace Crusher
             int steps = Mathf.Max(1, Mathf.CeilToInt(distance / Mathf.Max(saw.CutSweepStep, 0.01f)));
             Quaternion worldRotation = new(rotation.value.x, rotation.value.y, rotation.value.z, rotation.value.w);
             Vector3 scale = new(saw.Scale.x, saw.Scale.y, saw.Scale.z);
-            Vector3 pushDirection = fromPosition - toPosition;
-            pushDirection.z = 0f;
-            if (pushDirection.sqrMagnitude > 0.000001f)
-                pushDirection.Normalize();
             for (int i = 1; i <= steps; i++)
             {
                 Vector3 position = Vector3.Lerp(fromPosition, toPosition, i / (float)steps);
                 Matrix4x4 localToWorld = Matrix4x4.TRS(position, worldRotation, scale);
                 LevelMapAuthoring.ReleaseInBoxForActiveSpawners(
                     localToWorld, cache.Bounds, cache.Vertices, cache.Triangles,
-                    pushDirection, saw.MaxReleasedBlockVelocity);
+                    saw.BlockEjectSpeed);
             }
         }
     }

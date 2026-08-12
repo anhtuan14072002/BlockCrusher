@@ -31,7 +31,7 @@ public sealed partial class LevelMapAuthoring
         public Color32 Color;
     }
 
-    private void CreateDecorations(LevelDecoration[] decorations)
+    private void CreateDecorations(LevelDecoration[] decorations, Transform sourceRoot)
     {
         DisposeDecorations();
         if (decorations.Length == 0 || _chunks.Count == 0)
@@ -40,7 +40,7 @@ public sealed partial class LevelMapAuthoring
         List<int>[] chunkDecorations = new List<int>[_chunks.Count];
         _decorationChunksByCell = new List<int>[_cellSolid.Length];
         _separateDecorationsByCell = new List<int>[_cellSolid.Length];
-        Matrix4x4 worldToGrid = _runtimeParent.worldToLocalMatrix;
+        Matrix4x4 sourceToGrid = sourceRoot.worldToLocalMatrix;
         for (int i = 0; i < decorations.Length; i++)
         {
             LevelDecoration decoration = decorations[i];
@@ -49,7 +49,7 @@ public sealed partial class LevelMapAuthoring
             if (sourceMesh == null)
                 continue;
 
-            Vector3 localPosition = _runtimeParent.InverseTransformPoint(decoration.transform.position);
+            Vector3 localPosition = sourceRoot.InverseTransformPoint(decoration.transform.position);
             int cellX = Mathf.RoundToInt((localPosition.x - _offset.x) / _cellSize.x);
             int cellY = Mathf.RoundToInt((localPosition.y - _offset.y) / _cellSize.y);
             if ((uint)cellX >= (uint)_gridWidth || (uint)cellY >= (uint)_gridHeight)
@@ -66,7 +66,7 @@ public sealed partial class LevelMapAuthoring
             }
 
             int chunkIndex = cellY / _chunkSize * _chunkColumns + cellX / _chunkSize;
-            Matrix4x4 matrix = worldToGrid * decoration.transform.localToWorldMatrix;
+            Matrix4x4 matrix = sourceToGrid * decoration.transform.localToWorldMatrix;
             BuildSegmentedDecorationGeometry(sourceMesh, matrix, cellIndex,
                 out Vector3[] vertices, out Vector2[] uvs, out Color32[] colors,
                 out int[] triangles, out int[] triangleCells, out HashSet<int> coveredCells);
@@ -329,7 +329,8 @@ public sealed partial class LevelMapAuthoring
         chunk.DecorationRenderer.enabled = true;
     }
 
-    private void RemoveSeparateDecorationsAtCell(int cellIndex)
+    private void ReleaseSeparateDecorationsAtCell(
+        int cellIndex, Vector3 sawCenter, Vector3 pushDirection, float pushSpeed)
     {
         if (_separateDecorationsByCell == null || (uint)cellIndex >= (uint)_separateDecorationsByCell.Length)
             return;
@@ -338,9 +339,36 @@ public sealed partial class LevelMapAuthoring
         if (decorationIndices == null)
             return;
 
+        if (!EnsureEcsReady())
+            return;
+
         for (int i = 0; i < decorationIndices.Count; i++)
         {
-            _levelDecorations[decorationIndices[i]].Released = true;
+            DecorationRuntime decoration = _levelDecorations[decorationIndices[i]];
+            if (decoration.Released)
+                continue;
+
+            decoration.Released = true;
+            if (decoration.ReleasedTypeIndex == ushort.MaxValue)
+                continue;
+
+            Vector3 position = _runtimeParent.TransformPoint(decoration.ReleasedGridLocalPosition);
+            Vector3 direction = pushDirection;
+            if (direction.sqrMagnitude <= 0.000001f)
+                direction = position - sawCenter;
+            direction.z = 0f;
+            if (direction.sqrMagnitude > 0.000001f)
+                direction.Normalize();
+
+            float maxVelocity = GetSafePhysicsVelocity(Mathf.Max(pushSpeed, 1f));
+            for (int spawnIndex = 0; spawnIndex < decoration.ReleasedCount; spawnIndex++)
+            {
+                float spread = (spawnIndex - (decoration.ReleasedCount - 1) * 0.5f) * 14f;
+                Vector3 velocity = Quaternion.AngleAxis(spread, Vector3.forward) * direction * maxVelocity;
+                CreateReleasedBlockEntity(position, decoration.ReleasedColor,
+                    decoration.ReleasedTypeIndex, velocity, maxVelocity, false, true,
+                    Random.Range(-3f, 3f), true);
+            }
         }
     }
 

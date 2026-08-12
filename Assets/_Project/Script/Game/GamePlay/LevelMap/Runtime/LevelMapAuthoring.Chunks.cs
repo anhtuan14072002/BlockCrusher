@@ -230,19 +230,15 @@ public sealed partial class LevelMapAuthoring
             _entityManager.AddSharedComponent(chunk.PhysicsEntity, new PhysicsWorldIndex(0));
         }
         _entityManager.SetComponentData(chunk.PhysicsEntity, new PhysicsCollider { Value = chunk.PhysicsCollider });
-        if (previousCollider.IsCreated)
-            previousCollider.Dispose();
+        LevelMapColliderDisposalSystem.Retire(previousCollider);
     }
     private void DestroyChunkPhysicsCollider(ref ChunkRuntime chunk)
     {
         if (EnsureEcsReady() && chunk.PhysicsEntity != Entity.Null && _entityManager.Exists(chunk.PhysicsEntity))
             _entityManager.DestroyEntity(chunk.PhysicsEntity);
         chunk.PhysicsEntity = Entity.Null;
-        if (chunk.PhysicsCollider.IsCreated)
-        {
-            chunk.PhysicsCollider.Dispose();
-            chunk.PhysicsCollider = default;
-        }
+        LevelMapColliderDisposalSystem.Retire(chunk.PhysicsCollider);
+        chunk.PhysicsCollider = default;
     }
     private void DisposeChunks()
     {

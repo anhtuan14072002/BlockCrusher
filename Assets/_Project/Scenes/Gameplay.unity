@@ -6175,8 +6175,8 @@ MonoBehaviour:
   _prefab: {fileID: 4722558944525060870, guid: d164093ad86b4f219d90985fce3bf899, type: 3}
   _maxPlanarSpeed: 4
   _colliderPlanarSize: 0.82
-  _maxActiveBlocks: 1500
-  _maxSpawnsPerFrame: 64
+  _maxActiveBlocks: 5000
+  _maxSpawnsPerFrame: 24
 --- !u!1 &942276105
 GameObject:
   m_ObjectHideFlags: 0
@@ -6434,11 +6434,12 @@ MonoBehaviour:
   _bladeSpinSpeed: 923.4
   _bladeSpinAxis: {x: 0, y: 1, z: 0}
   _cutSweepStep: 0.08
-  _maxBlockVelocity: 2.5
+  _blockEjectSpeed: 2.5
   _obstacleDamagePerSecond: 1
   _canBreakStone: 1
   _obstacleBounceDistance: 0.08
   _bladeVisual: {fileID: 1012516617}
+  _bladeSubMeshIndex: 1
 --- !u!23 &1012516619
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -9089,11 +9090,12 @@ MonoBehaviour:
   _bladeSpinSpeed: 600
   _bladeSpinAxis: {x: 0, y: 0, z: 1}
   _cutSweepStep: 0.08
-  _maxBlockVelocity: 6
+  _blockEjectSpeed: 2.5
   _obstacleDamagePerSecond: 1
   _canBreakStone: 0
   _obstacleBounceDistance: 0.18
   _bladeVisual: {fileID: 6321545530090227014}
+  _bladeSubMeshIndex: 1
 --- !u!4 &7199391803083927821
 Transform:
   m_ObjectHideFlags: 0

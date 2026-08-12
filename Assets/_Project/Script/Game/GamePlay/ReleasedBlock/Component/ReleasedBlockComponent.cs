@@ -17,6 +17,7 @@ public struct ReleasedBlockComponent : IComponentData
 
 public struct SuctionTransit : IComponentData, IEnableableComponent
 {
+    public float Distance;
 }
 
 public struct ReleasedBlockSolidConstraint : IComponentData, IEnableableComponent

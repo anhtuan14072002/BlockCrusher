@@ -50,17 +50,19 @@ namespace Crusher
             if (!EnsureVariantResources())
                 return;
 
-            int available = _source.MaxActiveBlocks - _debrisQuery.CalculateEntityCount();
-            if (available <= 0)
-            {
-                // Ponytail: the hard mobile cap drops overflow instead of retaining an unbounded delayed-spawn queue.
-                _source.DiscardReady();
-                return;
-            }
-
-            int spawnCount = math.min(available, math.min(_source.ReadyCount, _source.MaxSpawnsPerFrame));
+            int spawnCount = math.min(_source.ReadyCount, _source.MaxSpawnsPerFrame);
             if (spawnCount == 0)
                 return;
+
+            int recycleCount = math.max(0,
+                _debrisQuery.CalculateEntityCount() + spawnCount - _source.MaxActiveBlocks);
+            if (recycleCount > 0)
+            {
+                using NativeArray<Entity> debris = _debrisQuery.ToEntityArray(Allocator.Temp);
+                recycleCount = math.min(recycleCount, debris.Length);
+                for (int i = 0; i < recycleCount; i++)
+                    EntityManager.DestroyEntity(debris[i]);
+            }
 
             using NativeArray<Entity> entities = new(spawnCount, Allocator.Temp);
             EntityManager.CreateEntity(_debrisArchetype, entities);
@@ -72,6 +74,8 @@ namespace Crusher
                 EntityManager.SetComponentData(entity, LocalTransform.FromPositionRotationScale(
                     new float3(request.Position.x, request.Position.y, request.Position.z),
                     quaternion.identity, request.Scale));
+                EntityManager.SetComponentData(entity,
+                    new PhysicsCollider { Value = _colliders[request.VariantIndex] });
                 EntityManager.SetComponentData(entity, _masses[request.VariantIndex]);
                 EntityManager.SetComponentData(entity, PhysicsVelocity.Zero);
                 EntityManager.SetComponentData(entity, _damping);
@@ -117,7 +121,7 @@ namespace Crusher
             };
             _gravityFactor = _source.PhysicsBody.GravityFactor;
             _debrisArchetype = EntityManager.CreateArchetype(
-                typeof(LocalTransform), typeof(PhysicsMass), typeof(PhysicsVelocity),
+                typeof(LocalTransform), typeof(PhysicsCollider), typeof(PhysicsMass), typeof(PhysicsVelocity),
                 typeof(PhysicsDamping), typeof(PhysicsGravityFactor), typeof(Simulate),
                 typeof(PhysicsWorldIndex), typeof(CutDebrisComponent), typeof(CutDebrisSuctionTransit),
                 typeof(CutDebrisPendingActivation));
@@ -128,10 +132,15 @@ namespace Crusher
 
         private bool EnsureVariantResources()
         {
+            CollisionFilter collisionFilter = new()
+            {
+                BelongsTo = DeviceMeshCollider.CutDebrisCategory,
+                CollidesWith = uint.MaxValue & ~DeviceMeshCollider.SawCategory
+            };
             while (_colliders.Count < _source.VariantCount)
             {
                 BlobAssetReference<Collider> collider = BoxCollider.Create(
-                    _source.GetBoxGeometry(_colliders.Count), CollisionFilter.Default, Material.Default);
+                    _source.GetBoxGeometry(_colliders.Count), collisionFilter, Material.Default);
                 if (!collider.IsCreated)
                     return false;
 

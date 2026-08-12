@@ -21,9 +21,10 @@ namespace Crusher
     public struct SawComponent : IComponentData
     {
         public UnityObjectRef<Mesh> CutMesh;
+        public int CutSubMeshIndex;
         public float3 Scale;
         public float CutSweepStep;
-        public float MaxReleasedBlockVelocity;
+        public float BlockEjectSpeed;
         public byte Active;
     }
 }

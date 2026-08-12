@@ -27,11 +27,25 @@ public sealed partial class LevelMapAuthoring
             return;
         }
 
+        if (CanBuildDirectlyFromPrefab(levelPrefab))
+        {
+            if (!TryBuildCellsFromLevel(levelPrefab, System.Array.Empty<BlockWater>(), true))
+                return;
+
+            LevelObstacle.MaskSpawnCells(_cellSolid, _breakableCellMask, _runtimeParent, _offset,
+                _gridWidth, _gridHeight, _cellSize);
+            CreateCutParticles();
+            _cellSolidSnapshot = _cellSolid.ToArray();
+            CreateChunks();
+            CreateDecorations(levelPrefab.GetComponentsInChildren<LevelDecoration>(true), levelPrefab.transform);
+            return;
+        }
+
         GameObject level = Instantiate(levelPrefab, _runtimeParent, false);
         level.name = levelPrefab.name;
         BlockWater[] waterMarkers = level.GetComponentsInChildren<BlockWater>(true);
         LevelDecoration[] decorations = level.GetComponentsInChildren<LevelDecoration>(true);
-        if (!TryBuildCellsFromLevel(level, waterMarkers))
+        if (!TryBuildCellsFromLevel(level, waterMarkers, false))
         {
             DestroyUnityObject(level);
             return;
@@ -55,12 +69,19 @@ public sealed partial class LevelMapAuthoring
         SpawnMetaballWater(waterMarkers);
         _cellSolidSnapshot = _cellSolid.ToArray();
         CreateChunks();
-        CreateDecorations(decorations);
+        CreateDecorations(decorations, _runtimeParent);
         level.SetActive(false);
         DestroyUnityObject(level);
     }
 
-    private bool TryBuildCellsFromLevel(GameObject level, BlockWater[] waterMarkers)
+    private static bool CanBuildDirectlyFromPrefab(GameObject levelPrefab)
+    {
+        return levelPrefab.GetComponentInChildren<BlockWater>(true) == null &&
+               levelPrefab.GetComponentInChildren<LevelObstacle>(true) == null;
+    }
+
+    private bool TryBuildCellsFromLevel(
+        GameObject level, BlockWater[] waterMarkers, bool sourceIsPrefabAsset)
     {
         TypeBlockMap[] blocks = level.GetComponentsInChildren<TypeBlockMap>(true);
         MeshRenderer firstRenderer = null;
@@ -70,11 +91,11 @@ public sealed partial class LevelMapAuthoring
         for (int i = 0; i < blocks.Length; i++)
         {
             firstRenderer ??= blocks[i].GetComponent<MeshRenderer>();
-            IncludeGridPosition(blocks[i].transform.position, ref min, ref max);
+            IncludeGridPosition(blocks[i].transform.position, sourceIsPrefabAsset, ref min, ref max);
         }
 
         for (int i = 0; i < waterMarkers.Length; i++)
-            IncludeGridPosition(waterMarkers[i].transform.position, ref min, ref max);
+            IncludeGridPosition(waterMarkers[i].transform.position, sourceIsPrefabAsset, ref min, ref max);
 
         if (firstRenderer == null)
         {
@@ -83,14 +104,14 @@ public sealed partial class LevelMapAuthoring
         }
 
         TypeBlockMap firstBlockMap = firstRenderer.GetComponent<TypeBlockMap>();
-        _cellSize = GetCellSizeInSpace(firstBlockMap, _runtimeParent);
+        _cellSize = GetCellSizeInSpace(firstBlockMap, sourceIsPrefabAsset ? null : _runtimeParent);
         if (_cellSize.x <= 0.0001f || _cellSize.y <= 0.0001f)
         {
             Debug.LogError("Level prefab blocks must use a non-zero cell size.", level);
             return false;
         }
 
-        Vector3 blockSize = GetBlockSizeInSpace(firstRenderer, _runtimeParent);
+        Vector3 blockSize = GetBlockSizeInSpace(firstRenderer, sourceIsPrefabAsset ? null : _runtimeParent);
         _chunkColliderDepth = blockSize.z;
         _offset = new Vector3(min.x, min.y, 0f);
         _gridWidth = Mathf.RoundToInt((max.x - min.x) / _cellSize.x) + 1;
@@ -113,7 +134,7 @@ public sealed partial class LevelMapAuthoring
         {
             TypeBlockMap blockMap = blocks[i];
             MeshRenderer renderer = blockMap.GetComponent<MeshRenderer>();
-            Vector3 localPosition = _runtimeParent.InverseTransformPoint(blockMap.transform.position);
+            Vector3 localPosition = GetGridLocalPosition(blockMap.transform.position, sourceIsPrefabAsset);
             int x = Mathf.RoundToInt((localPosition.x - _offset.x) / _cellSize.x);
             int y = Mathf.RoundToInt((localPosition.y - _offset.y) / _cellSize.y);
             Vector3 cellPosition = GetCellLocalPosition(x, y);
@@ -234,9 +255,10 @@ public sealed partial class LevelMapAuthoring
             "Terrain fragment meshes do not share identical edges.", this);
     }
 
-    private void IncludeGridPosition(Vector3 worldPosition, ref Vector3 min, ref Vector3 max)
+    private void IncludeGridPosition(
+        Vector3 sourcePosition, bool sourceIsPrefabAsset, ref Vector3 min, ref Vector3 max)
     {
-        Vector3 localPosition = _runtimeParent.InverseTransformPoint(worldPosition);
+        Vector3 localPosition = GetGridLocalPosition(sourcePosition, sourceIsPrefabAsset);
         min.x = Mathf.Min(min.x, localPosition.x);
         min.y = Mathf.Min(min.y, localPosition.y);
         max.x = Mathf.Max(max.x, localPosition.x);
@@ -250,12 +272,12 @@ public sealed partial class LevelMapAuthoring
             return Vector3.zero;
 
         Vector3 meshSize = meshFilter.sharedMesh.bounds.size;
-        float x = space.InverseTransformVector(
-            renderer.transform.TransformVector(new Vector3(meshSize.x, 0f, 0f))).magnitude;
-        float y = space.InverseTransformVector(
-            renderer.transform.TransformVector(new Vector3(0f, meshSize.y, 0f))).magnitude;
-        float z = space.InverseTransformVector(
-            renderer.transform.TransformVector(new Vector3(0f, 0f, meshSize.z))).magnitude;
+        Vector3 worldX = renderer.transform.TransformVector(new Vector3(meshSize.x, 0f, 0f));
+        Vector3 worldY = renderer.transform.TransformVector(new Vector3(0f, meshSize.y, 0f));
+        Vector3 worldZ = renderer.transform.TransformVector(new Vector3(0f, 0f, meshSize.z));
+        float x = (space != null ? space.InverseTransformVector(worldX) : worldX).magnitude;
+        float y = (space != null ? space.InverseTransformVector(worldY) : worldY).magnitude;
+        float z = (space != null ? space.InverseTransformVector(worldZ) : worldZ).magnitude;
         return new Vector3(x, y, z);
     }
 
@@ -264,11 +286,16 @@ public sealed partial class LevelMapAuthoring
         if (blockMap == null)
             return Vector2.zero;
 
-        float x = space.InverseTransformVector(
-            blockMap.transform.TransformVector(Vector3.right * blockMap.CellSize)).magnitude;
-        float y = space.InverseTransformVector(
-            blockMap.transform.TransformVector(Vector3.up * blockMap.CellSize)).magnitude;
+        Vector3 worldX = blockMap.transform.TransformVector(Vector3.right * blockMap.CellSize);
+        Vector3 worldY = blockMap.transform.TransformVector(Vector3.up * blockMap.CellSize);
+        float x = (space != null ? space.InverseTransformVector(worldX) : worldX).magnitude;
+        float y = (space != null ? space.InverseTransformVector(worldY) : worldY).magnitude;
         return new Vector2(x, y);
+    }
+
+    private Vector3 GetGridLocalPosition(Vector3 sourcePosition, bool sourceIsPrefabAsset)
+    {
+        return sourceIsPrefabAsset ? sourcePosition : _runtimeParent.InverseTransformPoint(sourcePosition);
     }
 
     [ContextMenu("Validate Level Prefab")]

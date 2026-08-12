@@ -28,8 +28,8 @@ namespace Crusher
         [SerializeField] private GameObject _prefab;
         [SerializeField, Min(0.1f)] private float _maxPlanarSpeed = 4f;
         [SerializeField, Range(0.5f, 0.95f)] private float _colliderPlanarSize = 0.82f;
-        [SerializeField, Range(64, 5000)] private int _maxActiveBlocks = 1500;
-        [SerializeField, Range(1, 256)] private int _maxSpawnsPerFrame = 64;
+        [SerializeField, Range(64, 5000)] private int _maxActiveBlocks = 256;
+        [SerializeField, Range(1, 256)] private int _maxSpawnsPerFrame = 24;
 
         private readonly List<SpawnRequest> _pending = new(256);
         private readonly List<SpawnRequest> _ready = new(128);
@@ -111,11 +111,6 @@ namespace Crusher
             SpawnRequest request = _ready[lastIndex];
             _ready.RemoveAt(lastIndex);
             return request;
-        }
-
-        internal void DiscardReady()
-        {
-            _ready.Clear();
         }
 
         internal void ResetDebris()
