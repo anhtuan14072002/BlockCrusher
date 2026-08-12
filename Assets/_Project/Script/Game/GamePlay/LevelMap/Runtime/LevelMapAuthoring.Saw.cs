@@ -3,8 +3,12 @@ using UnityEngine;
 
 public sealed partial class LevelMapAuthoring
 {
+    private const float BlockTangentialVelocityScale = 0.75f;
+    private const float BlockAngularVelocityScale = 0.18f;
+
     public bool ReleaseInBox(Matrix4x4 cutLocalToWorld, Bounds cutLocalBounds,
-        Vector3[] cutVertices, int[] cutTriangles, float blockEjectSpeed)
+        Vector3[] cutVertices, int[] cutTriangles, Vector3 blockEjectDirection,
+        float blockEjectSpeed, float blockTangentialSpinSpeed)
     {
         if (!_cellSolid.IsCreated || _runtimeParent == null)
             return false;
@@ -61,7 +65,8 @@ public sealed partial class LevelMapAuthoring
 
                 if (!releasedAny)
                     CompleteReleasedBlockJobs();
-                ReleaseCell(cellIndex, x, y, cellLocal, sawCenter, blockEjectSpeed);
+                ReleaseCell(cellIndex, x, y, cellLocal, sawCenter,
+                    blockEjectDirection, blockEjectSpeed, blockTangentialSpinSpeed);
                 releasedAny = true;
             }
         }
@@ -155,11 +160,15 @@ public sealed partial class LevelMapAuthoring
             new Vector3(0.05f, 0f), new Vector3(0f, 0.05f)));
         Debug.Assert(!MeshOverlapsCell(vertices, triangles, new Vector3(2f, 2f),
             new Vector3(0.05f, 0f), new Vector3(0f, 0.05f)));
+        Vector3 velocity = GetCutDebrisVelocity(
+            Vector3.up, Vector3.zero, Vector3.up, 2f, 600f);
+        Debug.Assert(velocity.x < 0f && velocity.y > 0f,
+            "Clockwise cut debris must keep lift and receive tangential velocity.");
     }
 #endif
 
     private void ReleaseCell(int cellIndex, int cellX, int cellY, Vector3 cellLocal, Vector3 sawCenter,
-        float blockEjectSpeed)
+        Vector3 blockEjectDirection, float blockEjectSpeed, float blockTangentialSpinSpeed)
     {
         Color32 surfaceColor = _cellColors[cellIndex];
         _cellSolid[cellIndex] = 0;
@@ -175,13 +184,30 @@ public sealed partial class LevelMapAuthoring
                                   !_cellReleasedColors.IsCreated
                 ? surfaceColor
                 : _cellReleasedColors[cellIndex];
+            Vector3 initialVelocity = GetCutDebrisVelocity(
+                releasedWorldPosition, sawCenter, blockEjectDirection,
+                blockEjectSpeed, blockTangentialSpinSpeed);
+            float angularVelocity = blockTangentialSpinSpeed * Mathf.Deg2Rad * BlockAngularVelocityScale;
             _cutDebris.QueueSpawn(releasedWorldPosition, debrisColor, sourceBlock.Mesh,
-                sourceBlock.Scale, sourceBlock.RenderScale, Vector3.up * blockEjectSpeed,
+                sourceBlock.Scale, sourceBlock.RenderScale, initialVelocity, angularVelocity,
                 _ownerId, GetCellChunkIndex(cellX, cellY));
         }
         ReleaseSeparateDecorationsAtCell(
-            cellIndex, sawCenter, Vector3.up, blockEjectSpeed);
+            cellIndex, sawCenter, blockEjectDirection, blockEjectSpeed);
         MarkCellChunkDirty(cellX, cellY);
+    }
+
+    private static Vector3 GetCutDebrisVelocity(Vector3 position, Vector3 sawCenter,
+        Vector3 ejectDirection, float ejectSpeed, float tangentialSpinSpeed)
+    {
+        Vector3 radial = position - sawCenter;
+        radial.z = 0f;
+        if (radial.sqrMagnitude <= 0.000001f || Mathf.Approximately(tangentialSpinSpeed, 0f))
+            return ejectDirection * ejectSpeed;
+
+        Vector3 tangent = Vector3.Cross(Vector3.forward, radial.normalized) *
+                          Mathf.Sign(tangentialSpinSpeed);
+        return ejectDirection * ejectSpeed + tangent * (ejectSpeed * BlockTangentialVelocityScale);
     }
     private void MarkCellChunkDirty(int cellX, int cellY)
     {

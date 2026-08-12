@@ -171,7 +171,10 @@ namespace Crusher
                 CutSubMeshIndex = GetCutSubMeshIndex(),
                 Scale = new float3(scale.x, scale.y, scale.z),
                 CutSweepStep = _cutSweepStep,
-                BlockEjectSpeed = _blockEjectSpeed
+                BlockEjectSpeed = _blockEjectSpeed,
+                BlockTangentialSpinSpeed = _deviceKind == CuttingDeviceKind.Saw
+                    ? _bladeSpinSpeed * Mathf.Sign(_bladeSpinDirection)
+                    : 0f
             };
         }
 

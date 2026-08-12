@@ -11,6 +11,8 @@ namespace Crusher
     [UpdateInGroup(typeof(BeforePhysicsSystemGroup))]
     public partial class SawDeviceSystem : SystemBase
     {
+        private const float BlockEjectBackBias = 0.65f;
+
         private sealed class CutMeshCache
         {
             public Mesh Mesh;
@@ -92,6 +94,7 @@ namespace Crusher
 
             Vector3 fromPosition = new(from.x, from.y, from.z);
             Vector3 toPosition = new(to.x, to.y, to.z);
+            Vector3 ejectDirection = GetBlockEjectDirection(toPosition - fromPosition);
             float distance = Vector2.Distance(fromPosition, toPosition);
             int steps = Mathf.Max(1, Mathf.CeilToInt(distance / Mathf.Max(saw.CutSweepStep, 0.01f)));
             Quaternion worldRotation = new(rotation.value.x, rotation.value.y, rotation.value.z, rotation.value.w);
@@ -102,8 +105,28 @@ namespace Crusher
                 Matrix4x4 localToWorld = Matrix4x4.TRS(position, worldRotation, scale);
                 LevelMapAuthoring.ReleaseInBoxForActiveSpawners(
                     localToWorld, cache.Bounds, cache.Vertices, cache.Triangles,
-                    saw.BlockEjectSpeed);
+                    ejectDirection, saw.BlockEjectSpeed, saw.BlockTangentialSpinSpeed);
             }
         }
+
+        private static Vector3 GetBlockEjectDirection(Vector3 movement)
+        {
+            movement.z = 0f;
+            if (movement.sqrMagnitude <= 0.000001f)
+                return Vector3.up;
+
+            return (Vector3.up - movement.normalized * BlockEjectBackBias).normalized;
+        }
+
+#if UNITY_EDITOR
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ValidateBlockEjectDirection()
+        {
+            Vector3 rightDig = GetBlockEjectDirection(Vector3.right);
+            Debug.Assert(rightDig.x < 0f && rightDig.y > 0f,
+                "Cut debris must eject upward and behind the saw movement.");
+            Debug.Assert(GetBlockEjectDirection(Vector3.zero) == Vector3.up);
+        }
+#endif
     }
 }

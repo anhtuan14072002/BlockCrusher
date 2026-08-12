@@ -30,7 +30,7 @@ public sealed partial class LevelMapAuthoring
                     continue;
 
                 _breakableCellMask[cellIndex] = 0;
-                ReleaseCell(cellIndex, x, y, cellLocal, obstacleCenter, 0f);
+                ReleaseCell(cellIndex, x, y, cellLocal, obstacleCenter, Vector3.up, 0f, 0f);
             }
         }
     }

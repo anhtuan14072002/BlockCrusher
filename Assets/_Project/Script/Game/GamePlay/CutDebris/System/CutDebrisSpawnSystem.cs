@@ -100,7 +100,8 @@ namespace Crusher
                 {
                     ContactCollider = _contactColliders[request.VariantIndex],
                     InitialVelocity = new float3(
-                        request.InitialVelocity.x, request.InitialVelocity.y, request.InitialVelocity.z)
+                        request.InitialVelocity.x, request.InitialVelocity.y, request.InitialVelocity.z),
+                    InitialAngularVelocity = request.InitialAngularVelocity
                 });
                 EntityManager.SetComponentEnabled<CutDebrisPendingActivation>(entity, true);
                 EntityManager.SetComponentEnabled<Simulate>(entity, false);

@@ -72,7 +72,8 @@ namespace Crusher
 
                 EntityManager.SetComponentData(entity, new PhysicsVelocity
                 {
-                    Linear = pending.InitialVelocity
+                    Linear = pending.InitialVelocity,
+                    Angular = new float3(0f, 0f, pending.InitialAngularVelocity)
                 });
                 EntityManager.SetComponentEnabled<Simulate>(entity, true);
             }

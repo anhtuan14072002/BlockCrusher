@@ -25,5 +25,6 @@ namespace Crusher
     {
         public BlobAssetReference<Collider> ContactCollider;
         public float3 InitialVelocity;
+        public float InitialAngularVelocity;
     }
 }

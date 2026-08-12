@@ -25,6 +25,7 @@ namespace Crusher
         public float3 Scale;
         public float CutSweepStep;
         public float BlockEjectSpeed;
+        public float BlockTangentialSpinSpeed;
         public byte Active;
     }
 }
