@@ -105,7 +105,7 @@ namespace Crusher
                 Matrix4x4 localToWorld = Matrix4x4.TRS(position, worldRotation, scale);
                 LevelMapAuthoring.ReleaseInBoxForActiveSpawners(
                     localToWorld, cache.Bounds, cache.Vertices, cache.Triangles,
-                    ejectDirection, saw.BlockEjectSpeed, saw.BlockTangentialSpinSpeed);
+                    ejectDirection, saw.BlockEjectSpeed);
             }
         }
 

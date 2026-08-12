@@ -14,7 +14,6 @@ namespace Crusher
             public Vector3 Position;
             public Color32 Color;
             public Vector3 InitialVelocity;
-            public float InitialAngularVelocity;
             public float Scale;
             public int OwnerId;
             public int ChunkIndex;
@@ -71,8 +70,7 @@ namespace Crusher
         }
 
         internal void QueueSpawn(Vector3 position, Color32 color, Mesh mesh,
-            float sourceWorldScale, Vector3 renderScale, Vector3 initialVelocity,
-            float initialAngularVelocity, int ownerId, int chunkIndex)
+            float sourceWorldScale, Vector3 renderScale, Vector3 initialVelocity, int ownerId, int chunkIndex)
         {
             if (_physicsShape == null || _physicsBody == null || mesh == null || sourceWorldScale <= 0f ||
                 _pending.Count + _ready.Count >= _maxActiveBlocks)
@@ -83,7 +81,6 @@ namespace Crusher
                 Position = position,
                 Color = color,
                 InitialVelocity = Vector3.ClampMagnitude(initialVelocity, _maxPlanarSpeed),
-                InitialAngularVelocity = initialAngularVelocity,
                 Scale = sourceWorldScale,
                 OwnerId = ownerId,
                 ChunkIndex = chunkIndex,
