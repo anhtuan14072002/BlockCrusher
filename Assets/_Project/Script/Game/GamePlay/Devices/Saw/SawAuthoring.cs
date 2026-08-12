@@ -60,7 +60,8 @@ namespace Crusher
 
         public void SetVisualActive(bool active)
         {
-            Renderer[] renderers = GetComponentsInChildren<Renderer>(true);
+            Transform visualRoot = _bladeVisual != null ? _bladeVisual : transform;
+            Renderer[] renderers = visualRoot.GetComponentsInChildren<Renderer>(true);
             for (int i = 0; i < renderers.Length; i++)
                 renderers[i].enabled = active;
         }

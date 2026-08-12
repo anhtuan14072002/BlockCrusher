@@ -9,10 +9,16 @@ namespace Crusher
     [UpdateInGroup(typeof(BeforePhysicsSystemGroup), OrderFirst = true)]
     public partial class DeviceBodySystem : SystemBase
     {
-        private const float SawMaxAngularSpeed = math.PI;
-
         protected override void OnUpdate()
         {
+            foreach (var (deviceReference, transformReference) in
+                     SystemAPI.Query<RefRO<DeviceBodyComponent>, RefRW<LocalTransform>>()
+                         .WithAll<SawDeviceTag>())
+            {
+                if (deviceReference.ValueRO.Initialized != 0)
+                    transformReference.ValueRW.Rotation = deviceReference.ValueRO.TargetRotation;
+            }
+
             float stepFrequency = SystemAPI.Time.DeltaTime > 0f ? 1f / SystemAPI.Time.DeltaTime : 0f;
             foreach (var (deviceReference, transformReference, velocityReference, massReference) in
                      SystemAPI.Query<RefRW<DeviceBodyComponent>, RefRW<LocalTransform>,
@@ -37,15 +43,6 @@ namespace Crusher
                 velocity = PhysicsVelocity.CalculateVelocityToTarget(
                     massReference.ValueRO, transform.Position, transform.Rotation,
                     new RigidTransform(device.TargetRotation, device.TargetPosition), stepFrequency);
-            }
-
-            foreach (RefRW<PhysicsVelocity> velocityReference in
-                     SystemAPI.Query<RefRW<PhysicsVelocity>>().WithAll<SawDeviceTag>())
-            {
-                ref float3 angularVelocity = ref velocityReference.ValueRW.Angular;
-                float angularSpeedSq = math.lengthsq(angularVelocity);
-                if (angularSpeedSq > SawMaxAngularSpeed * SawMaxAngularSpeed)
-                    angularVelocity *= SawMaxAngularSpeed * math.rsqrt(angularSpeedSq);
             }
         }
     }
