@@ -14,6 +14,7 @@ namespace Crusher
         private EntityQuery _debrisQuery;
         private EntityArchetype _debrisArchetype;
         private readonly List<BlobAssetReference<Collider>> _colliders = new(16);
+        private readonly List<BlobAssetReference<Collider>> _contactColliders = new(16);
         private readonly List<PhysicsMass> _masses = new(16);
         private PhysicsDamping _damping;
         private float _gravityFactor;
@@ -86,15 +87,18 @@ namespace Crusher
                         request.Color.b / 255f, request.Color.a / 255f),
                     RenderScale = new float3(
                         variant.RenderScale.x, variant.RenderScale.y, variant.RenderScale.z),
+                    PhysicsStepStartPosition = new float3(
+                        request.Position.x, request.Position.y, request.Position.z),
                     LockedZ = request.Position.z,
                     MaxPlanarSpeed = _source.MaxPlanarSpeed,
                     BaseScale = request.Scale,
+                    OwnerId = request.OwnerId,
                     VariantIndex = request.VariantIndex
                 });
                 EntityManager.SetComponentEnabled<CutDebrisSuctionTransit>(entity, false);
                 EntityManager.SetComponentData(entity, new CutDebrisPendingActivation
                 {
-                    Collider = _colliders[request.VariantIndex],
+                    ContactCollider = _contactColliders[request.VariantIndex],
                     InitialVelocity = new float3(
                         request.InitialVelocity.x, request.InitialVelocity.y, request.InitialVelocity.z)
                 });
@@ -137,18 +141,45 @@ namespace Crusher
                 BelongsTo = DeviceMeshCollider.CutDebrisCategory,
                 CollidesWith = uint.MaxValue & ~DeviceMeshCollider.SawCategory
             };
+            CollisionFilter contactFilter = collisionFilter;
+            contactFilter.CollidesWith = uint.MaxValue;
+            Material material = Material.Default;
+            material.Friction = 0.12f;
+            material.Restitution = 0.05f;
             while (_colliders.Count < _source.VariantCount)
             {
+                var geometry = _source.GetBoxGeometry(_colliders.Count);
                 BlobAssetReference<Collider> collider = BoxCollider.Create(
-                    _source.GetBoxGeometry(_colliders.Count), collisionFilter, Material.Default);
-                if (!collider.IsCreated)
+                    geometry, collisionFilter, material);
+                BlobAssetReference<Collider> contactCollider = BoxCollider.Create(
+                    geometry, contactFilter, material);
+                if (!collider.IsCreated || !contactCollider.IsCreated)
+                {
+                    if (collider.IsCreated)
+                        collider.Dispose();
+                    if (contactCollider.IsCreated)
+                        contactCollider.Dispose();
                     return false;
+                }
+#if UNITY_EDITOR
+                UnityEngine.Debug.Assert(collider.Value.Type == ColliderType.Box &&
+                                         (collider.Value.GetCollisionFilter().CollidesWith &
+                                          DeviceMeshCollider.SawCategory) == 0 &&
+                                         (collider.Value.GetCollisionFilter().CollidesWith &
+                                          DeviceMeshCollider.CutDebrisCategory) != 0,
+                    "Cut debris must keep Box-to-box collision without saw depenetration.");
+                UnityEngine.Debug.Assert(contactCollider.Value.Type == ColliderType.Box &&
+                                         (contactCollider.Value.GetCollisionFilter().CollidesWith &
+                                          DeviceMeshCollider.SawCategory) != 0,
+                    "Clear cut debris must restore real saw contact.");
+#endif
 
                 PhysicsMass mass = PhysicsMass.CreateDynamic(
                     collider.Value.MassProperties, math.max(_source.PhysicsBody.Mass, 0.001f));
                 mass.InverseInertia.x = 0f;
                 mass.InverseInertia.y = 0f;
                 _colliders.Add(collider);
+                _contactColliders.Add(contactCollider);
                 _masses.Add(mass);
             }
 
@@ -170,7 +201,13 @@ namespace Crusher
                 if (_colliders[i].IsCreated)
                     _colliders[i].Dispose();
             }
+            for (int i = 0; i < _contactColliders.Count; i++)
+            {
+                if (_contactColliders[i].IsCreated)
+                    _contactColliders[i].Dispose();
+            }
             _colliders.Clear();
+            _contactColliders.Clear();
             _masses.Clear();
         }
 

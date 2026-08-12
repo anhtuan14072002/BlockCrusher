@@ -8,15 +8,8 @@ Shader "BlockCrusher/VoxelExactColor"
         _EdgeStrength ("Edge Strength", Range(0,1)) = 0.45
         _EdgeWidth ("Edge Width", Range(0.001,0.15)) = 0.035
         _SoilTex ("Soil Texture", 2D) = "gray" {}
-        _SoilStrength ("Soil Strength", Range(0,0.35)) = 0.12
         _SoilTiling ("Soil Tiling", Float) = 0.65
-        _SoilFineStrength ("Fine Soil Strength", Range(0,0.35)) = 0.12
-        _SoilFineTiling ("Fine Soil Tiling", Float) = 3.2
-        _SoilLayerStrength ("Soil Layer Strength", Range(0,0.25)) = 0.08
-        _SoilLayerScale ("Soil Layer Scale", Float) = 1.1
-        _GrainColor ("Soil Grain Color", Color) = (0.16,0.085,0.055,1)
-        _GrainAmount ("Soil Grain Amount", Range(0,1)) = 0.32
-        _GrainScale ("Soil Grain Scale", Float) = 8
+        _SoilTint ("Soil Tint", Color) = (1,1,1,1)
         _CrackColor ("Crack Color", Color) = (0.08,0.08,0.08,1)
         _CrackAmount ("Crack Amount", Range(0,1)) = 0
         _CrackScale ("Crack Scale", Float) = 5
@@ -48,15 +41,8 @@ Shader "BlockCrusher/VoxelExactColor"
             half _EdgeStrength;
             half _EdgeWidth;
             sampler2D _SoilTex;
-            half _SoilStrength;
             half _SoilTiling;
-            half _SoilFineStrength;
-            half _SoilFineTiling;
-            half _SoilLayerStrength;
-            half _SoilLayerScale;
-            fixed4 _GrainColor;
-            half _GrainAmount;
-            half _GrainScale;
+            half4 _SoilTint;
             fixed4 _CrackColor;
             half _CrackScale;
             half _CrackWidth;
@@ -112,21 +98,6 @@ Shader "BlockCrusher/VoxelExactColor"
                 return frac((p3.xx + p3.yz) * p3.zy);
             }
 
-            float SoilGrain(float2 worldPosition)
-            {
-                float2 p = worldPosition * _GrainScale;
-                float2 cell = floor(p);
-                float2 local = frac(p) - 0.5;
-                float2 feature = (Hash22(cell) - 0.5) * 0.72;
-                float2 delta = local - feature;
-                // A diamond-like metric reads as a tiny angular stone rather than a round dot.
-                float distanceToGrain = abs(delta.x) + abs(delta.y);
-                float grainSize = lerp(0.055, 0.16, Hash22(cell + 19.31).x);
-                float feather = max(fwidth(distanceToGrain), 0.012);
-                float enabled = step(Hash22(cell + 7.73).y, 0.42);
-                return (1 - smoothstep(grainSize, grainSize + feather, distanceToGrain)) * enabled;
-            }
-
             float2 VoronoiEdge(float2 p)
             {
                 float2 cell = floor(p);
@@ -180,17 +151,8 @@ Shader "BlockCrusher/VoxelExactColor"
                 color.rgb = lerp(color.rgb, _EdgeColor.rgb,
                     edgeMask * _EdgeStrength * (1 - isSoil));
 
-                half coarseSoil = tex2D(_SoilTex, i.soilUv).r;
-                half fineSoil = tex2D(_SoilTex,
-                    i.worldPosition.xy * (_SoilTiling * _SoilFineTiling) + 0.317).r;
-                half layerNoise = sin(i.worldPosition.y * _SoilLayerScale + coarseSoil * 5.4h) * 0.5h + 0.5h;
-                half soilVariation = (coarseSoil * 2 - 1) * _SoilStrength +
-                                     (fineSoil * 2 - 1) * _SoilFineStrength +
-                                     (layerNoise * 2 - 1) * _SoilLayerStrength;
-                color.rgb *= 1 + soilVariation * isSoil;
-
-                half grain = SoilGrain(i.worldPosition.xy) * _GrainAmount * isSoil;
-                color.rgb = lerp(color.rgb, color.rgb * _GrainColor.rgb, grain);
+                half3 soilColor = tex2D(_SoilTex, i.soilUv).rgb * _SoilTint.rgb;
+                color.rgb = lerp(color.rgb, soilColor, isSoil);
 
                 half crackAmount = UNITY_ACCESS_INSTANCED_PROP(Props, _CrackAmount);
                 float2 crack = VoronoiEdge(i.crackUv);

@@ -56,16 +56,16 @@ MonoBehaviour:
   - {fileID: 612727279210085569, guid: 3f4ebe89b85f2a147bdba89bc394f76d, type: 3}
   GridColorLayers:
   - FromDepth: 0
-    ToDepth: 20
+    ToDepth: 0
     Color: {r: 0.4056604, g: 0.293038, b: 0.23918656, a: 1}
-  - FromDepth: 21
-    ToDepth: 40
+  - FromDepth: 0
+    ToDepth: 0
     Color: {r: 0.3962264, g: 0.28215945, b: 0.2224101, a: 1}
-  - FromDepth: 41
-    ToDepth: 60
+  - FromDepth: 0
+    ToDepth: 0
     Color: {r: 0.40392157, g: 0.17254902, b: 0.15686275, a: 1}
-  - FromDepth: 61
-    ToDepth: 89
+  - FromDepth: 0
+    ToDepth: 0
     Color: {r: 0.4056604, g: 0.051664297, b: 0.075264014, a: 1}
   PaintType: 3
   PrefabSize: 1
@@ -73,4 +73,4 @@ MonoBehaviour:
   HasScale: 1
   Spacing: 0
   GridWidth: 20
-  GridHeight: 90
+  GridHeight: 200

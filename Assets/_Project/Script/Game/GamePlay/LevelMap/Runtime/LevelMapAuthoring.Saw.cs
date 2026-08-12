@@ -177,7 +177,7 @@ public sealed partial class LevelMapAuthoring
                 : _cellReleasedColors[cellIndex];
             _cutDebris.QueueSpawn(releasedWorldPosition, debrisColor, sourceBlock.Mesh,
                 sourceBlock.Scale, sourceBlock.RenderScale, Vector3.up * blockEjectSpeed,
-                GetCellChunkIndex(cellX, cellY));
+                _ownerId, GetCellChunkIndex(cellX, cellY));
         }
         ReleaseSeparateDecorationsAtCell(
             cellIndex, sawCenter, Vector3.up, blockEjectSpeed);
@@ -226,6 +226,25 @@ public sealed partial class LevelMapAuthoring
             DeltaTime = Mathf.Max(Time.fixedDeltaTime, MinimumPhysicsDeltaTime),
             LocalRadiusScale = GetMaxLocalUnitsPerWorldUnit(),
             ResolveAfterPhysics = resolveAfterPhysics ? (byte)1 : (byte)0,
+            GridWidth = _gridWidth,
+            GridHeight = _gridHeight,
+            OwnerId = _ownerId
+        };
+        return true;
+    }
+
+    internal bool TryCreateCutDebrisMapGuardJob(out CutDebrisMapGuardJob job)
+    {
+        job = default;
+        if (!_cellSolid.IsCreated || _runtimeParent == null)
+            return false;
+
+        job = new CutDebrisMapGuardJob
+        {
+            CellSolid = _cellSolid,
+            WorldToLocal = ToFloat4x4(_runtimeParent.worldToLocalMatrix),
+            Offset = ToFloat3(_offset),
+            CellSize = ToFloat2(_cellSize),
             GridWidth = _gridWidth,
             GridHeight = _gridHeight,
             OwnerId = _ownerId

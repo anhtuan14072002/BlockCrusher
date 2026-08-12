@@ -8,6 +8,104 @@ using Unity.Transforms;
 public sealed partial class LevelMapAuthoring
 {
     [BurstCompile(FloatMode = FloatMode.Fast, FloatPrecision = FloatPrecision.Low)]
+    internal partial struct CutDebrisMapGuardJob : IJobEntity
+    {
+        [ReadOnly] public NativeArray<byte> CellSolid;
+        public float4x4 WorldToLocal;
+        public float3 Offset;
+        public float2 CellSize;
+        public int GridWidth;
+        public int GridHeight;
+        public int OwnerId;
+
+        private void Execute(ref LocalTransform transform, ref PhysicsVelocity velocity,
+            ref Crusher.CutDebrisComponent debris)
+        {
+            Apply(ref transform, ref velocity, ref debris);
+        }
+
+        internal void Apply(ref LocalTransform transform, ref PhysicsVelocity velocity,
+            ref Crusher.CutDebrisComponent debris)
+        {
+            if (debris.OwnerId != OwnerId)
+                return;
+
+            float3 position = transform.Position;
+            if (!IsInsideSolidCell(position))
+            {
+                debris.PhysicsStepStartPosition = position;
+                return;
+            }
+
+            float3 safePosition = debris.PhysicsStepStartPosition;
+            if (IsInsideSolidCell(safePosition))
+                return;
+
+            float3 correction = safePosition - position;
+            correction.z = 0f;
+            float correctionLengthSq = math.lengthsq(correction);
+            if (correctionLengthSq > 0.00000001f)
+            {
+                float3 normal = correction * math.rsqrt(correctionLengthSq);
+                float inwardSpeed = math.dot(velocity.Linear, normal);
+                if (inwardSpeed < 0f)
+                    velocity.Linear -= normal * inwardSpeed;
+            }
+
+            safePosition.z = position.z;
+            transform.Position = safePosition;
+            velocity.Angular.z = 0f;
+        }
+
+        private bool IsInsideSolidCell(float3 worldPosition)
+        {
+            float3 localPosition = math.transform(WorldToLocal, worldPosition);
+            int x = (int)math.round((localPosition.x - Offset.x) / CellSize.x);
+            int y = (int)math.round((localPosition.y - Offset.y) / CellSize.y);
+            return (uint)x < (uint)GridWidth && (uint)y < (uint)GridHeight &&
+                   CellSolid[y * GridWidth + x] != 0;
+        }
+    }
+
+#if UNITY_EDITOR
+    [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ValidateCutDebrisMapGuard()
+    {
+        NativeArray<byte> solid = new(2, Allocator.Temp);
+        solid[1] = 1;
+        CutDebrisMapGuardJob job = new()
+        {
+            CellSolid = solid,
+            WorldToLocal = float4x4.identity,
+            Offset = float3.zero,
+            CellSize = new float2(1f),
+            GridWidth = 2,
+            GridHeight = 1,
+            OwnerId = 7
+        };
+        LocalTransform transform = LocalTransform.FromPosition(new float3(1f, 0f, 0f));
+        PhysicsVelocity velocity = new()
+        {
+            Linear = new float3(1f, -2f, 0f),
+            Angular = new float3(0f, 0f, 1f)
+        };
+        Crusher.CutDebrisComponent debris = new()
+        {
+            OwnerId = 7,
+            PhysicsStepStartPosition = float3.zero
+        };
+
+        job.Apply(ref transform, ref velocity, ref debris);
+        UnityEngine.Debug.Assert(math.lengthsq(transform.Position) < 0.000001f &&
+                                 math.abs(velocity.Linear.x) < 0.0001f &&
+                                 math.abs(velocity.Linear.y + 2f) < 0.0001f &&
+                                 math.abs(velocity.Angular.z) < 0.0001f,
+            "Cut debris map guard must restore the last valid position without cancelling gravity.");
+        solid.Dispose();
+    }
+#endif
+
+    [BurstCompile(FloatMode = FloatMode.Fast, FloatPrecision = FloatPrecision.Low)]
     internal partial struct ReleasedBlockSolidConstraintJob : IJobEntity
     {
         [ReadOnly] public NativeArray<byte> CellSolid;

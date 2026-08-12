@@ -6095,7 +6095,7 @@ Transform:
   m_GameObject: {fileID: 925441447}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -2.18, y: -17.51, z: 0}
+  m_LocalPosition: {x: -2.18, y: -35.7, z: 0}
   m_LocalScale: {x: 0.31, y: 0.31, z: 0.31}
   m_ConstrainProportionsScale: 1
   m_Children:
@@ -6174,9 +6174,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _prefab: {fileID: 4722558944525060870, guid: d164093ad86b4f219d90985fce3bf899, type: 3}
   _maxPlanarSpeed: 4
-  _colliderPlanarSize: 0.82
-  _maxActiveBlocks: 5000
-  _maxSpawnsPerFrame: 24
+  _colliderPlanarSize: 0.95
+  _maxActiveBlocks: 1000
+  _maxSpawnsPerFrame: 32
 --- !u!1 &942276105
 GameObject:
   m_ObjectHideFlags: 0

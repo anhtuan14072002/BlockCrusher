@@ -1,5 +1,6 @@
 using Unity.Burst;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Physics;
 using Unity.Physics.Systems;
@@ -17,16 +18,31 @@ namespace Crusher
         {
             _query = SystemAPI.QueryBuilder()
                 .WithAllRW<LocalTransform, PhysicsVelocity>()
-                .WithAll<CutDebrisComponent, Simulate>()
+                .WithAllRW<CutDebrisComponent>()
+                .WithAll<Simulate>()
                 .WithDisabled<CutDebrisSuctionTransit>()
                 .Build();
             state.RequireForUpdate(_query);
         }
 
-        [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            state.Dependency = new ConstrainJob().ScheduleParallel(_query, state.Dependency);
+            JobHandle dependency = state.Dependency;
+            for (int i = LevelMapAuthoring.ActiveSpawnerCount - 1; i >= 0; i--)
+            {
+                LevelMapAuthoring spawner = LevelMapAuthoring.GetActiveSpawner(i);
+                if (spawner == null)
+                {
+                    LevelMapAuthoring.RemoveActiveSpawnerAt(i);
+                    continue;
+                }
+
+                if (spawner.TryCreateCutDebrisMapGuardJob(
+                        out LevelMapAuthoring.CutDebrisMapGuardJob mapGuardJob))
+                    dependency = mapGuardJob.ScheduleParallel(_query, dependency);
+            }
+
+            state.Dependency = new ConstrainJob().ScheduleParallel(_query, dependency);
         }
 
         [BurstCompile(FloatMode = FloatMode.Fast, FloatPrecision = FloatPrecision.Low)]

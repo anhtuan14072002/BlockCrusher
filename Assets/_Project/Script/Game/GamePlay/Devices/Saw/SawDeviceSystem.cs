@@ -47,17 +47,14 @@ namespace Crusher
                 float3 to = bodyReference.ValueRO.TargetPosition;
                 quaternion toRotation = bodyReference.ValueRO.TargetRotation;
 
-                if (math.lengthsq(to.xy - from.xy) > 0.000001f)
+                _cutRequests.Add(new CutRequest
                 {
-                    _cutRequests.Add(new CutRequest
-                    {
-                        Entity = entity,
-                        Saw = saw,
-                        From = from,
-                        To = to,
-                        Rotation = toRotation
-                    });
-                }
+                    Entity = entity,
+                    Saw = saw,
+                    From = from,
+                    To = to,
+                    Rotation = toRotation
+                });
             }
 
             for (int i = 0; i < _cutRequests.Count; i++)
