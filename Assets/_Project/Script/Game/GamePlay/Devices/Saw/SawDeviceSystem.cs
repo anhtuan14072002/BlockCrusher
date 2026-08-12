@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using Unity.Burst;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Physics;
 using Unity.Physics.Systems;
@@ -12,6 +14,7 @@ namespace Crusher
     public partial class SawDeviceSystem : SystemBase
     {
         private const float BlockEjectBackBias = 0.65f;
+        private const float CentrifugalContactWeight = 0.35f;
 
         private sealed class CutMeshCache
         {
@@ -29,10 +32,27 @@ namespace Crusher
             public float3 From;
             public float3 To;
             public quaternion Rotation;
+            public float PlanarSpinAngularSpeed;
         }
 
         private readonly Dictionary<Entity, CutMeshCache> _cutMeshes = new(1);
         private readonly List<CutRequest> _cutRequests = new(2);
+        private EntityQuery _cutDebrisContactQuery;
+        private EntityQuery _releasedBlockContactQuery;
+
+        protected override void OnCreate()
+        {
+            _cutDebrisContactQuery = SystemAPI.QueryBuilder()
+                .WithAllRW<PhysicsVelocity>()
+                .WithAll<LocalTransform, CutDebrisComponent, Simulate>()
+                .WithDisabled<CutDebrisSuctionTransit>()
+                .Build();
+            _releasedBlockContactQuery = SystemAPI.QueryBuilder()
+                .WithAllRW<PhysicsVelocity>()
+                .WithAll<LocalTransform, ReleasedBlockComponent, Simulate>()
+                .WithDisabled<SuctionTransit>()
+                .Build();
+        }
 
         protected override void OnUpdate()
         {
@@ -48,6 +68,7 @@ namespace Crusher
                 float3 from = transformReference.ValueRO.Position;
                 float3 to = bodyReference.ValueRO.TargetPosition;
                 quaternion toRotation = bodyReference.ValueRO.TargetRotation;
+                float3 worldSpinAxis = math.rotate(toRotation, saw.BladeSpinAxis);
 
                 _cutRequests.Add(new CutRequest
                 {
@@ -55,7 +76,10 @@ namespace Crusher
                     Saw = saw,
                     From = from,
                     To = to,
-                    Rotation = toRotation
+                    Rotation = toRotation,
+                    PlanarSpinAngularSpeed = EntityManager.HasComponent<SawDeviceTag>(entity)
+                        ? saw.BladeSpinAngularSpeed * worldSpinAxis.z
+                        : 0f
                 });
             }
 
@@ -63,12 +87,63 @@ namespace Crusher
             {
                 CutRequest request = _cutRequests[i];
                 ReleaseMapAlongMovement(
-                    request.Entity, in request.Saw, request.From, request.To, request.Rotation);
+                    request.Entity, in request.Saw, request.From, request.To, request.Rotation,
+                    request.PlanarSpinAngularSpeed);
             }
+
+            JobHandle dependency = Dependency;
+            for (int i = 0; i < _cutRequests.Count; i++)
+            {
+                CutRequest request = _cutRequests[i];
+                dependency = ApplySpinContactImpulse(in request, dependency);
+            }
+            Dependency = dependency;
+        }
+
+        private JobHandle ApplySpinContactImpulse(in CutRequest request, JobHandle dependency)
+        {
+            if (math.abs(request.PlanarSpinAngularSpeed) <= 0.0001f ||
+                request.Saw.BlockEjectSpeed <= 0f ||
+                !_cutMeshes.TryGetValue(request.Entity, out CutMeshCache cache))
+                return dependency;
+
+            Quaternion rotation = new(
+                request.Rotation.value.x, request.Rotation.value.y,
+                request.Rotation.value.z, request.Rotation.value.w);
+            Vector3 position = new(request.To.x, request.To.y, request.To.z);
+            Vector3 scale = new(request.Saw.Scale.x, request.Saw.Scale.y, request.Saw.Scale.z);
+            Matrix4x4 localToWorld = Matrix4x4.TRS(position, rotation, scale);
+            Vector3 center = localToWorld.MultiplyPoint3x4(cache.Bounds.center);
+            Vector3 radiusX = localToWorld.MultiplyVector(Vector3.right * cache.Bounds.extents.x);
+            Vector3 radiusY = localToWorld.MultiplyVector(Vector3.up * cache.Bounds.extents.y);
+            float contactRadius = Mathf.Max(
+                new Vector2(radiusX.x, radiusX.y).magnitude,
+                new Vector2(radiusY.x, radiusY.y).magnitude);
+            if (contactRadius <= 0.0001f)
+                return dependency;
+
+            float2 contactCenter = new(center.x, center.y);
+            float contactRadiusSq = contactRadius * contactRadius;
+            float spinDirection = math.sign(request.PlanarSpinAngularSpeed);
+            float ejectSpeed = request.Saw.BlockEjectSpeed;
+            dependency = new ApplySawSpinToCutDebrisJob
+            {
+                Center = contactCenter,
+                ContactRadiusSq = contactRadiusSq,
+                SpinDirection = spinDirection,
+                EjectSpeed = ejectSpeed
+            }.ScheduleParallel(_cutDebrisContactQuery, dependency);
+            return new ApplySawSpinToReleasedBlockJob
+            {
+                Center = contactCenter,
+                ContactRadiusSq = contactRadiusSq,
+                SpinDirection = spinDirection,
+                EjectSpeed = ejectSpeed
+            }.ScheduleParallel(_releasedBlockContactQuery, dependency);
         }
 
         private void ReleaseMapAlongMovement(Entity entity, in SawComponent saw,
-            float3 from, float3 to, quaternion rotation)
+            float3 from, float3 to, quaternion rotation, float planarSpinAngularSpeed)
         {
             Mesh mesh = saw.CutMesh.Value;
             if (mesh == null)
@@ -105,7 +180,7 @@ namespace Crusher
                 Matrix4x4 localToWorld = Matrix4x4.TRS(position, worldRotation, scale);
                 LevelMapAuthoring.ReleaseInBoxForActiveSpawners(
                     localToWorld, cache.Bounds, cache.Vertices, cache.Triangles,
-                    ejectDirection, saw.BlockEjectSpeed);
+                    ejectDirection, saw.BlockEjectSpeed, planarSpinAngularSpeed);
             }
         }
 
@@ -118,6 +193,64 @@ namespace Crusher
             return (Vector3.up - movement.normalized * BlockEjectBackBias).normalized;
         }
 
+        private static void ApplySpinContactImpulse(ref PhysicsVelocity velocity, float2 position,
+            float maxPlanarSpeed, float2 center, float contactRadiusSq,
+            float spinDirection, float ejectSpeed)
+        {
+            float2 offset = position - center;
+            if (math.lengthsq(offset) > contactRadiusSq)
+                return;
+
+            float2 radialDirection = math.normalizesafe(offset, new float2(0f, 1f));
+            float2 tangentialDirection = new(
+                -radialDirection.y * spinDirection,
+                radialDirection.x * spinDirection);
+            float2 impulseDirection = math.normalizesafe(
+                tangentialDirection + radialDirection * CentrifugalContactWeight,
+                radialDirection);
+            float targetSpeed = math.min(math.max(ejectSpeed, 0f), math.max(maxPlanarSpeed, 0f));
+            float missingSpeed = targetSpeed - math.dot(velocity.Linear.xy, impulseDirection);
+            if (missingSpeed > 0f)
+                velocity.Linear.xy += impulseDirection * missingSpeed;
+
+            float speedSq = math.lengthsq(velocity.Linear.xy);
+            float maxSpeedSq = maxPlanarSpeed * maxPlanarSpeed;
+            if (speedSq > maxSpeedSq && maxSpeedSq > 0f)
+                velocity.Linear.xy = math.normalize(velocity.Linear.xy) * maxPlanarSpeed;
+        }
+
+        [BurstCompile(FloatMode = FloatMode.Fast, FloatPrecision = FloatPrecision.Low)]
+        private partial struct ApplySawSpinToCutDebrisJob : IJobEntity
+        {
+            public float2 Center;
+            public float ContactRadiusSq;
+            public float SpinDirection;
+            public float EjectSpeed;
+
+            private void Execute(ref PhysicsVelocity velocity, in LocalTransform transform,
+                in CutDebrisComponent debris)
+            {
+                ApplySpinContactImpulse(ref velocity, transform.Position.xy, debris.MaxPlanarSpeed,
+                    Center, ContactRadiusSq, SpinDirection, EjectSpeed);
+            }
+        }
+
+        [BurstCompile(FloatMode = FloatMode.Fast, FloatPrecision = FloatPrecision.Low)]
+        private partial struct ApplySawSpinToReleasedBlockJob : IJobEntity
+        {
+            public float2 Center;
+            public float ContactRadiusSq;
+            public float SpinDirection;
+            public float EjectSpeed;
+
+            private void Execute(ref PhysicsVelocity velocity, in LocalTransform transform,
+                in ReleasedBlockComponent block)
+            {
+                ApplySpinContactImpulse(ref velocity, transform.Position.xy, block.MaxPlanarSpeed,
+                    Center, ContactRadiusSq, SpinDirection, EjectSpeed);
+            }
+        }
+
 #if UNITY_EDITOR
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ValidateBlockEjectDirection()
@@ -126,6 +259,13 @@ namespace Crusher
             Debug.Assert(rightDig.x < 0f && rightDig.y > 0f,
                 "Cut debris must eject upward and behind the saw movement.");
             Debug.Assert(GetBlockEjectDirection(Vector3.zero) == Vector3.up);
+
+            PhysicsVelocity counterClockwiseVelocity = PhysicsVelocity.Zero;
+            ApplySpinContactImpulse(ref counterClockwiseVelocity, new float2(1f, 0f), 4f,
+                float2.zero, 2f, 1f, 2.5f);
+            Debug.Assert(counterClockwiseVelocity.Linear.x > 0f &&
+                         counterClockwiseVelocity.Linear.y > 0f,
+                "A spinning saw must impart tangential and centrifugal velocity to nearby blocks.");
         }
 #endif
     }

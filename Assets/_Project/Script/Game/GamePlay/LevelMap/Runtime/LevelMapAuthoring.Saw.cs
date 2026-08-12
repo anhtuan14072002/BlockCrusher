@@ -3,9 +3,13 @@ using UnityEngine;
 
 public sealed partial class LevelMapAuthoring
 {
+    private const float SpinTangentialEjectWeight = 1f;
+    private const float CentrifugalRadialEjectWeight = 0.35f;
+    private const float CutEscapeEjectWeight = 0.75f;
+
     public bool ReleaseInBox(Matrix4x4 cutLocalToWorld, Bounds cutLocalBounds,
         Vector3[] cutVertices, int[] cutTriangles, Vector3 blockEjectDirection,
-        float blockEjectSpeed)
+        float blockEjectSpeed, float planarSpinAngularSpeed)
     {
         if (!_cellSolid.IsCreated || _runtimeParent == null)
             return false;
@@ -62,8 +66,11 @@ public sealed partial class LevelMapAuthoring
 
                 if (!releasedAny)
                     CompleteReleasedBlockJobs();
+                Vector3 cellWorldPosition = _runtimeParent.TransformPoint(cellLocal);
+                Vector3 ejectDirection = GetSpinningBladeEjectDirection(
+                    cellWorldPosition, sawCenter, blockEjectDirection, planarSpinAngularSpeed);
                 ReleaseCell(cellIndex, x, y, cellLocal, sawCenter,
-                    blockEjectDirection, blockEjectSpeed);
+                    ejectDirection, blockEjectSpeed);
                 releasedAny = true;
             }
         }
@@ -147,6 +154,37 @@ public sealed partial class LevelMapAuthoring
         return a.x * b.y - a.y * b.x;
     }
 
+    private static Vector3 GetSpinningBladeEjectDirection(
+        Vector3 blockPosition, Vector3 sawCenter, Vector3 fallbackDirection,
+        float planarSpinAngularSpeed)
+    {
+        fallbackDirection.z = 0f;
+        fallbackDirection = fallbackDirection.sqrMagnitude > 0.000001f
+            ? fallbackDirection.normalized
+            : Vector3.up;
+        if (Mathf.Abs(planarSpinAngularSpeed) <= 0.0001f)
+            return fallbackDirection;
+
+        Vector3 radialDirection = blockPosition - sawCenter;
+        radialDirection.z = 0f;
+        if (radialDirection.sqrMagnitude <= 0.000001f)
+            return fallbackDirection;
+
+        radialDirection.Normalize();
+        float spinDirection = Mathf.Sign(planarSpinAngularSpeed);
+        Vector3 tangentialDirection = new(
+            -radialDirection.y * spinDirection,
+            radialDirection.x * spinDirection,
+            0f);
+        Vector3 combinedDirection =
+            tangentialDirection * SpinTangentialEjectWeight +
+            radialDirection * CentrifugalRadialEjectWeight +
+            fallbackDirection * CutEscapeEjectWeight;
+        return combinedDirection.sqrMagnitude > 0.000001f
+            ? combinedDirection.normalized
+            : fallbackDirection;
+    }
+
 #if UNITY_EDITOR
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ValidateMeshCellOverlap()
@@ -157,6 +195,20 @@ public sealed partial class LevelMapAuthoring
             new Vector3(0.05f, 0f), new Vector3(0f, 0.05f)));
         Debug.Assert(!MeshOverlapsCell(vertices, triangles, new Vector3(2f, 2f),
             new Vector3(0.05f, 0f), new Vector3(0f, 0.05f)));
+
+        Vector3 counterClockwiseEjection = GetSpinningBladeEjectDirection(
+            Vector3.right, Vector3.zero, Vector3.up, 1f);
+        Vector3 clockwiseEjection = GetSpinningBladeEjectDirection(
+            Vector3.right, Vector3.zero, Vector3.up, -1f);
+        Debug.Assert(counterClockwiseEjection.x > 0f && counterClockwiseEjection.y > 0f &&
+                     clockwiseEjection.x > 0f && clockwiseEjection.y < 0f,
+            "Cut debris must follow the blade spin while retaining an outward component.");
+        Debug.Assert(GetSpinningBladeEjectDirection(
+                Vector3.zero, Vector3.zero, Vector3.left, 1f) == Vector3.left,
+            "Cut debris at the saw center must use the fallback eject direction.");
+        Debug.Assert(GetSpinningBladeEjectDirection(
+                Vector3.right, Vector3.zero, Vector3.left, 0f) == Vector3.left,
+            "A stationary blade must preserve the normal cut eject direction.");
     }
 #endif
 

@@ -165,14 +165,27 @@ namespace Crusher
         private SawComponent CreateComponent(Mesh mesh, Transform sourceTransform)
         {
             Vector3 scale = sourceTransform.lossyScale;
+            Vector3 spinAxis = GetBladeSpinAxis(sourceTransform);
             return new SawComponent
             {
                 CutMesh = mesh,
                 CutSubMeshIndex = GetCutSubMeshIndex(),
                 Scale = new float3(scale.x, scale.y, scale.z),
+                BladeSpinAxis = new float3(spinAxis.x, spinAxis.y, spinAxis.z),
+                BladeSpinAngularSpeed = SpinSpeed * Mathf.Deg2Rad,
                 CutSweepStep = _cutSweepStep,
                 BlockEjectSpeed = _blockEjectSpeed
             };
+        }
+
+        private Vector3 GetBladeSpinAxis(Transform sourceTransform)
+        {
+            Vector3 axis = _bladeSpinAxis.sqrMagnitude > 0.000001f
+                ? _bladeSpinAxis.normalized
+                : Vector3.forward;
+            Vector3 worldAxis = BladeVisual.TransformDirection(axis);
+            Vector3 localAxis = sourceTransform.InverseTransformDirection(worldAxis);
+            return localAxis.sqrMagnitude > 0.000001f ? localAxis.normalized : Vector3.forward;
         }
 
         private int GetCutSubMeshIndex()
